@@ -32,7 +32,12 @@ class buffer;
 class constant;
 class generator;
 class computation_tester;
+class send;
 class recv;
+class wait;
+class channel;
+struct transfer;
+struct send_recv;
 
 struct HalideCodegenOutput
 {
@@ -296,7 +301,6 @@ private:
      */
     void rename_computations();
 
-
 protected:
 
     /**
@@ -362,6 +366,11 @@ protected:
       * Add an iterator to the function.
       */
     void add_iterator_name(const std::string &it_name);
+
+    /**
+     * Look for operations that are library calls and prep their arguments.
+     */
+    void lift_ops_to_library_calls();
 
     /**
       * Keeps track of allocation computations created using
@@ -462,7 +471,7 @@ protected:
        */
      isl_ast_node *get_isl_ast() const;
 
-     /**
+    /**
        * Return the union of all the iteration domains
        * of the computations of the function.
        */
@@ -856,6 +865,7 @@ public:
       * This function takes an ISL set as input.
       */
     void set_context_set(isl_set *context);
+
 };
 
 
@@ -1323,6 +1333,31 @@ private:
       * specified.
       */
     isl_set *time_processor_domain;
+
+    /**
+     * If true, this operation was partitioned into child partitions, so it is the parent.
+     */
+    bool is_a_parent_partition;
+
+    /**
+     * If true, this operation is a partition (i.e. it was split off from a parent operation).
+     */
+    bool is_a_child_partition;
+
+    /**
+     * If is_a_child_partition, this is the portion of the parent's iteration domain that this child broke off from
+     */
+    isl_set *parent_partition_domain;
+
+    /**
+     * If this is a child partition, this is the parent.
+     */
+    tiramisu::computation *parent_operation;
+
+    /**
+     * If this is a parent partition, then the partitions go in here.
+     */
+    std::vector<tiramisu::computation *> child_partitions;
 
     // Private class methods.
 
@@ -3288,8 +3323,26 @@ public:
       * problems.
       */
     void dump(bool exhaustive) const;
-};
 
+    // Code for communication
+
+    /**
+      * send_recv_iter_dom should be defined over the iterations of the producer that we need.
+      * e should be just a single access expression into the producer.
+      */
+    static send_recv create_transfer(std::string send_recv_iter_dom_str, std::string send_name, std::string recv_name,
+                                     tiramisu::channel *send_chan, tiramisu::channel *recv_chan, tiramisu::expr e,
+                                     tiramisu::function *fct, std::vector<tiramisu::computation *> consumers);
+
+    tiramisu::send *create_send(std::string iteration_domain_str, tiramisu::expr start, tiramisu::channel *chan,
+                                bool schedule_this, std::initializer_list<expr> dims);
+
+    tiramisu::recv *create_recv(std::string iteration_domain_str, tiramisu::computation *consumer,
+                                bool schedule_this_computation);
+
+    tiramisu::recv *create_recv(std::string iteration_domain_str, bool schedule_this_computation);
+
+};
 
 /**
 * A class for code generation.
@@ -3510,6 +3563,23 @@ enum channel_attr {
     CUDAEVENT,
 };
 
+struct transfer {
+    tiramisu::send *s;
+    tiramisu::wait *send_w;
+    tiramisu::recv *r;
+    tiramisu::wait *recv_w;
+};
+
+struct send_recv {
+    tiramisu::send *s;
+    tiramisu::recv *r;
+};
+
+enum wait_type {
+    WAIT_ONE,
+    WAIT_ALL
+};
+
 class channel {
 private:
 
@@ -3542,10 +3612,18 @@ private:
 
     channel *chan = nullptr;
 
-    // Asynchronous communication returns an object that you can use to wait on. This access function
-    // defines how to write those objects to buffer. The user doesn't have to do that--it is automatically
-    // constructed if it is needed.
+    /**
+      * Asynchronous communication returns an object that you can use to wait on. This access function
+      * defines how to write those objects to buffer. The user doesn't have to do that--it is automatically
+      * constructed if it is needed.
+      */
     isl_map *async_access = nullptr;
+
+    /**
+      * An index expression just for the request buffer.
+      */
+    isl_ast_expr *req_index_expr;
+
 
 public:
 
@@ -3615,6 +3693,21 @@ public:
     void set_matching_send(tiramisu::send *matching_send);
 
     tiramisu::computation *get_consumer() const;
+
+};
+
+class wait : public communicator {
+private:
+
+    wait_type _wait_type;
+
+public:
+
+    wait(tiramisu::expr rhs, tiramisu::function *fct);
+
+    tiramisu::wait_type get_wait_type() const;
+
+    std::vector<tiramisu::computation *> get_op_to_wait_on() const;
 
 };
 
