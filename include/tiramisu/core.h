@@ -32,6 +32,7 @@ class buffer;
 class constant;
 class generator;
 class computation_tester;
+class recv;
 
 struct HalideCodegenOutput
 {
@@ -3432,6 +3433,14 @@ protected:
                                             const tiramisu::expr &exp,
                                             std::vector<isl_map *> &accesses,
                                             bool return_buffer_accesses);
+
+    /**
+     * TODO Does this actually replace all occurrences?
+     * Traverse a tiramisu expression (\p current_exp) until an expression with the specified name is found.
+     * Replace that name with a new name. Replaces all occurrences.
+     */
+    static void replace_expr_name(tiramisu::expr &current_exp, std::string name_to_replace, std::string replace_with);
+
 };
 
 /**
@@ -3484,6 +3493,157 @@ public:
     static std::string get_parameters_list(isl_set *set);
 };
 
+// communication and input from file
+
+typedef std::tuple<int, tiramisu::expr, tiramisu::expr> collapser;
+
+enum channel_attr {
+    // types of sends and receives
+            SYNC,
+    ASYNC,
+    BLOCK,
+    NONBLOCK,
+    // ordering
+            FIFO,
+    // paradigm
+            MPI,
+    CUDAEVENT,
+};
+
+class channel {
+private:
+
+    std::string name;
+
+    tiramisu::primitive_t dtype;
+
+    std::vector<tiramisu::channel_attr> attrs;
+
+public:
+
+    channel(std::string name, tiramisu::primitive_t dtype, std::initializer_list<tiramisu::channel_attr> attrs);
+
+    void add_attr(tiramisu::channel_attr attr);
+
+    bool contains_attr(tiramisu::channel_attr attr) const;
+
+    bool contains_attrs(std::vector<tiramisu::channel_attr> attrs) const;
+
+    const std::string &get_name() const;
+
+    tiramisu::primitive_t get_dtype() const;
+
+};
+
+class communicator : public computation {
+private:
+
+    std::vector<tiramisu::expr> dims;
+
+    channel *chan = nullptr;
+
+    // Asynchronous communication returns an object that you can use to wait on. This access function
+    // defines how to write those objects to buffer. The user doesn't have to do that--it is automatically
+    // constructed if it is needed.
+    isl_map *async_access = nullptr;
+
+public:
+
+    communicator(std::string iteration_domain_str, tiramisu::expr rhs, bool schedule_this_computation,
+            tiramisu::primitive_t data_type, tiramisu::function *fct, tiramisu::channel *chan);
+
+    // collapse a level
+    void collapse(int level, tiramisu::expr collapse_from_iter, tiramisu::expr collapse_until_iter,
+                  tiramisu::expr num_collapsed);
+
+    // Collapse multiple levels. This is the same as calling the above collapse function multiple times.
+    // You can only collapse the innermost to the outermost loops.
+    void collapse_many(std::vector<collapser> collapse_each);
+
+    void add_dim(tiramisu::expr size);
+
+    tiramisu::channel *get_channel() const;
+
+    tiramisu::expr get_num_elements();
+
+};
+
+class send : public communicator {
+private:
+
+    tiramisu::computation *producer = nullptr;
+
+    recv *matching_recv = nullptr;
+
+    int msg_tag;
+
+    static int next_msg_tag;
+
+public:
+
+    send(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs, tiramisu::channel *chan,
+         bool schedule_this_computation, tiramisu::function *fct, std::vector<expr> dims);
+
+    tiramisu::computation *get_producer() const;
+
+    tiramisu::recv *get_matching_recv() const;
+
+    int get_msg_tag() const;
+
+    void set_matching_recv(tiramisu::recv *matching_recv);
+
+};
+
+class recv : public communicator {
+private:
+
+    tiramisu::computation *consumer = nullptr;
+
+    send *matching_send = nullptr;
+
+public:
+
+    recv();
+
+    recv(std::string iteration_domain_str, tiramisu::computation *consumer, bool schedule_this,
+         tiramisu::function *fct, tiramisu::channel *chan);
+
+    recv(std::string iteration_domain_str, bool schedule_this, tiramisu::function *fct, tiramisu::channel *chan);
+
+    tiramisu::send *get_matching_send() const;
+
+    void set_matching_send(tiramisu::send *matching_send);
+
+    tiramisu::computation *get_consumer() const;
+
+};
+
+class reader : public computation {
+private:
+
+    std::vector<tiramisu::expr> dims;
+
+    tiramisu::expr filename;
+
+public:
+
+    reader(std::string iteration_domain_str, tiramisu::expr filename, bool schedule_this_operation,
+           tiramisu::primitive_t data_type, tiramisu::function *fct, tiramisu::expr rhs);
+
+    tiramisu::expr get_num_elements();
+
+    tiramisu::expr get_filename() const;
+
+    std::vector<reader *> collapse(int level, tiramisu::expr collapse_from_iter, tiramisu::expr collapse_until_iter,
+                                   tiramisu::expr num_collapsed);
+
+    // Collapse multiple levels. This is the same as calling the above collapse function multiple times.
+    // You can only collapse the innermost to the outermost loops.
+    void fully_collapse_many(std::vector<collapser> collapse_each);
+
+    void add_dim(tiramisu::expr dim);
+
+};
 
 // Halide IR specific functions
 
