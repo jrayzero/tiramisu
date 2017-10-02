@@ -36,6 +36,7 @@ enum primitive_t
     p_float32,
     p_float64,
     p_boolean,
+    p_string,
     p_none
 };
 
@@ -105,6 +106,10 @@ enum op_t
     // Operators taking a name and a vector of expressions.
     o_call,
     o_access,
+    o_address_of,
+    o_lin_index,
+    o_type,
+    o_dummy,
 
     o_none
 };
