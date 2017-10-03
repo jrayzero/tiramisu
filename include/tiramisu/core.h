@@ -2350,6 +2350,11 @@ public:
 protected:
 
     /**
+      * An index expression just for the request buffer.
+      */
+    isl_ast_expr *req_index_expr = nullptr;
+
+    /**
      * Collapse all the iterations of a loop into one single iteration.
      */
     void full_loop_level_collapse(int level, tiramisu::expr collapse_from_iter);
@@ -3812,11 +3817,6 @@ private:
       */
     isl_map *async_access = nullptr;
 
-    /**
-      * An index expression just for the request buffer.
-      */
-    isl_ast_expr *req_index_expr = nullptr;
-
 protected:
 
     channel *chan = nullptr;
@@ -3884,8 +3884,6 @@ private:
     send *matching_send = nullptr;
 
 public:
-
-    recv();
 
     recv(std::string iteration_domain_str, tiramisu::computation *consumer, bool schedule_this,
          tiramisu::function *fct, tiramisu::channel *chan);
