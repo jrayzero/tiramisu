@@ -3649,9 +3649,8 @@ protected:
     /**
      * Create a Halide expression from a  Tiramisu expression.
      */
-    static Halide::Expr halide_expr_from_tiramisu_expr(const tiramisu::function *fct,
-                                                       std::vector<isl_ast_expr *> &index_expr,
-                                                       const tiramisu::expr &tiramisu_expr);
+    static Halide::Expr halide_expr_from_tiramisu_expr(const tiramisu::function *fct, std::vector<isl_ast_expr *> &index_expr,
+                                                           const tiramisu::expr &tiramisu_expr, tiramisu::computation *comp);
 
     /**
      * Linearize a multidimensional access to a Halide buffer.
