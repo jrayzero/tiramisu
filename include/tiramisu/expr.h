@@ -757,6 +757,19 @@ public:
         return name;
     }
 
+    tiramisu::expr replace_op_in_expr(const std::string &to_replace,
+                                      const std::string &replace_with) {
+        if (this->name == to_replace) {
+            this->name = replace_with;
+            return *this;
+        }
+        for (int i = 0; i < this->op.size(); i++) {
+            tiramisu::expr operand = this->get_operand(i);
+            this->op[i] = operand.replace_op_in_expr(to_replace, replace_with);
+        }
+        return *this;
+    }
+
     /**
       * Get the type of the operator (tiramisu::op_t).
       */
