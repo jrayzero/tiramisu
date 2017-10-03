@@ -3603,6 +3603,8 @@ public:
 
     tiramisu::primitive_t get_dtype() const;
 
+    static std::string attr_to_string(channel_attr attr);
+
 };
 
 class communicator : public computation {
