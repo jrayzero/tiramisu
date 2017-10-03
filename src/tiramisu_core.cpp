@@ -6526,7 +6526,7 @@ isl_set *tiramisu::computation::get_trimmed_time_processor_domain()
     isl_set *tp_domain_without_duplicate_dim =
             isl_set_project_out(isl_set_copy(tp_domain), isl_dim_set, 0, 1);
     tp_domain_without_duplicate_dim = isl_set_set_tuple_name(tp_domain_without_duplicate_dim, name);
-    return tp_domain_without_duplicate_dim ;
+    return tp_domain_without_duplicate_dim;
 }
 
 /**
@@ -6965,12 +6965,191 @@ std::string tiramisu::channel::attr_to_string(tiramisu::channel_attr attr) {
 }
 
 /*
+ * Communicator
+ */
+
+tiramisu::communicator::communicator(std::string iteration_domain_str, tiramisu::expr e, bool schedule_this_computation,
+                                     tiramisu::primitive_t data_type, tiramisu::function *fct,
+                                     tiramisu::channel *chan) :
+        computation(iteration_domain_str, e, schedule_this_computation, data_type, fct), chan(chan) {}
+
+tiramisu::communicator::communicator(std::string iteration_domain_str, tiramisu::expr e, bool schedule_this_computation,
+                                     tiramisu::primitive_t data_type, tiramisu::function *fct) :
+        computation(iteration_domain_str, e, schedule_this_computation, data_type, fct) {}
+
+tiramisu::communicator::communicator() {}
+
+// TODO(Jess) check for bad collapsing, such as not putting adjacent levels together
+void tiramisu::communicator::collapse_many(std::vector<tiramisu::collapser> collapse_each) {
+    for (auto c : collapse_each) {
+        this->collapse(std::get<0>(c), std::get<1>(c), -1, std::get<2>(c));
+    }
+}
+
+void tiramisu::communicator::add_dim(tiramisu::expr dim) {
+    this->dims.push_back(dim);
+}
+
+tiramisu::expr tiramisu::communicator::get_num_elements() const {
+    tiramisu::expr num = expr(1);
+    for (std::vector<tiramisu::expr>::const_iterator iter = dims.cbegin(); iter != dims.cend(); iter++) {
+        num = *iter * num;
+    }
+    return num;
+}
+
+tiramisu::channel *tiramisu::communicator::get_channel() const {
+    return chan;
+}
+
+std::vector<communicator *> tiramisu::communicator::collapse(int level, tiramisu::expr collapse_from_iter,
+                                                             tiramisu::expr collapse_until_iter,
+                                                             tiramisu::expr num_collapsed) {
+    std::vector<communicator *> ret;
+    if (collapse_until_iter.get_expr_type() == tiramisu::e_val && collapse_until_iter.get_int32_value() == -1) {
+        this->add_dim(num_collapsed);
+        // Instead of fully removing the loop, we modify the collapsed loop to only have a single iteration.
+        full_loop_level_collapse(level, collapse_from_iter);
+    } else {
+        std::vector<communicator *> comms =
+                partial_loop_level_collapse<communicator>(level, collapse_from_iter, collapse_until_iter,
+                                                          num_collapsed);
+        ret.push_back(comms[0]);
+        ret.push_back(comms[1]);
+    }
+
+    return ret;
+}
+
+/*
+ * Send
+ */
+
+std::string create_send_func_name(const channel * const chan) {
+    std::string name = "send";
+    if (chan->contains_attr(MPI)) {
+        name += "_MPI";
+    }
+    if (chan->contains_attr(SYNC)) {
+        name += "_sync";
+    }
+    if (chan->contains_attr(ASYNC)) {
+        name += "_async";
+    }
+    if (chan->contains_attr(BLOCK)) {
+        name += "_block";
+    }
+    if (chan->contains_attr(NONBLOCK)) {
+        name += "_nonblock";
+    }
+    return name;
+}
+
+tiramisu::send::send(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs,
+                     tiramisu::channel *chan, bool schedule_this, tiramisu::function *fct, std::vector<expr> dims) :
+        communicator(iteration_domain_str, rhs, schedule_this, chan->get_dtype(), fct, chan), producer(producer),
+        msg_tag(next_msg_tag++) {
+    _is_library_call = true;
+    library_call_name = create_send_func_name(chan);
+    expr mod_rhs(tiramisu::o_address_of, rhs.get_name(), rhs.get_access(), rhs.get_data_type());
+    set_expression(mod_rhs);
+}
+
+int tiramisu::send::get_msg_tag() const {
+    return msg_tag;
+}
+
+tiramisu::computation *tiramisu::send::get_producer() const {
+    return producer;
+}
+
+tiramisu::recv *tiramisu::send::get_matching_recv() const {
+    return matching_recv;
+}
+
+void tiramisu::send::set_matching_recv(tiramisu::recv *matching_recv) {
+    this->matching_recv = matching_recv;
+}
+
+/*
+ * Recv
+ */
+
+std::string create_recv_func_name(const tiramisu::channel * const chan) {
+    std::string name = "recv";
+    if (chan->contains_attr(MPI)) {
+        name += "_MPI";
+    }
+    if (chan->contains_attr(BLOCK)) {
+        name += "_block";
+    }
+    if (chan->contains_attr(NONBLOCK)) {
+        name += "_nonblock";
+    }
+    // synchronous and asynchronous receives don't make sense because they aren't waiting for a response from anything
+    return name;
+}
+
+
+tiramisu::recv::recv(std::string iteration_domain_str, tiramisu::computation *consumer, bool schedule_this,
+                     tiramisu::function *fct, channel *chan)
+        : communicator(iteration_domain_str, tiramisu::expr(), schedule_this, chan->get_dtype(), fct, chan), consumer(consumer) {
+    _is_library_call = true;
+}
+
+tiramisu::recv::recv(std::string iteration_domain_str, bool schedule_this, tiramisu::function *fct, channel *chan)
+        : communicator(iteration_domain_str, tiramisu::expr(), schedule_this, chan->get_dtype(), fct, chan) {
+    _is_library_call = true;
+}
+
+tiramisu::computation *tiramisu::recv::get_consumer() const {
+    return consumer;
+}
+
+send * tiramisu::recv::get_matching_send() const {
+    return matching_send;
+}
+
+void tiramisu::recv::set_matching_send(send *matching_send) {
+    this->matching_send = matching_send;
+    library_call_name = create_recv_func_name(chan);
+}
+
+bool tiramisu::recv::is_recv() const {
+    return true;
+}
+
+/*
+ * Wait
+ */
+
+tiramisu::wait::wait(tiramisu::expr rhs, tiramisu::function *fct) : communicator() {
+    assert(rhs.get_op_type() == tiramisu::o_access && "The RHS expression for a wait should be an access!");
+    tiramisu::computation *op = fct->get_computation_by_name(rhs.get_name())[0];
+    isl_set *dom = isl_set_copy(op->get_iteration_domain());
+    std::string new_name = std::string(isl_set_get_tuple_name(dom)) + "_wait";
+    dom = isl_set_set_tuple_name(dom, new_name.c_str());
+    init_computation(isl_set_to_str(dom), fct, rhs, true, tiramisu::p_async);
+    _is_library_call = true;
+    library_call_name = "wait";
+}
+
+wait_type tiramisu::wait::get_wait_type() const {
+    return this->_wait_type;
+}
+
+std::vector<tiramisu::computation *> tiramisu::wait::get_op_to_wait_on() const {
+    std::string op_name = this->get_expr().get_name();
+    return this->get_function()->get_computation_by_name(op_name);
+}
+
+/*
  * Reader
  */
 
 tiramisu::reader::reader(std::string iteration_domain_str, tiramisu::expr filename, bool schedule_this_operation,
                          tiramisu::primitive_t data_type, tiramisu::function *fct, tiramisu::expr rhs) :
-        computation(iteration_domain_str, expr(), schedule_this_operation, data_type, fct), filename(filename) {
+        communicator(iteration_domain_str, expr(), schedule_this_operation, data_type, fct), filename(filename) {
     // By default, the rhs becomes o_access. For a reader though, we want to just represent the index, so we need to convert
     // it to an o_lin_index
     _is_library_call = true;
@@ -6981,43 +7160,6 @@ tiramisu::reader::reader(std::string iteration_domain_str, tiramisu::expr filena
 
 tiramisu::expr tiramisu::reader::get_filename() const {
     return filename;
-}
-
-tiramisu::expr tiramisu::reader::get_num_elements() {
-    tiramisu::expr num = 1;
-    for (std::vector<tiramisu::expr>::iterator iter = dims.begin(); iter != dims.end(); iter++) {
-        num = *iter * num;
-    }
-    return num;
-}
-
-void tiramisu::reader::add_dim(tiramisu::expr dim) {
-    this->dims.push_back(dim);
-}
-
-std::vector<reader *> tiramisu::reader::collapse(int level, tiramisu::expr collapse_from_iter,
-                                                 tiramisu::expr collapse_until_iter,
-                                                 tiramisu::expr num_collapsed) {
-    std::vector<reader *> ret;
-    if (collapse_until_iter.get_expr_type() == tiramisu::e_val && collapse_until_iter.get_int32_value() == -1) {
-        this->add_dim(num_collapsed);
-        // Instead of fully removing the loop, we modify the collapsed loop to only have a single iteration.
-        full_loop_level_collapse(level, collapse_from_iter);
-    } else {
-        std::vector<reader *> readers =
-                partial_loop_level_collapse<reader>(level, collapse_from_iter, collapse_until_iter, num_collapsed);
-        ret.push_back(readers[0]);
-        ret.push_back(readers[1]);
-    }
-
-    return ret;
-}
-
-// TODO check for bad collapsing, such as not putting adjacent levels together
-void tiramisu::reader::fully_collapse_many(std::vector<collapser> collapse_each) {
-    for (auto c : collapse_each) {
-        this->collapse(std::get<0>(c), std::get<1>(c), -1, std::get<2>(c));
-    }
 }
 
 isl_map *isl_map_add_free_var(const std::string &free_var_name, isl_map *map, isl_ctx *ctx) {
@@ -7085,7 +7227,8 @@ void tiramisu::computation::full_loop_level_collapse(int level, tiramisu::expr c
     } else {
         dim_name = _dim_name;
     }
-    std::string subtract_cst = dim_name + " > " + collapse_from_iter_repr; // > because you want a single iteration (iter 0)
+    std::string subtract_cst =
+            dim_name + " > " + collapse_from_iter_repr; // > because you want a single iteration (iter 0)
     isl_map *ident = isl_set_identity(isl_set_copy(this->get_iteration_domain()));
     ident = isl_map_apply_domain(isl_map_copy(this->get_schedule()), ident);
     assert(isl_map_n_out(ident) == isl_map_n_out(sched));
@@ -7095,7 +7238,7 @@ void tiramisu::computation::full_loop_level_collapse(int level, tiramisu::expr c
     std::vector<std::string> parts;
     split_string(transform_str, "}", parts);
     transform_str = parts[0] + ": " + subtract_cst + "}";
-    isl_map *transform =  isl_map_read_from_str(this->get_ctx(), transform_str.c_str());
+    isl_map *transform = isl_map_read_from_str(this->get_ctx(), transform_str.c_str());
     if (collapse_from_iter.get_expr_type() != tiramisu::e_val) { // This might be a free variable
         transform = isl_map_add_free_var(collapse_from_iter_repr, transform, this->get_ctx());
     }
@@ -7109,8 +7252,7 @@ void split_string(std::string str, std::string delimiter,
                   std::vector<std::string> &vector) {
     size_t pos = 0;
     std::string token;
-    while ((pos = str.find(delimiter)) != std::string::npos)
-    {
+    while ((pos = str.find(delimiter)) != std::string::npos) {
         token = str.substr(0, pos);
         vector.push_back(token);
         str.erase(0, pos + delimiter.length());
@@ -7196,10 +7338,6 @@ bool tiramisu::computation::is_wait() const {
 }
 
 bool tiramisu::send::is_send() const {
-    return true;
-}
-
-bool tiramisu::recv::is_recv() const {
     return true;
 }
 
