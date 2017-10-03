@@ -1563,6 +1563,8 @@ private:
       */
     void create_halide_assignment();
 
+    void create_halide_assignment2();
+
     /**
       * Apply a duplication transformation from iteration space to
       * time-processor space.
@@ -2123,7 +2125,7 @@ protected:
     int req_argument_idx;
 
     // TODO(Jess) document
-    isl_map *req_access_map;
+    isl_map *req_access_map = nullptr;
 
     /**
       * By default, this becomes an o_access to signify that we are writing into a location. However, it can be changed
@@ -2152,7 +2154,7 @@ protected:
      * Return the predicate around this computation if a predicate
      * was added using add_predicate().
      */
-    tiramisu::expr get_predicate();
+    tiramisu::expr get_predicate() const;
 
     /**
       * Return the name of the computation.

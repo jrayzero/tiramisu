@@ -5995,7 +5995,7 @@ void tiramisu::computation::set_iterators_map(std::map<std::string, isl_ast_expr
     this->iterators_map = map;
 }
 
-tiramisu::expr tiramisu::computation::get_predicate()
+tiramisu::expr tiramisu::computation::get_predicate() const
 {
     return this->predicate;
 }
@@ -6031,6 +6031,17 @@ void tiramisu::computation::init_computation(std::string iteration_space_str,
     duplicate_number = 0;
     automatically_allocated_buffer = NULL;
     predicate = tiramisu::expr();
+    this->is_a_parent_partition = false;
+    this->is_a_child_partition = false;
+
+    this->lhs_access_type = tiramisu::o_access;
+    this->lhs_argument_idx = -1;
+    this->rhs_argument_idx = -1;
+    this->req_argument_idx = -1;
+    this->_is_library_call = false;
+    this->req_access_map = nullptr;
+    this->req_index_expr = nullptr;
+
     // In the constructor of computations, we assume that every created
     // computation is the first computation, then, if this computation
     // was created by add_definitions(), we change is_first_definition
@@ -6113,6 +6124,17 @@ tiramisu::computation::computation()
     this->name = "";
     this->fct = NULL;
     this->is_let = false;
+
+    this->is_a_parent_partition = false;
+    this->is_a_child_partition = false;
+    this->lhs_access_type = tiramisu::o_access;
+    this->lhs_argument_idx = -1;
+    this->rhs_argument_idx = -1;
+    this->req_argument_idx = -1;
+    this->_is_library_call = false;
+    this->req_access_map = nullptr;
+    this->req_index_expr = nullptr;
+    predicate = tiramisu::expr();
 }
 
 /**
@@ -7044,6 +7066,8 @@ std::string create_send_func_name(const channel * const chan) {
     }
     return name;
 }
+
+int send::next_msg_tag = 0;
 
 tiramisu::send::send(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs,
                      tiramisu::channel *chan, bool schedule_this, tiramisu::function *fct, std::vector<expr> dims) :
