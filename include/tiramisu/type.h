@@ -37,7 +37,9 @@ enum primitive_t
     p_float64,
     p_boolean,
     p_string,
-    p_none
+    p_none,
+    p_async,
+    p_req_ptr
 };
 
 /**
