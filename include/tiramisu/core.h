@@ -82,6 +82,8 @@ class function
     friend computation;
     friend constant;
     friend generator;
+    friend recv;
+    friend wait;
 
 private:
     /**
@@ -1694,6 +1696,8 @@ private:
       */
     tiramisu::computation *get_first_definition();
 
+protected:
+
     /**
       * Return the Tiramisu expression associated with the computation.
       */
@@ -1703,6 +1707,8 @@ private:
       * Return the function where the computation is declared.
       */
     tiramisu::function *get_function() const;
+
+private:
 
     /**
       * Return the Halide statement that assigns the computation to a buffer location.
@@ -3676,7 +3682,6 @@ protected:
                                                    bool return_buffer_accesses);
 
     /**
-     * TODO Does this actually replace all occurrences?
      * Traverse a tiramisu expression (\p current_exp) until an expression with the specified name is found.
      * Replace that name with a new name. Replaces all occurrences.
      */
@@ -3800,8 +3805,6 @@ private:
 
     std::vector<tiramisu::expr> dims;
 
-    channel *chan = nullptr;
-
     /**
       * Asynchronous communication returns an object that you can use to wait on. This access function
       * defines how to write those objects to buffer. The user doesn't have to do that--it is automatically
@@ -3812,17 +3815,26 @@ private:
     /**
       * An index expression just for the request buffer.
       */
-    isl_ast_expr *req_index_expr;
+    isl_ast_expr *req_index_expr = nullptr;
 
+protected:
+
+    channel *chan = nullptr;
+
+    communicator();
 
 public:
 
     communicator(std::string iteration_domain_str, tiramisu::expr rhs, bool schedule_this_computation,
-                 tiramisu::primitive_t data_type, tiramisu::function *fct, tiramisu::channel *chan);
+                 tiramisu::primitive_t data_type, tiramisu::function *fct);
+
+    communicator(std::string iteration_domain_str, tiramisu::expr rhs, bool schedule_this_computation,
+                 tiramisu::primitive_t
+            , tiramisu::function *fct, tiramisu::channel *chan);
 
     // collapse a level
-    void collapse(int level, tiramisu::expr collapse_from_iter, tiramisu::expr collapse_until_iter,
-                  tiramisu::expr num_collapsed);
+    std::vector<communicator *> collapse(int level, tiramisu::expr collapse_from_iter,
+                                         tiramisu::expr collapse_until_iter, tiramisu::expr num_collapsed);
 
     // Collapse multiple levels. This is the same as calling the above collapse function multiple times.
     // You can only collapse the innermost to the outermost loops.
@@ -3832,7 +3844,7 @@ public:
 
     tiramisu::channel *get_channel() const;
 
-    tiramisu::expr get_num_elements();
+    tiramisu::expr get_num_elements() const;
 
 };
 
@@ -3907,10 +3919,8 @@ public:
 
 };
 
-class reader : public computation {
+class reader : public communicator {
 private:
-
-    std::vector<tiramisu::expr> dims;
 
     tiramisu::expr filename;
 
@@ -3919,18 +3929,7 @@ public:
     reader(std::string iteration_domain_str, tiramisu::expr filename, bool schedule_this_operation,
            tiramisu::primitive_t data_type, tiramisu::function *fct, tiramisu::expr rhs);
 
-    tiramisu::expr get_num_elements();
-
     tiramisu::expr get_filename() const;
-
-    std::vector<reader *> collapse(int level, tiramisu::expr collapse_from_iter, tiramisu::expr collapse_until_iter,
-                                   tiramisu::expr num_collapsed);
-
-    // Collapse multiple levels. This is the same as calling the above collapse function multiple times.
-    // You can only collapse the innermost to the outermost loops.
-    void fully_collapse_many(std::vector<collapser> collapse_each);
-
-    void add_dim(tiramisu::expr dim);
 
     virtual bool is_reader() const override;
 
