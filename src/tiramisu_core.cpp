@@ -6693,6 +6693,14 @@ void tiramisu::computation::mark_as_let_statement()
     this->is_let = true;
 }
 
+void tiramisu::computation::mark_as_library_call() {
+    this->_is_library_call = true;
+}
+
+bool tiramisu::computation::is_library_call() const {
+    return this->_is_library_call;
+}
+
 /****************************************************************************
  ****************************************************************************
  ***************************** Constant class *******************************
@@ -6954,6 +6962,317 @@ std::string tiramisu::channel::attr_to_string(tiramisu::channel_attr attr) {
             return "";
         }
     }
+}
+
+/*
+ * Reader
+ */
+
+tiramisu::reader::reader(std::string iteration_domain_str, tiramisu::expr filename, bool schedule_this_operation,
+                         tiramisu::primitive_t data_type, tiramisu::function *fct, tiramisu::expr rhs) :
+        computation(iteration_domain_str, expr(), schedule_this_operation, data_type, fct), filename(filename) {
+    // By default, the rhs becomes o_access. For a reader though, we want to just represent the index, so we need to convert
+    // it to an o_lin_index
+    _is_library_call = true;
+    library_call_name = "read_binary_data";
+    expr mod_rhs(tiramisu::o_lin_index, rhs.get_name(), rhs.get_access(), rhs.get_data_type());
+    set_expression(mod_rhs);
+}
+
+tiramisu::expr tiramisu::reader::get_filename() const {
+    return filename;
+}
+
+tiramisu::expr tiramisu::reader::get_num_elements() {
+    tiramisu::expr num = 1;
+    for (std::vector<tiramisu::expr>::iterator iter = dims.begin(); iter != dims.end(); iter++) {
+        num = *iter * num;
+    }
+    return num;
+}
+
+void tiramisu::reader::add_dim(tiramisu::expr dim) {
+    this->dims.push_back(dim);
+}
+
+std::vector<reader *> tiramisu::reader::collapse(int level, tiramisu::expr collapse_from_iter,
+                                                 tiramisu::expr collapse_until_iter,
+                                                 tiramisu::expr num_collapsed) {
+    std::vector<reader *> ret;
+    if (collapse_until_iter.get_expr_type() == tiramisu::e_val && collapse_until_iter.get_int32_value() == -1) {
+        this->add_dim(num_collapsed);
+        // Instead of fully removing the loop, we modify the collapsed loop to only have a single iteration.
+        full_loop_level_collapse(level, collapse_from_iter);
+    } else {
+        std::vector<reader *> readers =
+                partial_loop_level_collapse<reader>(level, collapse_from_iter, collapse_until_iter, num_collapsed);
+        ret.push_back(readers[0]);
+        ret.push_back(readers[1]);
+    }
+
+    return ret;
+}
+
+// TODO check for bad collapsing, such as not putting adjacent levels together
+void tiramisu::reader::fully_collapse_many(std::vector<collapser> collapse_each) {
+    for (auto c : collapse_each) {
+        this->collapse(std::get<0>(c), std::get<1>(c), -1, std::get<2>(c));
+    }
+}
+
+isl_map *isl_map_add_free_var(const std::string &free_var_name, isl_map *map, isl_ctx *ctx) {
+    isl_map *final_map = nullptr;
+
+    // first, check to see if this variable is actually a free variable. If not, then we don't need to add it.
+    int num_domain_dims = isl_map_dim(map, isl_dim_in);
+    for (int i = 0; i < num_domain_dims; i++) {
+        if (std::strcmp(isl_map_get_dim_name(map, isl_dim_in, i), free_var_name.c_str()) == 0) {
+            return map;
+        }
+    }
+    int num_range_dims = isl_map_dim(map, isl_dim_out);
+    for (int i = 0; i < num_range_dims; i++) {
+        if (std::strcmp(isl_map_get_dim_name(map, isl_dim_out, i), free_var_name.c_str()) == 0) {
+            return map;
+        }
+    }
+
+    std::string map_str = isl_map_to_str(map);
+    std::vector<std::string> parts;
+    // TODO(Jess) test this function. Not sure if parts is length 2 or 3
+    split_string(map_str, "{", parts);
+    if (parts[0] != "") { // A free variable already exists, so add this variable to that box
+        std::vector<std::string> free_parts;
+        split_string(parts[0], "[", free_parts);
+        // remove the right bracket
+        std::vector<std::string> tmp;
+        split_string(free_parts[free_parts.size() - 1], "]", tmp);
+        free_parts.insert(free_parts.end(), tmp[0]);
+        std::string free_vars = "";
+        int ctr = 0;
+        for (auto s: free_parts) {
+            if (s == free_var_name) {
+                // The variable name was already in the box, so we don't actually need to do anything
+                return map;
+            }
+            free_vars += ctr++ == 0 ? s : "," + s;
+        }
+        free_vars += "," + free_var_name;
+        free_vars = "[" + free_vars + "]" + "{" + parts[1];
+        final_map = isl_map_read_from_str(ctx, free_vars.c_str());
+    } else {
+        std::string m = "[" + free_var_name + "]->{" + parts[1];
+        final_map = isl_map_read_from_str(ctx, m.c_str());
+    }
+    assert(final_map && "Adding free param to map resulted in a null isl_map");
+    return final_map;
+}
+
+static int next_dim_name = 0;
+
+void tiramisu::computation::full_loop_level_collapse(int level, tiramisu::expr collapse_from_iter) {
+    std::string collapse_from_iter_repr =
+            collapse_from_iter.get_expr_type() == tiramisu::e_val ?
+            std::to_string(collapse_from_iter.get_int32_value()) : collapse_from_iter.get_name();
+    isl_map *sched = this->get_schedule();
+    isl_map *sched_copy = isl_map_copy(sched);
+    int dim = loop_level_into_dynamic_dimension(level);
+    const char *_dim_name = isl_map_get_dim_name(sched, isl_dim_out, dim);
+    std::string dim_name = "";
+    if (!_dim_name) { // Since dim names are optional...
+        dim_name = "jr" + std::to_string(next_dim_name++);
+        sched = isl_map_set_dim_name(sched, isl_dim_out, dim, dim_name.c_str());
+    } else {
+        dim_name = _dim_name;
+    }
+    std::string subtract_cst = dim_name + " > " + collapse_from_iter_repr; // > because you want a single iteration (iter 0)
+    isl_map *ident = isl_set_identity(isl_set_copy(this->get_iteration_domain()));
+    ident = isl_map_apply_domain(isl_map_copy(this->get_schedule()), ident);
+    assert(isl_map_n_out(ident) == isl_map_n_out(sched));
+    ident = isl_map_set_dim_name(ident, isl_dim_out, dim, dim_name.c_str());
+    isl_map *universe = isl_map_universe(isl_map_get_space(ident));
+    std::string transform_str = isl_map_to_str(universe);
+    std::vector<std::string> parts;
+    split_string(transform_str, "}", parts);
+    transform_str = parts[0] + ": " + subtract_cst + "}";
+    isl_map *transform =  isl_map_read_from_str(this->get_ctx(), transform_str.c_str());
+    if (collapse_from_iter.get_expr_type() != tiramisu::e_val) { // This might be a free variable
+        transform = isl_map_add_free_var(collapse_from_iter_repr, transform, this->get_ctx());
+    }
+    sched = isl_map_subtract(sched, transform);
+    // update all the dim names because they get removed in the transform
+    assert(isl_map_n_out(sched) == isl_map_n_out(sched_copy)); // Shouldn't have added or removed any dims here...
+    this->set_schedule(sched);
+}
+
+void split_string(std::string str, std::string delimiter,
+                  std::vector<std::string> &vector) {
+    size_t pos = 0;
+    std::string token;
+    while ((pos = str.find(delimiter)) != std::string::npos)
+    {
+        token = str.substr(0, pos);
+        vector.push_back(token);
+        str.erase(0, pos + delimiter.length());
+    }
+    token = str.substr(0, pos);
+    vector.push_back(token);
+}
+
+void tiramisu::function::lift_ops_to_library_calls() {
+    for (std::vector<tiramisu::computation *>::iterator op_iter = body.begin(); op_iter != body.end(); op_iter++) {
+        if ((*op_iter)->is_send()) {
+            send *s = static_cast<send *>(*op_iter);
+            recv *r = s->get_matching_recv();
+            tiramisu::expr s_pred = s->get_predicate().get_int_val() == -2 ? tiramisu::var("pred") : s->get_predicate();
+            tiramisu::expr r_pred(r->get_predicate());
+            tiramisu::expr tag(s->get_msg_tag());
+            tiramisu::expr num_elements(s->get_num_elements());
+            tiramisu::expr send_type(s->get_channel()->get_dtype());
+            bool isnonblock = s->get_channel()->contains_attr(NONBLOCK);
+            s->rhs_argument_idx = 4;
+            s->library_call_args.resize(isnonblock ? 7 : 6);
+            s->library_call_args[0] = s_pred;
+            s->library_call_args[1] = num_elements;
+            s->library_call_args[2] = r_pred;
+            s->library_call_args[3] = tag;
+            s->library_call_args[5] = send_type;
+            if (isnonblock) {
+                // This additional RHS argument is to the request buffer. It is really more of a side effect.
+                s->req_argument_idx = 6;
+            }
+        } else if ((*op_iter)->is_recv()) {
+            recv *r = static_cast<recv *>(*op_iter);
+            send *s = r->get_matching_send();
+            tiramisu::expr s_pred(s->get_predicate());
+            tiramisu::expr r_pred = r->get_predicate().get_int_val() == -2 ? tiramisu::var("pred") : r->get_predicate();
+            tiramisu::expr tag(s->get_msg_tag());
+            tiramisu::expr num_elements(r->get_num_elements());
+            tiramisu::expr recv_type(s->get_channel()->get_dtype());
+            bool isnonblock = r->get_channel()->contains_attr(NONBLOCK);
+            r->lhs_argument_idx = 4;
+            r->library_call_args.resize(isnonblock ? 7 : 6);
+            r->library_call_args[0] = r_pred;
+            r->library_call_args[1] = num_elements;
+            r->library_call_args[2] = s_pred;
+            r->library_call_args[3] = tag;
+            r->library_call_args[5] = recv_type;
+            r->lhs_access_type = tiramisu::o_address_of;
+            if (isnonblock) {
+                // This RHS argument is to the request buffer. It is really more of a side effect.
+                r->req_argument_idx = 6;
+            }
+        } else if ((*op_iter)->is_reader()) {
+            reader *r = static_cast<reader *>(*op_iter);
+            r->lhs_argument_idx = 2;
+            r->rhs_argument_idx = 3;
+            r->library_call_args.resize(5);
+            r->library_call_args[0] = r->get_filename();
+            r->library_call_args[1] = r->get_num_elements();
+            r->library_call_args[4] = tiramisu::expr(tiramisu::p_float32);
+            r->lhs_access_type = tiramisu::o_address_of;
+        } else if ((*op_iter)->is_wait()) {
+            wait *w = static_cast<wait *>(*op_iter);
+            w->rhs_argument_idx = 0;
+            w->library_call_args.resize(1);
+        }
+    }
+}
+
+bool tiramisu::computation::is_send() const {
+    return false;
+}
+
+bool tiramisu::computation::is_recv() const {
+    return false;
+}
+
+bool tiramisu::computation::is_reader() const {
+    return false;
+}
+
+bool tiramisu::computation::is_wait() const {
+    return false;
+}
+
+bool tiramisu::send::is_send() const {
+    return true;
+}
+
+bool tiramisu::recv::is_recv() const {
+    return true;
+}
+
+bool tiramisu::reader::is_reader() const {
+    return true;
+}
+
+bool tiramisu::wait::is_wait() const {
+    return true;
+}
+
+tiramisu::send_recv tiramisu::computation::create_transfer(std::string send_recv_iter_dom_str, std::string send_name,
+                                                           std::string recv_name, tiramisu::channel *send_chan,
+                                                           tiramisu::channel *recv_chan,
+                                                           tiramisu::expr e, tiramisu::function *fct,
+                                                           std::vector<tiramisu::computation *> consumers) {
+    assert(e.get_op_type() == tiramisu::o_access);
+    tiramisu::computation *producer = fct->get_computation_by_name(e.get_name())[0];
+
+    isl_set *iteration_domain = isl_set_read_from_str(producer->get_ctx(), send_recv_iter_dom_str.c_str());
+    isl_set *send_domain = isl_set_set_tuple_name(isl_set_copy(iteration_domain), send_name.c_str());
+    isl_set *recv_domain = isl_set_set_tuple_name(iteration_domain, recv_name.c_str());
+    tiramisu::send *s = new tiramisu::send(isl_set_to_str(send_domain), producer, e, send_chan, true,
+                                           producer->get_function(), {1});
+    tiramisu::recv *r = nullptr;
+    if (!consumers.empty()) {
+        r = new tiramisu::recv(isl_set_to_str(recv_domain), consumers[0], true, fct, recv_chan);
+    } else {
+        r = new tiramisu::recv(isl_set_to_str(recv_domain), true, fct, recv_chan);
+    }
+    isl_map *send_sched = s->gen_identity_schedule_for_iteration_domain();
+    isl_map *recv_sched = r->gen_identity_schedule_for_iteration_domain();
+    s->set_schedule(send_sched);
+    r->set_schedule(recv_sched);
+    s->set_matching_recv(r);
+    r->set_matching_send(s);
+
+    tiramisu::send_recv sr;
+    sr.s = s;
+    sr.r = r;
+
+    // Replace accesses to the producer in the consumers
+    for (auto c : consumers) {
+        tiramisu::generator::replace_expr_name(c->expression, producer->get_name(), recv_name);
+    }
+
+    return sr;
+}
+
+tiramisu::send *tiramisu::computation::create_send(std::string iteration_domain_str, tiramisu::expr start,
+                                                   tiramisu::channel *chan, bool schedule_this,
+                                                   std::initializer_list<expr> dims) {
+    send *s = new send(iteration_domain_str, this, start, chan, schedule_this, this->get_function(), dims);
+    return s;
+}
+
+tiramisu::recv *tiramisu::computation::create_recv(std::string iteration_domain_str, tiramisu::computation *consumer,
+                                                   bool schedule_this) {
+    recv *r = new recv(iteration_domain_str, consumer, schedule_this, this->get_function(), nullptr);
+    // Update the consumer to use the same RHS access, but to the recv instead of whatever it accessed before
+    tiramisu::expr e = consumer->get_expr();
+    e = e.replace_op_in_expr(this->get_name(), r->get_name());
+    consumer->set_expression(e);
+    return r;
+}
+
+tiramisu::recv *tiramisu::computation::create_recv(std::string iteration_domain_str, bool schedule_this) {
+    recv *r = new recv(iteration_domain_str, schedule_this, this->get_function(), nullptr);
+    return r;
+}
+
+void tiramisu::computation::set_parent_computation(tiramisu::computation *parent_computation) {
+    this->parent_computation = parent_computation;
 }
 
 }
