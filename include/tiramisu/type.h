@@ -95,7 +95,12 @@ enum op_t
     o_min,
     o_right_shift,
     o_left_shift,
-
+    o_is_nan,
+    o_bitwise_not,
+    o_bitwise_and,
+    o_bitwise_or,
+    o_bitwise_xor,
+    o_pow,
 
     // Ternary operators
     // The arguments are tiramisu::expr.

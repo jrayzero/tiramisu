@@ -34,6 +34,7 @@ std::string str_from_tiramisu_type_primitive(tiramisu::primitive_t type);
 class buffer;
 class var;
 class global;
+class generator;
 
 /**
   * A class that holds all the global variables necessary for Tiramisu.
@@ -96,6 +97,7 @@ public:
 class expr
 {
     friend var;
+    friend generator;
 
     /**
       * The type of the operator.
@@ -757,6 +759,18 @@ public:
         return name;
     }
 
+    void set_name(std::string &name) {
+        assert((this->get_expr_type() == tiramisu::e_var) ||
+               (this->get_op_type() == tiramisu::o_access) ||
+               (this->get_op_type() == tiramisu::o_call) ||
+               (this->get_op_type() == tiramisu::o_allocate) ||
+               (this->get_op_type() == tiramisu::o_free) ||
+               (this->get_op_type() == tiramisu::o_address_of) ||
+               (this->get_op_type() == tiramisu::o_lin_index) ||
+               (this->get_op_type() == tiramisu::o_dummy));
+        this->name = name;
+    }
+
     tiramisu::expr replace_op_in_expr(const std::string &to_replace,
                                       const std::string &replace_with) {
         if (this->name == to_replace) {
@@ -1416,6 +1430,18 @@ public:
                             return *this;
                         case tiramisu::o_type:
                             return *this;
+                        case tiramisu::o_pow:
+                            return *this;
+                        case tiramisu::o_is_nan:
+                            return *this;
+                        case tiramisu::o_bitwise_and:
+                            return *this;
+                        case tiramisu::o_bitwise_or:
+                            return *this;
+                        case tiramisu::o_bitwise_not:
+                            return *this;
+                        case tiramisu::o_bitwise_xor:
+                            return *this;
                         case tiramisu::o_free:
                             return *this;
                         default:
@@ -1654,6 +1680,34 @@ public:
                             break;
                         case tiramisu::o_type:
                             str += "type(" + std::to_string(this->dtype) + ")";
+                            break;
+                        case tiramisu::o_pow:
+                            str += "pow((" + this->get_operand(0).to_str() + "), (" + this->get_operand(1).to_str()
+                                   + "))";
+                            break;
+                        case tiramisu::o_bitwise_and:
+                            str += "(";
+                            this->get_operand(0).dump(false);
+                            str += ") &" + std::string("(");
+                            str += this->get_operand(1).to_str();
+                            str += ")";
+                            break;
+                        case tiramisu::o_bitwise_or:
+                            str += "(" + this->get_operand(0).to_str();
+                            str += ") | (" + this->get_operand(1).to_str();
+                            str += ")";
+                            break;
+                        case tiramisu::o_bitwise_xor:
+                            str += "(" + this->get_operand(0).to_str();
+                            str += ") ^ (" + this->get_operand(1).to_str();
+                            str += ")";
+                            break;
+                        case tiramisu::o_bitwise_not:
+                            str += "~(" + this->get_operand(0).to_str();
+                            str += ")";
+                            break;
+                        case tiramisu::o_is_nan:
+                            str += "is_nan(" + this->get_operand(0).to_str() + ") ";
                             break;
                         default:
                             tiramisu::error("Dumping an unsupported tiramisu expression.", 1);
