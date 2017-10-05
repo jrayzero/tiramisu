@@ -383,11 +383,6 @@ protected:
     void add_iterator_name(const std::string &it_name);
 
     /**
-     * Look for operations that are library calls and prep their arguments.
-     */
-    void lift_ops_to_library_calls();
-
-    /**
       * Keeps track of allocation computations created using
       * allocate_and_map_buffer_automatically() to schedule them during gen_ordering_schedules.
       */
@@ -880,6 +875,11 @@ public:
       * This function takes an ISL set as input.
       */
     void set_context_set(isl_set *context);
+
+    /**
+     * Look for operations that are library calls and prep their arguments.
+     */
+    void lift_ops_to_library_calls();
 
 };
 
@@ -3470,10 +3470,11 @@ public:
       * send_recv_iter_dom should be defined over the iterations of the producer that we need.
       * e should be just a single access expression into the producer.
       */
-    static tiramisu::send_recv create_transfer(std::string send_recv_iter_dom_str, std::string send_name,
-                                               std::string recv_name, tiramisu::channel *send_chan,
-                                               tiramisu::channel *recv_chan, tiramisu::expr e,
-                                               tiramisu::function *fct, std::vector<tiramisu::computation *> consumers);
+    static send_recv create_transfer(std::string send_recv_iter_dom_str, std::string send_name, std::string recv_name,
+                                     tiramisu::channel *send_chan, tiramisu::channel *recv_chan, tiramisu::expr e,
+                                     std::vector<tiramisu::computation *> consumers, tiramisu::function *fct);
+
+    static void distribute(std::vector<std::vector<computation *>> ops, std::vector<int> predicates);
 
     tiramisu::send *create_send(std::string iteration_domain_str, tiramisu::expr start, tiramisu::channel *chan,
                                 bool schedule_this, std::initializer_list<expr> dims);

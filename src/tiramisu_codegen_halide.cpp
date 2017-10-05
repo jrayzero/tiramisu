@@ -2104,7 +2104,6 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
     return result;
 }
 
-// TODO(Jess) this is where I need stuff for the groups, predicates, etc
 void function::gen_halide_stmt()
 {
     DEBUG_FCT_NAME(3);
@@ -3148,7 +3147,9 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
                 }
                 DEBUG(10, tiramisu::str_dump("Buffer strides have been computed."));
 
-                if (tiramisu_expr.get_op_type() == tiramisu::o_access)
+                if (tiramisu_expr.get_op_type() == tiramisu::o_access ||
+                        tiramisu_expr.get_op_type() == tiramisu::o_address_of ||
+                        tiramisu_expr.get_op_type() == tiramisu::o_lin_index)
                 {
                     Halide::Expr index;
 
@@ -3192,8 +3193,9 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
 
                         index_expr.erase(index_expr.begin());
                     }
-
-                    if (tiramisu_buffer->get_argument_type() == tiramisu::a_input)
+                    if (tiramisu_expr.get_op_type() == tiramisu::o_lin_index) {
+                        result = index;
+                    } else if (tiramisu_buffer->get_argument_type() == tiramisu::a_input)
                     {
                         /*Halide::Buffer<> buffer = Halide::Buffer<>(
                                                       type,
@@ -3212,12 +3214,22 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
                         result = Halide::Internal::Load::make(
                                 type, tiramisu_buffer->get_name(), index, Halide::Buffer<>(),
                                 param, Halide::Internal::const_true(type.lanes()));
+                        if (tiramisu_expr.get_op_type() == tiramisu::o_address_of) {
+                            result = Halide::Internal::Call::make(Halide::Handle(1, type.handle_type),
+                                                                  Halide::Internal::Call::address_of, {result},
+                                                                  Halide::Internal::Call::Intrinsic);
+                        }
                     }
                     else
                     {
                         result = Halide::Internal::Load::make(
                                 type, tiramisu_buffer->get_name(), index, Halide::Buffer<>(),
                                 Halide::Internal::Parameter(), Halide::Internal::const_true(type.lanes()));
+                        if (tiramisu_expr.get_op_type() == tiramisu::o_address_of) {
+                            result = Halide::Internal::Call::make(Halide::Handle(1, type.handle_type),
+                                                                  Halide::Internal::Call::address_of, {result},
+                                                                  Halide::Internal::Call::Intrinsic);
+                        }
                     }
                 }
                 else if (tiramisu_expr.get_op_type() == tiramisu::o_address)

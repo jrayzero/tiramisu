@@ -894,10 +894,11 @@ void tiramisu::computation::rename_computation(std::string new_name)
 
     // Rename the access relation of the computation.
     isl_map *access = this->get_access_relation();
-    assert(access != NULL);
-    access = isl_map_set_tuple_name(access, isl_dim_in, new_name.c_str());
-    DEBUG(10, tiramisu::str_dump("Setting the access relation to ", isl_map_to_str(access)));
-    this->set_access(access);
+    if (access != NULL) { // in cases like partitioning, we won't have an access function yet, so don't assert it's true
+        access = isl_map_set_tuple_name(access, isl_dim_in, new_name.c_str());
+        DEBUG(10, tiramisu::str_dump("Setting the access relation to ", isl_map_to_str(access)));
+        this->set_access(access);
+    }
 
     // Rename the schedule
     isl_map *sched = this->get_schedule();
@@ -6248,7 +6249,9 @@ isl_map *tiramisu::computation::get_access_relation_adapted_to_time_processor_do
 
     if (!this->is_let_stmt())
     {
-        DEBUG(10, tiramisu::str_dump("Original access:", isl_map_to_str(access)));
+        if (access != NULL) {
+            DEBUG(10, tiramisu::str_dump("Original access:", isl_map_to_str(access)));
+        }
 
         if (global::is_auto_data_mapping_set())
         {
@@ -7373,11 +7376,9 @@ bool tiramisu::wait::is_wait() const {
     return true;
 }
 
-tiramisu::send_recv tiramisu::computation::create_transfer(std::string send_recv_iter_dom_str, std::string send_name,
-                                                           std::string recv_name, tiramisu::channel *send_chan,
-                                                           tiramisu::channel *recv_chan,
-                                                           tiramisu::expr e, tiramisu::function *fct,
-                                                           std::vector<tiramisu::computation *> consumers) {
+send_recv tiramisu::computation::create_transfer(std::string send_recv_iter_dom_str, std::string send_name, std::string recv_name,
+                                                tiramisu::channel *send_chan, tiramisu::channel *recv_chan, tiramisu::expr e,
+                                                std::vector<tiramisu::computation *> consumers, tiramisu::function *fct) {
     assert(e.get_op_type() == tiramisu::o_access);
     tiramisu::computation *producer = fct->get_computation_by_name(e.get_name())[0];
 
@@ -7403,7 +7404,7 @@ tiramisu::send_recv tiramisu::computation::create_transfer(std::string send_recv
     sr.s = s;
     sr.r = r;
 
-    // Replace accesses to the producer in the consumers
+    // Replace accesses to the producer in the consumers with the receive function
     for (auto c : consumers) {
         tiramisu::generator::replace_expr_name(c->expression, producer->get_name(), recv_name);
     }
@@ -7435,6 +7436,19 @@ tiramisu::recv *tiramisu::computation::create_recv(std::string iteration_domain_
 
 void tiramisu::computation::set_parent_computation(tiramisu::computation *parent_computation) {
     this->parent_computation = parent_computation;
+}
+
+void tiramisu::computation::distribute(std::vector<std::vector<tiramisu::computation *>> ops,
+                                       std::vector<int> predicates) {
+    assert(ops.size() == predicates.size());
+    int idx = 0;
+    for (auto op_group_iter = ops.begin(); op_group_iter != ops.end(); op_group_iter++) {
+        for (auto op_iter = op_group_iter->begin(); op_iter != op_group_iter->end(); op_iter++) {
+            assert(!(*op_iter)->is_a_parent_partition && "You are trying to distribute a partitioned operation!");
+            (*op_iter)->add_predicate(tiramisu::expr(predicates[idx]));
+        }
+        idx++;
+    }
 }
 
 }

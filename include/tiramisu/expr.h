@@ -1645,6 +1645,8 @@ public:
                             str +=  "cast("+this->get_operand(0).to_str();
                             str +=  ") ";
                             break;
+                        case tiramisu::o_address_of:
+                        case tiramisu::o_lin_index:
                         case tiramisu::o_access:
                             str +=  this->get_name() + "(";
                             for (int k = 0; k < this->get_access().size(); k++)
