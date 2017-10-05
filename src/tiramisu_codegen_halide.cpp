@@ -2018,16 +2018,36 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                                                                                                       comp->get_iterators_map());
                 Halide::Expr predicate = halide_expr_from_tiramisu_expr(comp->get_function(), ie, tiramisu_predicate,
                                                                         comp);
-                DEBUG(3, tiramisu::str_dump("Adding a predicate around the computation."); std::cout << predicate);
-                DEBUG(3, tiramisu::str_dump("Generating code for the if branch."));
+                if (!comp->is_distributed_predicate()) {
+                    DEBUG(3, tiramisu::str_dump("Adding a predicate around the computation.");
+                            std::cout << predicate);
+                    DEBUG(3, tiramisu::str_dump("Generating code for the if branch."));
 
-                Halide::Internal::Stmt if_s = result;
-                DEBUG(10, tiramisu::str_dump("If branch: "); std::cout << if_s);
+                    Halide::Internal::Stmt if_s = result;
+                    DEBUG(10, tiramisu::str_dump("If branch: ");
+                            std::cout << if_s);
 
-                Halide::Internal::Stmt else_s;
+                    Halide::Internal::Stmt else_s;
 
-                result = Halide::Internal::IfThenElse::make(predicate, if_s, else_s);
-                DEBUG(10, tiramisu::str_dump("The predicated statement is "); std::cout << result);
+                    result = Halide::Internal::IfThenElse::make(predicate, if_s, else_s);
+                    DEBUG(10, tiramisu::str_dump("The predicated statement is ");
+                            std::cout << result);
+                } else { // For now, just handle as if it is MPI ranks
+                    // TODO(Jess) this
+                    DEBUG(3, tiramisu::str_dump("Adding a predicate around the computation.");
+                            std::cout << predicate);
+                    DEBUG(3, tiramisu::str_dump("Generating code for the if branch."));
+
+                    Halide::Internal::Stmt if_s = result;
+                    DEBUG(10, tiramisu::str_dump("If branch: ");
+                            std::cout << if_s);
+
+                    Halide::Internal::Stmt else_s;
+
+                    result = Halide::Internal::IfThenElse::make(predicate, if_s, else_s);
+                    DEBUG(10, tiramisu::str_dump("The predicated statement is ");
+                            std::cout << result);
+                }
             }
         }
     }
@@ -2119,6 +2139,16 @@ void function::gen_halide_stmt()
 
     // Generate the statement that represents the whole function
     stmt = tiramisu::generator::halide_stmt_from_isl_node(*this, this->get_isl_ast(), 0, generated_stmts);
+
+    if (this->_needs_rank_call) {
+        // add a call to MPI rank to the beginning of the function
+        Halide::Expr mpi_rank_var =
+                Halide::Internal::Variable::make(halide_type_from_tiramisu_type(tiramisu::p_int32), "pred");
+        Halide::Expr mpi_rank = Halide::Internal::Call::make(Halide::Int(32), Halide::Internal::Call::mrank,
+                                                             std::vector<Halide::Expr>(),
+                                                             Halide::Internal::Call::Intrinsic);
+        stmt = Halide::Internal::LetStmt::make("pred", mpi_rank, stmt);
+    }
 
     DEBUG(3, tiramisu::str_dump("The following Halide statement was generated:\n"); std::cout << stmt << std::endl);
 

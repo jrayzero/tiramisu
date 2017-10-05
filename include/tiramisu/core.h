@@ -117,6 +117,8 @@ private:
       */
     isl_ast_node *ast;
 
+    bool _needs_rank_call = false;
+
     /**
       * A vector representing the parallel dimensions around
       * the computations of the function.
@@ -881,6 +883,8 @@ public:
      */
     void lift_ops_to_library_calls();
 
+    bool needs_rank_call() const;
+
 };
 
 
@@ -1314,6 +1318,11 @@ private:
      * condition around the computation.
      */
     tiramisu::expr predicate;
+
+    /**
+     * True if this predicated is being used for separating distributed computations (such as for ranks in MPI)
+     */
+    bool _is_distributed_predicate;
 
     /**
       * The schedules of the computation.
@@ -2156,6 +2165,8 @@ protected:
      */
     tiramisu::expr get_predicate() const;
 
+    bool is_distributed_predicate() const;
+
     /**
       * Return the name of the computation.
       */
@@ -2597,7 +2608,7 @@ public:
      * The compiler will then transform automatically the multiple conditions (condition around each
      * computation) into one condition around the whole block.
      */
-    void add_predicate(tiramisu::expr predicate);
+    void add_predicate(tiramisu::expr predicate, bool is_distributed_predicate=false);
 
     /**
       * \brief Schedule this computation to run after the computation \p comp.

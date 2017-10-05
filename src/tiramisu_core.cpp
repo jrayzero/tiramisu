@@ -6001,9 +6001,10 @@ tiramisu::expr tiramisu::computation::get_predicate() const
     return this->predicate;
 }
 
-void tiramisu::computation::add_predicate(tiramisu::expr predicate)
+void tiramisu::computation::add_predicate(tiramisu::expr predicate, bool is_distributed_predicate)
 {
     this->predicate = predicate;
+    this->_is_distributed_predicate = is_distributed_predicate;
 }
 
 /**
@@ -6032,6 +6033,7 @@ void tiramisu::computation::init_computation(std::string iteration_space_str,
     duplicate_number = 0;
     automatically_allocated_buffer = NULL;
     predicate = tiramisu::expr();
+    _is_distributed_predicate = false;
     this->is_a_parent_partition = false;
     this->is_a_child_partition = false;
 
@@ -6136,6 +6138,7 @@ tiramisu::computation::computation()
     this->req_access_map = nullptr;
     this->req_index_expr = nullptr;
     predicate = tiramisu::expr();
+    _is_distributed_predicate = false;
 }
 
 /**
@@ -7442,13 +7445,22 @@ void tiramisu::computation::distribute(std::vector<std::vector<tiramisu::computa
                                        std::vector<int> predicates) {
     assert(ops.size() == predicates.size());
     int idx = 0;
+    ops[0][0]->get_function()->_needs_rank_call = true;
     for (auto op_group_iter = ops.begin(); op_group_iter != ops.end(); op_group_iter++) {
         for (auto op_iter = op_group_iter->begin(); op_iter != op_group_iter->end(); op_iter++) {
             assert(!(*op_iter)->is_a_parent_partition && "You are trying to distribute a partitioned operation!");
-            (*op_iter)->add_predicate(tiramisu::expr(predicates[idx]));
+            (*op_iter)->add_predicate(tiramisu::expr(predicates[idx]), true);
         }
         idx++;
     }
+}
+
+bool tiramisu::computation::is_distributed_predicate() const {
+    return _is_distributed_predicate;
+}
+
+bool tiramisu::function::needs_rank_call() const {
+    return _needs_rank_call;
 }
 
 }
