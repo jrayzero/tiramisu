@@ -2018,35 +2018,23 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                                                                                                       comp->get_iterators_map());
                 Halide::Expr predicate = halide_expr_from_tiramisu_expr(comp->get_function(), ie, tiramisu_predicate,
                                                                         comp);
+                Halide::Internal::Stmt if_s = result;
+                Halide::Internal::Stmt else_s;
                 if (!comp->is_distributed_predicate()) {
                     DEBUG(3, tiramisu::str_dump("Adding a predicate around the computation.");
                             std::cout << predicate);
                     DEBUG(3, tiramisu::str_dump("Generating code for the if branch."));
-
-                    Halide::Internal::Stmt if_s = result;
                     DEBUG(10, tiramisu::str_dump("If branch: ");
                             std::cout << if_s);
-
-                    Halide::Internal::Stmt else_s;
-
                     result = Halide::Internal::IfThenElse::make(predicate, if_s, else_s);
                     DEBUG(10, tiramisu::str_dump("The predicated statement is ");
                             std::cout << result);
                 } else { // For now, just handle as if it is MPI ranks
-                    // TODO(Jess) this
-                    DEBUG(3, tiramisu::str_dump("Adding a predicate around the computation.");
-                            std::cout << predicate);
-                    DEBUG(3, tiramisu::str_dump("Generating code for the if branch."));
-
-                    Halide::Internal::Stmt if_s = result;
-                    DEBUG(10, tiramisu::str_dump("If branch: ");
-                            std::cout << if_s);
-
-                    Halide::Internal::Stmt else_s;
-
-                    result = Halide::Internal::IfThenElse::make(predicate, if_s, else_s);
-                    DEBUG(10, tiramisu::str_dump("The predicated statement is ");
-                            std::cout << result);
+                    assert(comp->get_predicate().get_int_val() != -1 && "Not handling -1 rank yet");
+                    Halide::Expr mpi_rank_var =
+                            Halide::Internal::Variable::make(halide_type_from_tiramisu_type(p_int32), "pred");
+                    Halide::Expr eq = mpi_rank_var == predicate;
+                    result = Halide::Internal::IfThenElse::make(eq, if_s, else_s);
                 }
             }
         }
