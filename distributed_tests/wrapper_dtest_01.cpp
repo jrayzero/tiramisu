@@ -3,6 +3,7 @@
 //
 
 #include <mpi.h>
+#include <iostream>
 #include "Halide.h"
 #include "wrapper_dtest_01.h"
 
@@ -17,20 +18,22 @@ int main(int argc, char** argv) {
     Halide::Runtime::Buffer<float> input(_input, {160,160});
     Halide::Runtime::Buffer<float> output(160,160);
 
-    dtest01(input, output);
-
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    dtest_01(input, output);
 
     if (rank == 0) {
         int ctr = 0;
         for (int row = 0; row < 160; row++) {
             for (int col = 0; col < 160; col++) {
-                assert(output(col, row) == ctr++);
+	      assert(output(col, row) == (ctr++ + 4));
             }
         }
-    }
+    }  
 
     MPI_Finalize();
+
+    std::cerr << "Rank " << rank << " is complete!" << std::endl;
 
 }

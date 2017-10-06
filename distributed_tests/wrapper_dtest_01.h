@@ -11,10 +11,10 @@
 extern "C" {
 #endif
 
-int dtest01(halide_buffer_t *, halide_buffer_t *);
-int dtest01_argv(void **args);
+int dtest_01(halide_buffer_t *, halide_buffer_t *);
+int dtest_01_argv(void **args);
 
-const struct halide_filter_metadata_t dtest01_metadata();
+const struct halide_filter_metadata_t dtest_01_metadata();
 
 #ifdef __cplusplus
 }  // extern "C"
