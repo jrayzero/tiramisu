@@ -2,7 +2,6 @@
 // Created by Jessica Ray on 10/3/17.
 //
 
-#include <isl/set.h>
 #include <tiramisu/debug.h>
 #include <tiramisu/core.h>
 
@@ -88,6 +87,5 @@ int main(int argc, char **argv) {
     dtest_01.gen_halide_stmt();
     dtest_01.dump_halide_stmt();
     dtest_01.gen_halide_obj("build/generated_fct_dtest_01.o");
-
 
 }

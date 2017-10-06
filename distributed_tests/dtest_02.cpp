@@ -36,21 +36,21 @@ int main(int argc, char **argv)
     constant p1("M", expr((int32_t) SIZE1), p_int32, true, NULL, 0, &blurxy);
 
     // Declare the computations c_blurx and c_blury.
-    computation c_input("[N]->{c_input[i,j]: 0<=i<N and 0<=j<N}", expr(), false, p_float32, &blurxy);
+    computation c_input("[N]->{c_input[i,j]: 0<=i<N and 0<=j<N}", expr(), false, p_uint8, &blurxy);
 
     var i("i"), j("j");
 
     expr e1 = (c_input(i - 1, j) +
                c_input(i    , j) +
-               c_input(i + 1, j)) / 3.0f;
+               c_input(i + 1, j)) / (uint8_t)3;
 
-    computation c_blurx("[N,M]->{c_blurx[i,j]: 0<i<N and 0<j<M}", e1, true, p_float32, &blurxy);
+    computation c_blurx("[N,M]->{c_blurx[i,j]: 0<i<N and 0<j<M}", e1, true, p_uint8, &blurxy);
 
     expr e2 = (c_blurx(i, j - 1) +
                c_blurx(i, j) +
-               c_blurx(i, j + 1)) / 3.0f;
+               c_blurx(i, j + 1)) / (uint8_t)3;
 
-    computation c_blury("[N,M]->{c_blury[i,j]: 1<i<N-1 and 1<j<M-1}", e2, true, p_float32, &blurxy);
+    computation c_blury("[N,M]->{c_blury[i,j]: 1<i<N-1 and 1<j<M-1}", e2, true, p_uint8, &blurxy);
 
     // -------------------------------------------------------
     // Layer II
@@ -65,7 +65,7 @@ int main(int argc, char **argv)
     std::vector<computation *> blurx_parts = c_blurx.partition<computation>(blurx_domain_splits);
     std::vector<computation *> blury_parts = c_blury.partition<computation>(blury_domain_splits);
 
-    channel chan_sync_block("chan_sync_block", p_float32, {FIFO, SYNC, BLOCK, MPI});
+    channel chan_sync_block("chan_sync_block", p_uint8, {FIFO, SYNC, BLOCK, MPI});
 
     send_recv n0n1 = computation::create_transfer("[N,M]->{[i,j]: N-1<=i<N and 0<=j<M}", "send_0_1", "recv_0_1",
                                                   &chan_sync_block, &chan_sync_block, c_input(var("i"), var("j")),
@@ -94,14 +94,14 @@ int main(int argc, char **argv)
     // Layer III
     // -------------------------------------------------------
 
-    buffer b_input0("b_input0", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_float32, a_input, &blurxy);
-    buffer b_input1("b_input1", {tiramisu::expr(SIZE0)/2 + 1, tiramisu::expr(SIZE1)}, p_float32, a_temporary, &blurxy);
+    buffer b_input0("b_input0", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint8, a_input, &blurxy);
+    buffer b_input1("b_input1", {tiramisu::expr(SIZE0)/2 + 1, tiramisu::expr(SIZE1)}, p_uint8, a_temporary, &blurxy);
 
-    buffer b_blury0("b_blury0", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_float32, a_output, &blurxy);
-    buffer b_blury("b_blury1", {tiramisu::expr(SIZE0)/2, tiramisu::expr(SIZE1)}, p_float32, a_temporary, &blurxy);
+    buffer b_blury0("b_blury0", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint8, a_output, &blurxy);
+    buffer b_blury("b_blury1", {tiramisu::expr(SIZE0)/2, tiramisu::expr(SIZE1)}, p_uint8, a_temporary, &blurxy);
 
-    buffer b_blurx0("b_blurx0", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_float32, a_temporary, &blurxy);
-    buffer b_blurx1("b_blurx1", {tiramisu::expr(SIZE0)/2, tiramisu::expr(SIZE1)}, p_float32, a_temporary, &blurxy);
+    buffer b_blurx0("b_blurx0", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint8, a_temporary, &blurxy);
+    buffer b_blurx1("b_blurx1", {tiramisu::expr(SIZE0)/2, tiramisu::expr(SIZE1)}, p_uint8, a_temporary, &blurxy);
 
     c_input.set_access("{c_input[i,j]->b_input0[i,j]}");
     blurx_parts[0]->set_access("{c_blurx0[i,j]->b_blurx0[i,j]}");
