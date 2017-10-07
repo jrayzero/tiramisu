@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
     }  
 
     MPI_Finalize();
-
     std::cerr << "Rank " << rank << " is complete!" << std::endl;
 
+    return 0;
 }
