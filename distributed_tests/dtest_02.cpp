@@ -67,7 +67,7 @@ int main(int argc, char **argv)
 
     channel chan_sync_block("chan_sync_block", p_uint8, {FIFO, SYNC, BLOCK, MPI});
 
-    send_recv n0n1 = computation::create_transfer("[N,M]->{[i,j]: N-1<=i<N and 0<=j<M}", "send_0_1", "recv_0_1",
+    send_recv n0n1 = computation::create_transfer("[N,M]->{[i,j]: N/2-1<=i<N and 0<=j<M}", "send_0_1", "recv_0_1",
                                                   &chan_sync_block, &chan_sync_block, c_input(var("i"), var("j")),
                                                   {blurx_parts[1]}, &blurxy);
     send_recv n1n0 = computation::create_transfer("[N,M]->{[i,j]: N/2<=i<N and 0<=j<M}", "send_1_0", "recv_1_0",
