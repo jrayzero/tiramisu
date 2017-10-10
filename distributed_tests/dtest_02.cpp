@@ -108,7 +108,7 @@ int main(int argc, char **argv)
     blurx_parts[1]->set_access("[N]->{c_blurx1[i,j]->b_blurx1[i-N/2,j]}");
     blury_parts[0]->set_access("{c_blury0[i,j]->b_blury0[i,j]}");
     blury_parts[1]->set_access("[N]->{c_blury1[i,j]->b_blury1[i-N/2,j]}");
-    n0n1.r->set_access("[N]->{recv_0_1[i,j]->b_input1[i-N/2,j]}");
+    n0n1.r->set_access("[N]->{recv_0_1[i,j]->b_input1[i-(N/2-1),j]}");
     n1n0.r->set_access("{recv_1_0[i,j]->b_blury0[i,j]}");
 
     // -------------------------------------------------------
