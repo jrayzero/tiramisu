@@ -1930,40 +1930,6 @@ private:
     void rename_computation(std::string new_name);
 
     /**
-      * Separate the iteration domain into two iteration domains using
-      * the constant \p C.
-      * Let us assume that the dimension \p dim of the iteration domain
-      * is called i.  The iteration domain is separated into two domains
-      * using the hyperplane (i = v*floor(N/v)). That means, two copies of the
-      * iteration domain are created, the constraint (i<=v*floor(N/v)) is added to
-      * the schedule of the first while the constrain (i>v*floor(N/v)) is added to
-      * the schedule of the second.
-      *
-      * Let us assume that we have the following iteration domain
-      *
-      *   {S0[i,j]: 0<=i<N and 0<=j<M}
-      *
-      * To separate this iteration domain by the hyperplane j=4*floor(M/4), one should
-      * call
-      *
-      *   S0.separate(1, tiramisu::expr("M"), 4)
-      *
-      * This will result in the creation of two computations that have the same
-      * iteration domains but have different schedules. The schedules are as
-      * follows:
-      *
-      * The schedule of the original (full) computation would be
-      * {S0[i,j]->S0[0, 0, i, 0, j, 0]: j<4*floor(M/4)}
-      *
-      * The schedule of the separated (partial) computation would be
-      * {S0[i]->S0[0, 0, i, 10, j, 0]: 4*floor(M/4)<=j}
-      *
-      * The second computation created using separate can be accessed with
-      * get_update().
-      */
-    void separate(int dim, tiramisu::expr N, int v);
-
-    /**
       * Set the names of loop levels dimensions.
       * The loop levels are specified using \p loop_levels
       * and their names are specified using \p names.
@@ -2351,39 +2317,6 @@ protected:
     void set_schedule(isl_map *map);
     void set_schedule(std::string map_str);
     // @}
-
-public:
-
-    /**
-     * Partition an operation into a new set of operations based on the constraints provided. The constraints should
-     * be provided as a set of iteration domains. These constraints are intersected with the parent
-     * operation's domain (if preserve_schedule = false) or the schedule (if preserve_schedule = true)
-     */
-    template <typename T>
-    std::vector<T *> partition(std::vector<std::pair<std::string, std::string>> domains) {
-        std::vector<T *> output;
-        this->get_function()->align_schedules();
-        for (auto domain_iter = domains.begin(); domain_iter != domains.end(); domain_iter++) {
-            std::string partition_name = domain_iter->first;
-            isl_set *partition_iter_domain = isl_set_read_from_str(this->get_ctx(), (domain_iter->second).c_str());
-            partition_iter_domain = isl_set_set_tuple_name(partition_iter_domain, partition_name.c_str());
-            T *part = static_cast<T*>(this->copy());
-            part->set_iteration_domain(partition_iter_domain);
-            part->set_schedule(part->gen_identity_schedule_for_iteration_domain());
-            isl_map *sched = part->gen_identity_schedule_for_iteration_domain();
-            part->set_schedule(sched);
-            part->set_parent_computation(this);
-            part->is_a_child_partition = true;
-            part->rename_computation(partition_name);
-            output.push_back(part);
-            this->child_partitions.push_back(part);
-        }
-
-        this->is_a_parent_partition = true;
-        this->schedule_this_computation = false;
-
-        return output;
-    }
 
 protected:
 
@@ -2933,6 +2866,71 @@ public:
 
         this->after(comp, lev);
     }
+
+    /**
+         * Partition an operation into a new set of operations based on the constraints provided. The constraints should
+         * be provided as a set of iteration domains. These constraints are intersected with the parent
+         * operation's domain (if preserve_schedule = false) or the schedule (if preserve_schedule = true)
+         */
+    template <typename T>
+    std::vector<T *> partition(std::vector<std::pair<std::string, std::string>> domains) {
+        std::vector<T *> output;
+        this->get_function()->align_schedules();
+        for (auto domain_iter = domains.begin(); domain_iter != domains.end(); domain_iter++) {
+            std::string partition_name = domain_iter->first;
+            isl_set *partition_iter_domain = isl_set_read_from_str(this->get_ctx(), (domain_iter->second).c_str());
+            partition_iter_domain = isl_set_set_tuple_name(partition_iter_domain, partition_name.c_str());
+            T *part = static_cast<T*>(this->copy());
+            part->set_iteration_domain(partition_iter_domain);
+            part->set_schedule(part->gen_identity_schedule_for_iteration_domain());
+            isl_map *sched = part->gen_identity_schedule_for_iteration_domain();
+            part->set_schedule(sched);
+            part->set_parent_computation(this);
+            part->is_a_child_partition = true;
+            part->rename_computation(partition_name);
+            output.push_back(part);
+            this->child_partitions.push_back(part);
+        }
+
+        this->is_a_parent_partition = true;
+        this->schedule_this_computation = false;
+
+        return output;
+    }
+
+    /**
+         * Separate the iteration domain into two iteration domains using
+         * the constant \p C.
+         * Let us assume that the dimension \p dim of the iteration domain
+         * is called i.  The iteration domain is separated into two domains
+         * using the hyperplane (i = v*floor(N/v)). That means, two copies of the
+         * iteration domain are created, the constraint (i<=v*floor(N/v)) is added to
+         * the schedule of the first while the constrain (i>v*floor(N/v)) is added to
+         * the schedule of the second.
+         *
+         * Let us assume that we have the following iteration domain
+         *
+         *   {S0[i,j]: 0<=i<N and 0<=j<M}
+         *
+         * To separate this iteration domain by the hyperplane j=4*floor(M/4), one should
+         * call
+         *
+         *   S0.separate(1, tiramisu::expr("M"), 4)
+         *
+         * This will result in the creation of two computations that have the same
+         * iteration domains but have different schedules. The schedules are as
+         * follows:
+         *
+         * The schedule of the original (full) computation would be
+         * {S0[i,j]->S0[0, 0, i, 0, j, 0]: j<4*floor(M/4)}
+         *
+         * The schedule of the separated (partial) computation would be
+         * {S0[i]->S0[0, 0, i, 10, j, 0]: 4*floor(M/4)<=j}
+         *
+         * The second computation created using separate can be accessed with
+         * get_update().
+         */
+    void separate(int dim, tiramisu::expr N, int v);
 
     /**
       * Generate the time-space domain of the computation.
