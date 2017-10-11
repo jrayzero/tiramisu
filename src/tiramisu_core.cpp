@@ -795,6 +795,39 @@ bool function::should_vectorize(const std::string &comp, int lev) const
     return found;
 }
 
+bool function::should_distribute(const std::string &comp, int lev) const
+{
+    DEBUG_FCT_NAME(10);
+    DEBUG_INDENT(4);
+
+    assert(!comp.empty());
+    assert(lev >= 0);
+
+    bool found = false;
+
+    DEBUG(10, tiramisu::str_dump("Checking if the computation " + comp +
+                                 " should be distributed" +
+                                 " at the loop level " + std::to_string(lev)));
+
+    for (const auto &pd : this->distributed_dimensions)
+    {
+        DEBUG(10, tiramisu::str_dump("Comparing " + comp + " to " + std::get<0>(pd)));
+        DEBUG(10, tiramisu::str_dump(std::get<0>(pd) + " is marked for distribution at level " + std::to_string(std::get<1>(pd))));
+
+        if ((std::get<0>(pd) == comp) && (std::get<1>(pd) == lev))
+            found = true;
+    }
+
+    std::string str = "Dimension " + std::to_string(lev) +
+                      (found ? " should" : " should not")
+                      + " be distributed.";
+    DEBUG(10, tiramisu::str_dump(str));
+
+    DEBUG_INDENT(-4);
+
+    return found;
+}
+
 void function::set_context_set(isl_set *context)
 {
     assert((context != NULL) && "Context is NULL");
@@ -912,6 +945,9 @@ void tiramisu::computation::rename_computation(std::string new_name)
         if (pd.first == old_name)
             pd.first = new_name;
     for (auto &pd : this->get_function()->parallel_dimensions)
+        if (pd.first == old_name)
+            pd.first = new_name;
+    for (auto &pd : this->get_function()->distributed_dimensions)
         if (pd.first == old_name)
             pd.first = new_name;
     for (auto &pd : this->get_function()->gpu_block_dimensions)
@@ -5974,6 +6010,25 @@ void tiramisu::buffer::dump(bool exhaustive) const
 
         std::cout << std::endl << std::endl;
     }
+}
+
+tiramisu::dist_buffer::dist_buffer(std::string name, std::vector<tiramisu::expr> dim_sizes,
+        tiramisu::primitive_t type, tiramisu::function *fct) : output_buffer(-1) {
+    buffer *b = new buffer(name, dim_sizes, type, tiramisu::a_dist, fct);
+    this->buffs.push_back(b);
+}
+
+tiramisu::dist_buffer::dist_buffer(std::vector<std::string> names, std::vector<std::vector<tiramisu::expr>> dim_sizes,
+        tiramisu::primitive_t type, tiramisu::function *fct) : output_buffer(-1) {
+    assert(names.size() == dim_sizes.size());
+    for (int i = 0; i < names.size(); i++) {
+        buffer *b = new buffer(names[i], dim_sizes[i], type, tiramisu::a_dist, fct);
+        this->buffs.push_back(b);
+    }
+}
+
+void tiramisu::dist_buffer::set_output_buffer(int idx) {
+    this->output_buffer = idx;
 }
 
 Halide::Type halide_type_from_tiramisu_type(tiramisu::primitive_t type)

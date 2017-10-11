@@ -637,6 +637,12 @@ protected:
     bool should_vectorize(const std::string &comp, int lev) const;
 
     /**
+      * Return true if the computation \p comp should be distributed
+      * at the loop level \p lev.
+      */
+    bool should_distribute(const std::string &comp, int lev) const;
+
+    /**
       * The set of all computations that have no computation scheduled before them.
       * Does not include allocation computations created using
       * allocate_and_map_buffer_automatically().
@@ -1163,6 +1169,31 @@ public:
      * Mark an array as already allocated.
      */
     void mark_as_allocated();
+};
+
+class dist_buffer {
+private:
+
+    /**
+     * If not -1, this buffer should be an output one
+     */
+    int output_buffer;
+
+    /**
+     * The representative buffers
+     */
+    std::vector<buffer *> buffs;
+
+public:
+
+    dist_buffer(std::string name, std::vector<tiramisu::expr> dim_sizes,
+                tiramisu::primitive_t type, tiramisu::function *fct);
+
+    dist_buffer(std::vector<std::string> names, std::vector<std::vector<tiramisu::expr>> dim_sizes,
+                tiramisu::primitive_t type, tiramisu::function *fct);
+
+    void set_output_buffer(int idx);
+
 };
 
 /**
@@ -3690,7 +3721,7 @@ protected:
      * Create a Halide expression from a  Tiramisu expression.
      */
     static Halide::Expr halide_expr_from_tiramisu_expr(const tiramisu::function *fct, std::vector<isl_ast_expr *> &index_expr,
-                                                           const tiramisu::expr &tiramisu_expr, tiramisu::computation *comp);
+                                                       const tiramisu::expr &tiramisu_expr, tiramisu::computation *comp);
 
     /**
      * Linearize a multidimensional access to a Halide buffer.
