@@ -1948,6 +1948,7 @@ private:
     isl_map *intersect_map_domain_with_context(isl_map *map);
     // @}
 
+public:
     /**
      * Rename this computation and modify the schedule and the access relation
      * accordingly.
@@ -1959,7 +1960,7 @@ private:
      * any ambiguity for the code generator.
      */
     void rename_computation(std::string new_name);
-
+private:
     /**
       * Set the names of loop levels dimensions.
       * The loop levels are specified using \p loop_levels
@@ -2961,7 +2962,7 @@ public:
          * The second computation created using separate can be accessed with
          * get_update().
          */
-    void separate(int dim, tiramisu::expr N, int v);
+    void separate(int dim, tiramisu::expr N, int v, int dim_sched_after = -2);
 
     /**
       * Generate the time-space domain of the computation.

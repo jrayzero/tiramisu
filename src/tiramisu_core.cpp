@@ -1473,7 +1473,7 @@ std::string computation::get_dimension_name_for_loop_level(int loop_level)
  * we create a new computation. That is better than just keeping the same original
  * computation and addin a new schedule to it for the separated computation.
  */
-void tiramisu::computation::separate(int dim, tiramisu::expr N, int v)
+void tiramisu::computation::separate(int dim, tiramisu::expr N, int v, int dim_sched_after)
 {
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
@@ -1561,7 +1561,11 @@ void tiramisu::computation::separate(int dim, tiramisu::expr N, int v)
 
         // Mark the separated computation to be executed after the original (full)
         // computation.
-        this->get_update(last_update_computation).after(*this, dim);
+        if (dim_sched_after == -2) {
+            this->get_update(last_update_computation).after(*this, dim);
+        } else {
+            this->get_update(last_update_computation).after(*this, dim_sched_after);
+        }
 
         DEBUG(3, tiramisu::str_dump("The separate computation:"); this->get_update(last_update_computation).dump());
     }
