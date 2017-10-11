@@ -1173,6 +1173,20 @@ void tiramisu::computation::tag_parallel_level(int par_dim)
     DEBUG_INDENT(-4);
 }
 
+void tiramisu::computation::tag_distribute_level(int dist_dim)
+{
+    assert(dist_dim >= 0);
+    assert(!this->get_name().empty());
+    assert(this->get_function() != NULL);
+
+    DEBUG_FCT_NAME(3);
+    DEBUG_INDENT(4);
+
+    this->get_function()->add_distributed_dimension(this->get_name(), dist_dim);
+
+    DEBUG_INDENT(-4);
+}
+
 void tiramisu::computation::tag_gpu_level(int dim0, int dim1)
 {
     assert(dim0 >= 0);
@@ -1315,6 +1329,21 @@ void tiramisu::computation::tag_parallel_level(tiramisu::var L0_var)
     int L0 = dimensions[0];
 
     this->tag_parallel_level(L0);
+
+    DEBUG_INDENT(-4);
+}
+
+void tiramisu::computation::tag_distribute_level(tiramisu::var L) {
+    DEBUG_FCT_NAME(3);
+    DEBUG_INDENT(4);
+
+    assert(L.get_name().length() > 0);
+    std::vector<int> dimensions =
+            this->get_loop_level_numbers_from_dimension_names({L.get_name()});
+    this->check_dimensions_validity(dimensions);
+    int L0 = dimensions[0];
+
+    this->tag_distribute_level(L0);
 
     DEBUG_INDENT(-4);
 }
@@ -5485,6 +5514,14 @@ void tiramisu::function::add_parallel_dimension(std::string stmt_name, int vec_d
     assert(!stmt_name.empty());
 
     this->parallel_dimensions.push_back({stmt_name, vec_dim});
+}
+
+void tiramisu::function::add_distributed_dimension(std::string stmt_name, int dim)
+{
+    assert(dim >= 0);
+    assert(!stmt_name.empty());
+
+    this->distributed_dimensions.push_back({stmt_name, dim});
 }
 
 void tiramisu::function::add_unroll_dimension(std::string stmt_name, int level)

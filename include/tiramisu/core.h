@@ -131,6 +131,17 @@ private:
     std::vector<std::pair<std::string, int>> parallel_dimensions;
 
     /**
+      * A vector representing the distributed dimensions around
+      * the computations of the function.
+      * A distributed dimension is identified using the pair
+      * <computation_name, level>, for example the pair
+      * <S0, 0> indicates that the loop with level 0
+      * (i.e. the outermost loop) around the computation S0
+      * should be distributed.
+      */
+    std::vector<std::pair<std::string, int>> distributed_dimensions;
+
+    /**
       * A vector representing the vectorized dimensions around
       * the computations of the function.
       * A vector dimension is identified using the tuple
@@ -215,6 +226,14 @@ private:
       * corresponds to the leftmost dimension in the iteration space).
       */
     void add_parallel_dimension(std::string computation_name, int vec_dim);
+
+    /**
+      * Tag the dimension \p dim of the computation \p computation_name to
+      * be distributed.
+      * The dimension 0 represents the outermost loop level (it
+      * corresponds to the leftmost dimension in the iteration space).
+      */
+    void add_distributed_dimension(std::string computation_name, int dim);
 
     /**
       * Tag the dimension \p dim of the computation \p computation_name to
@@ -2046,9 +2065,15 @@ private:
 
     /**
       * Identical to
-      *    void tag_parallel_level(int L);
+      *    void tag_parallel_level(var L);
       */
     void tag_parallel_level(int L);
+
+    /**
+      * Identical to
+      *    void tag_distributel_level(var L);
+      */
+    void tag_distribute_level(int dist_dim);
 
     /**
       * Identical to
@@ -3209,6 +3234,11 @@ public:
       * Tag the loop level \p L to be parallelized.
       */
     void tag_parallel_level(tiramisu::var L);
+
+    /**
+     * Tag the loop level \p L to be distributed.
+     */
+    void tag_distribute_level(tiramisu::var L);
 
     /**
       * Tag the loop level \p L to be vectorized.
