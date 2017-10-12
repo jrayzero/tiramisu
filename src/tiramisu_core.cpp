@@ -1666,6 +1666,30 @@ std::vector<tiramisu::expr>* computation::compute_buffer_size()
     return dim_sizes;
 }
 
+// TODO (Jess) this should handle the distributed dimension differently because otherwise that will return 0, which is wrong.
+
+// Need this is you have a range of ranks
+//std::vector<tiramisu::expr> tiramisu::computation::compute_buffer_offset() {
+//    std::vector<tiramisu::expr> offsets;
+//    gen_time_space_domain();
+//    isl_set *tpd = get_time_processor_domain();
+//    int n_dims = isl_set_n_dim(tpd);
+//    int n_levels = (n_dims - 1) / 2 - 1; // skip the first level and do that separately
+//    // Needs to be done relative to the level that the is distributed. We don't care about the previous levels
+//    // TODO (Jess) for now, we only allow the outermost loop level to be distribteud
+//    assert(this->fct->should_distribute(this->get_name(), 0));
+//    // Now, insert the value of the rank, because that is the "min" value of the outermost distributed loop
+//    offsets.push_back(tiramisu::var("pred")); // "pred" is a reserved word here
+//    // don't just want the global one either...
+//    for (int i = 1; i < n_levels; i++) {
+////        int idx = i * 2 + 3;
+//        tiramisu::expr lower = utility::get_bound(tpd, i, false);
+//        offsets.push_back(lower);
+//    }
+//    expr blah = tiramisu::var("pred") + 1;
+//    return offsets;
+//}
+
 /**
  * Algorithm:
  * - Compute the size of the buffer:
