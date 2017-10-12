@@ -1263,6 +1263,47 @@ std::map<std::string, isl_ast_expr *> generator::compute_iterators_map(tiramisu:
     return iterators_map;
 }
 
+//int generator::partial_stmt_code_generator(isl_ast_node *node, isl_ast_build *build, void *user) {
+//    assert(node != NULL);
+//    assert(build != NULL);
+//
+//    DEBUG_FCT_NAME(3);
+//    DEBUG_INDENT(4);
+//
+//    tiramisu::function *func = (tiramisu::function *)user;
+//
+//    // Find the name of the computation associated to this AST leaf node.
+//    std::vector<tiramisu::computation *> comp_vec = generator::get_computation_by_node(func, node);
+//    assert(!comp_vec.empty() && "get_computation_by_node() returned an empty vector!");
+//    isl_union_map *sched = isl_ast_build_get_schedule(build);
+//    isl_union_set *sched_range = isl_union_map_domain(sched);
+//    assert((sched_range != NULL) && "Range of schedule is NULL.");
+//
+//    std::vector<tiramisu::computation *> filtered_comp_vec = generator::filter_computations_by_domain(comp_vec, sched_range);
+//    isl_union_set_free(sched_range);
+//
+//    for (auto comp: filtered_comp_vec)
+//    {
+//        // Mark "comp" as the computation associated with this node.
+//        isl_id *annotation_id = isl_id_alloc(func->get_isl_ctx(), "", (void *)comp);
+//        node = isl_ast_node_set_annotation(node, annotation_id);
+//
+//        assert((comp != NULL) && "Computation not found!");;
+//
+//        if (comp->has_accesses() == true)
+//        {
+//            isl_map *access = comp->get_access_relation_adapted_to_time_processor_domain();
+//            isl_ast_expr *idx_expr = create_isl_ast_index_expression(build, access);
+//            int num_args = isl_ast_expr_get_op_n_arg(idx_expr);
+//            isl_map_free(access);
+//            return num_args;
+//        }
+//
+//    }
+//
+//    return -1;
+//}
+
 /**
  * Retrieve the access function of the ISL AST leaf node (which represents a
  * computation). Store the access in computation->access.
@@ -1799,6 +1840,8 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
         // Change the type from Serial to parallel or vector if the
         // current level was marked as such.
         size_t tt = 0;
+        bool convert_to_conditional = false;
+        bool offset;
         while (tt < tagged_stmts.size())
         {
             if (tagged_stmts[tt] != "")
@@ -1915,7 +1958,11 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                     break;
                 }
                 else if (fct.should_distribute(tagged_stmts[tt], level)) {
-                    // TODO(Jess) implement this
+                    // Change this loop into an if statement instead
+                    offset = fct.get_distributed_offset(tagged_stmts[tt]);
+                    convert_to_conditional = true;
+                    tagged_stmts[tt] = "";
+                    break;
                 }
             }
             tt++;
@@ -1925,9 +1972,31 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
         for (const auto &ts: tagged_stmts)
         DEBUG(10, tiramisu::str_dump(ts + " "));
 
-        DEBUG(3, tiramisu::str_dump("Creating the for loop."));
-        result = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
-                                             fortype, dev_api, halide_body);
+        if (convert_to_conditional) {
+            DEBUG(3, tiramisu::str_dump("Converting for loop into a rank conditional."));
+            // TODO Jess, this is only going to work if the loop we need to stick on starts from 0. If the loop doesn't start from 0, will the code generator actually remove it?
+            if (offset) { // We need to create a for loop for this level and then wrap it in an if statement because our split was removed by the code generator
+                halide_body = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
+                                                          fortype, dev_api, halide_body);
+            }
+            Halide::Expr rank_var =
+                    Halide::Internal::Variable::make(halide_type_from_tiramisu_type(p_int32), "rank");
+            Halide::Expr condition;
+            if (offset) {
+                condition = rank_var == 0;
+            } else {
+                condition = rank_var >= init_expr;
+                condition = condition && (rank_var < cond_upper_bound_halide_format);
+            }
+            Halide::Internal::Stmt else_s;
+            // We need a reference still to this iterator name, so set it equal to the rank
+            halide_body = Halide::Internal::LetStmt::make(iterator_str, rank_var, halide_body);
+            result = Halide::Internal::IfThenElse::make(condition, halide_body, else_s);
+        } else {
+            DEBUG(3, tiramisu::str_dump("Creating the for loop."));
+            result = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
+                                                 fortype, dev_api, halide_body);
+        }
         DEBUG(3, tiramisu::str_dump("For loop created."));
         DEBUG(10, std::cout << result);
 
@@ -2037,7 +2106,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                 } else { // For now, just handle as if it is MPI ranks
                     assert(comp->get_predicate().get_int_val() != -1 && "Not handling -1 rank yet");
                     Halide::Expr mpi_rank_var =
-                            Halide::Internal::Variable::make(halide_type_from_tiramisu_type(p_int32), "pred");
+                            Halide::Internal::Variable::make(halide_type_from_tiramisu_type(p_int32), "rank");
                     Halide::Expr eq = mpi_rank_var == predicate;
                     result = Halide::Internal::IfThenElse::make(eq, if_s, else_s);
                 }
@@ -2136,11 +2205,11 @@ void function::gen_halide_stmt()
     if (this->_needs_rank_call) {
         // add a call to MPI rank to the beginning of the function
         Halide::Expr mpi_rank_var =
-                Halide::Internal::Variable::make(halide_type_from_tiramisu_type(tiramisu::p_int32), "pred");
+                Halide::Internal::Variable::make(halide_type_from_tiramisu_type(tiramisu::p_int32), "rank");
         Halide::Expr mpi_rank = Halide::Internal::Call::make(Halide::Int(32), Halide::Internal::Call::mrank,
                                                              std::vector<Halide::Expr>(),
                                                              Halide::Internal::Call::Intrinsic);
-        stmt = Halide::Internal::LetStmt::make("pred", mpi_rank, stmt);
+        stmt = Halide::Internal::LetStmt::make("rank", mpi_rank, stmt);
     }
 
     DEBUG(3, tiramisu::str_dump("The following Halide statement was generated:\n"); std::cout << stmt << std::endl);
@@ -2150,7 +2219,8 @@ void function::gen_halide_stmt()
     {
         tiramisu::buffer *buf = b.second;
         // Allocate only arrays that are not passed to the function as arguments.
-        if (buf->get_argument_type() == tiramisu::a_temporary && buf->get_auto_allocate() == true)
+        if ((buf->get_argument_type() == tiramisu::a_temporary || buf->get_argument_type() == tiramisu::a_dist) &&
+            buf->get_auto_allocate() == true)
         {
             std::vector<Halide::Expr> halide_dim_sizes;
             // Create a vector indicating the size that should be allocated.
@@ -2231,9 +2301,12 @@ Halide::Expr generator::linearize_access(int dims, const halide_dimension_t *sha
             operand = isl_ast_expr_get_op_arg(index_expr, i);
         } else { // this is going to be an addition of the outermost loop and the next loop. We drop the outermost
             // loop because it is a rank loop
+            // hacky way to deal with when we might have a loop that is removed because it is only one iter (i.e. it's a single rank loop)
             operand = isl_ast_expr_get_op_arg(index_expr, i);
-            assert(isl_ast_expr_get_op_n_arg(operand) == 2); //
-            operand = isl_ast_expr_get_op_arg(operand, 1);
+            if (isl_ast_expr_get_type(operand) == isl_ast_expr_op && isl_ast_expr_get_op_n_arg(operand) == 2) {
+                operand = isl_ast_expr_get_op_arg(operand, 1);
+            }
+
         }
         Halide::Expr operand_h = halide_expr_from_isl_ast_expr(operand);
         index += operand_h * shape[dims - i].stride;
@@ -2405,11 +2478,11 @@ void tiramisu::computation::create_halide_assignment()
                     strides_vector.push_back(stride_expr);
                     stride_expr =
                             stride_expr *
-                                    generator::halide_expr_from_tiramisu_expr(this->get_function(), empty_index_expr,
-                                                                              replace_original_indices_with_transformed_indices(
-                                                                                      lhs_tiramisu_buffer->get_dim_sizes()[dim_idx],
-                                                                                      this->get_iterators_map()),
-                                                                              this);
+                            generator::halide_expr_from_tiramisu_expr(this->get_function(), empty_index_expr,
+                                                                      replace_original_indices_with_transformed_indices(
+                                                                              lhs_tiramisu_buffer->get_dim_sizes()[dim_idx],
+                                                                              this->get_iterators_map()),
+                                                                      this);
                 }
             }
 
@@ -2472,9 +2545,9 @@ void tiramisu::computation::create_halide_assignment()
                                                                                                   this));
                             param.set_stride_constraint(i, stride_expr);
                             stride_expr = stride_expr *
-                                    generator::halide_expr_from_tiramisu_expr(this->get_function(), empty_index_expr,
-                                                                              lhs_tiramisu_buffer->get_dim_sizes()[dim_idx],
-                                                                              this);
+                                          generator::halide_expr_from_tiramisu_expr(this->get_function(), empty_index_expr,
+                                                                                    lhs_tiramisu_buffer->get_dim_sizes()[dim_idx],
+                                                                                    this);
                         }
                     }
                 }
@@ -3209,7 +3282,7 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
                     // then we need to remove the distributed iterator from the linearized access because
                     // it is just a rank
                     bool remove_rank_iter = comp->fct->should_distribute(comp->get_name(), 0) &&
-                            !access_comp->fct->should_distribute(access_comp->get_name(), 0);
+                                            !access_comp->fct->should_distribute(access_comp->get_name(), 0);
                     if (index_expr.size() == 0)
                     {
                         DEBUG(10, tiramisu::str_dump("index_expr is empty. Retrieving access indices directly from the tiramisu access expression without scheduling."));
@@ -3583,5 +3656,59 @@ Halide::Expr halide_expr_from_tiramisu_type(tiramisu::primitive_t ptype) {
     }
 }
 
+int tiramisu::computation::generate_partial_ast() {
+    //    tiramisu::function f("f");
+    //    tiramisu::function *orig = this->fct;
+    //    this->fct = &f;
+    tiramisu::computation *copied = this;//->copy();
+    //    this->fct = orig;
+    isl_set_dump(this->get_iteration_domain());
+    isl_map_dump(copied->get_schedule());
+    this->fct->gen_time_space_domain();
+    // now f contains a copy of the computation
+
+    // Check that time_processor representation has already been computed,
+    assert(this->fct->get_trimmed_time_processor_domain() != NULL);
+    assert(this->fct->get_aligned_identity_schedules() != NULL);
+
+    isl_ctx *ctx = this->fct->get_isl_ctx();
+    assert(ctx != NULL);
+    isl_ast_build *ast_build;
+
+    // Rename updates so that they have different names because
+    // the code generator expects each unique name to have
+    // an expression, different computations that have the same
+    // name cannot have different expressions.
+    this->fct->rename_computations();
+
+    if (this->fct->get_program_context() == NULL)
+    {
+        ast_build = isl_ast_build_alloc(ctx);
+    }
+    else
+    {
+        ast_build = isl_ast_build_from_context(isl_set_copy(this->fct->get_program_context()));
+    }
+
+    isl_options_set_ast_build_atomic_upper_bound(ctx, 1);
+    isl_options_get_ast_build_exploit_nested_bounds(ctx);
+    isl_options_set_ast_build_group_coscheduled(ctx, 1);
+
+    ast_build = isl_ast_build_set_after_each_for(ast_build, &tiramisu::for_code_generator_after_for,
+                                                 NULL);
+
+    if (copied->has_accesses())
+    {
+        copied->set_access(copied->get_schedule());
+        isl_map *access = copied->get_access_relation_adapted_to_time_processor_domain();
+        isl_ast_expr *idx_expr = create_isl_ast_index_expression(ast_build, access);
+        int num_args = isl_ast_expr_get_op_n_arg(idx_expr);
+        isl_map_free(access);
+        return num_args;
+    }
+
+    return -1;
+
+}
 
 }

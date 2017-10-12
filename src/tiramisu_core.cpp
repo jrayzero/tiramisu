@@ -828,6 +828,22 @@ bool function::should_distribute(const std::string &comp, int lev) const
     return found;
 }
 
+bool function::get_distributed_offset(const std::string &comp) const
+{
+    DEBUG_FCT_NAME(10);
+    DEBUG_INDENT(4);
+
+    assert(!comp.empty());
+
+    for (const auto &pd : this->distributed_dimensions_offsets)
+    {
+        if ((pd == comp)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void function::set_context_set(isl_set *context)
 {
     assert((context != NULL) && "Context is NULL");
@@ -1218,7 +1234,8 @@ void tiramisu::computation::tag_distribute_level(int dist_dim)
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
 
-    this->get_function()->add_distributed_dimension(this->get_name(), dist_dim);
+    this->get_function()->add_distributed_dimension(this->get_name(), dist_dim, should_offset_distributed_level);
+    this->get_function()->_needs_rank_call = true;
 
     DEBUG_INDENT(-4);
 }
@@ -2000,7 +2017,6 @@ void function::gen_time_space_domain()
     {
         comp->gen_time_space_domain();
     }
-
     DEBUG_INDENT(-4);
 }
 
@@ -2904,7 +2920,7 @@ void tiramisu::computation::allocate_and_map_buffer_automatically(tiramisu::argu
     this->automatically_allocated_buffer = buff;
 
     tiramisu::computation *allocation;
-    if (type == tiramisu::a_temporary)
+    if (type == tiramisu::a_temporary || type == tiramisu::a_dist)
     {
         allocation = buff->allocate_at(*this, computation::root_dimension);
         allocation->set_name("_allocation_" + this->name);
@@ -4945,6 +4961,78 @@ tiramisu::expr utility::get_bound(isl_set *set, int dim, int upper)
     return e;
 }
 
+void tiramisu::computation::distributed_split(tiramisu::var L0, int sizeX) {
+    tiramisu::var L0_outer = tiramisu::var(generate_new_variable_name());
+    tiramisu::var L0_inner = tiramisu::var(generate_new_variable_name());
+    this->distributed_split(L0, sizeX, L0_outer, L0_inner);
+}
+
+int isl_ast_expr_get_depth(isl_ast_expr *node) {
+    assert(isl_ast_expr_get_type(node) == isl_ast_expr_op);
+    int n_args = isl_ast_expr_get_op_n_arg(node);
+    for (int i = 0; i < n_args; i++) {
+        isl_ast_expr *arg = isl_ast_expr_get_op_arg(node, i);
+        if (isl_ast_expr_get_type(arg) == isl_ast_expr_op) {
+            return 1 + isl_ast_expr_get_depth(arg);
+        }
+    }
+    return 0;
+}
+
+
+void tiramisu::computation::distributed_split(tiramisu::var L0, int sizeX, tiramisu::var L0_outer,
+                                              tiramisu::var L0_inner) {
+    for (auto comp : this->fct->body) {
+        // set dummy access functions if we don't have one (I don't really care what they are at this point)
+        std::vector<tiramisu::computation *> computations =
+                this->get_function()->get_computation_by_name(comp->get_name());
+        for (auto comp2 : computations) {
+            if (comp2->get_access_relation() == NULL) {
+                isl_map *dummy_acc = isl_set_identity(isl_set_copy(comp2->get_iteration_domain()));
+                dummy_acc = isl_map_set_tuple_name(dummy_acc, isl_dim_out, "b0");
+                comp2->set_access(dummy_acc);
+            }
+        }
+    }
+    this->fct->gen_time_space_domain();
+    this->fct->gen_isl_ast();
+    isl_ast_expr *lhs_access = this->get_index_expr()[0];
+//    int n_levels_before_split = isl_ast_expr_get_op_n_arg(lhs_access);
+    int n_levels_before_split = isl_ast_expr_get_depth(lhs_access);
+    this->split(L0, sizeX, L0_outer, L0_inner);
+    for (auto comp : this->fct->body) {
+        // set dummy access functions if we don't have one (I don't really care what they are at this point)
+        std::vector<tiramisu::computation *> computations =
+                this->get_function()->get_computation_by_name(comp->get_name());
+        for (auto comp2 : computations) {
+            if (comp2->get_access_relation() == NULL) {
+                comp2->clear_index_expr();
+                isl_map *dummy_acc = isl_set_identity(isl_set_copy(comp2->get_iteration_domain()));
+                dummy_acc = isl_map_set_tuple_name(dummy_acc, isl_dim_out, "b0");
+                comp2->set_access(dummy_acc);
+            }
+        }
+    }
+    this->fct->gen_time_space_domain();
+    this->fct->gen_isl_ast();
+    lhs_access = this->get_index_expr()[0];
+    int n_levels_after_split = isl_ast_expr_get_depth(lhs_access);//isl_ast_expr_get_op_n_arg(lhs_access);
+    if (n_levels_before_split == n_levels_after_split) {
+        // Our split level is removed, so we need to remember this for later and take that into account!
+        this->should_offset_distributed_level = true;
+    }
+    for (auto comp : this->fct->body) {
+        // set dummy access functions if we don't have one (I don't really care what they are at this point)
+        std::vector<tiramisu::computation *> computations =
+                this->get_function()->get_computation_by_name(comp->get_name());
+        for (auto comp2 : computations) {
+            if (comp2->get_access_relation() == NULL) {
+                comp2->clear_index_expr();
+            }
+        }
+    }
+}
+
 void computation::split(tiramisu::var L0_var, int sizeX)
 {
     DEBUG_FCT_NAME(3);
@@ -5541,7 +5629,7 @@ Halide::Argument::Kind halide_argtype_from_tiramisu_argtype(tiramisu::argument_t
 {
     Halide::Argument::Kind res;
 
-    if (type == tiramisu::a_temporary)
+    if (type == tiramisu::a_temporary || type == tiramisu::a_dist)
     {
         tiramisu::error("Buffer type \"temporary\" can't be translated to Halide.\n", true);
     }
@@ -5580,12 +5668,15 @@ void tiramisu::function::add_parallel_dimension(std::string stmt_name, int vec_d
     this->parallel_dimensions.push_back({stmt_name, vec_dim});
 }
 
-void tiramisu::function::add_distributed_dimension(std::string stmt_name, int dim)
+void tiramisu::function::add_distributed_dimension(std::string stmt_name, int dim, bool offset)
 {
     assert(dim >= 0);
     assert(!stmt_name.empty());
 
     this->distributed_dimensions.push_back({stmt_name, dim});
+    if (offset) {
+        this->distributed_dimensions_offsets.push_back(stmt_name);
+    }
 }
 
 void tiramisu::function::add_unroll_dimension(std::string stmt_name, int level)
@@ -5905,6 +5996,8 @@ std::string str_from_tiramisu_type_argument(tiramisu::argument_t type)
             return "output";
         case tiramisu::a_temporary:
             return "temporary";
+        case tiramisu::a_dist:
+            return "dist";
         default:
             tiramisu::error("Tiramisu type not supported.", true);
             return "";
@@ -6433,6 +6526,10 @@ tiramisu::function *tiramisu::computation::get_function() const
 std::vector<isl_ast_expr *> &tiramisu::computation::get_index_expr()
 {
     return index_expr;
+}
+
+void tiramisu::computation::clear_index_expr() {
+    this->index_expr.clear();
 }
 
 /**
@@ -7416,7 +7513,7 @@ void tiramisu::function::lift_ops_to_library_calls() {
         if ((*op_iter)->is_send()) {
             send *s = static_cast<send *>(*op_iter);
             recv *r = s->get_matching_recv();
-            tiramisu::expr s_pred = s->get_predicate().get_int_val() == -2 ? tiramisu::var("pred") : s->get_predicate();
+            tiramisu::expr s_pred = s->get_predicate().get_int_val() == -2 ? tiramisu::var("rank") : s->get_predicate();
             tiramisu::expr r_pred(r->get_predicate());
             tiramisu::expr tag(s->get_msg_tag());
             tiramisu::expr num_elements(s->get_num_elements());
@@ -7437,7 +7534,7 @@ void tiramisu::function::lift_ops_to_library_calls() {
             recv *r = static_cast<recv *>(*op_iter);
             send *s = r->get_matching_send();
             tiramisu::expr s_pred(s->get_predicate());
-            tiramisu::expr r_pred = r->get_predicate().get_int_val() == -2 ? tiramisu::var("pred") : r->get_predicate();
+            tiramisu::expr r_pred = r->get_predicate().get_int_val() == -2 ? tiramisu::var("rank") : r->get_predicate();
             tiramisu::expr tag(s->get_msg_tag());
             tiramisu::expr num_elements(r->get_num_elements());
             tiramisu::expr recv_type(s->get_channel()->get_dtype());

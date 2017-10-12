@@ -140,6 +140,7 @@ private:
       * should be distributed.
       */
     std::vector<std::pair<std::string, int>> distributed_dimensions;
+    std::vector<std::string> distributed_dimensions_offsets;
 
     /**
       * A vector representing the vectorized dimensions around
@@ -233,7 +234,7 @@ private:
       * The dimension 0 represents the outermost loop level (it
       * corresponds to the leftmost dimension in the iteration space).
       */
-    void add_distributed_dimension(std::string computation_name, int dim);
+    void add_distributed_dimension(std::string computation_name, int dim, bool offset);
 
     /**
       * Tag the dimension \p dim of the computation \p computation_name to
@@ -641,6 +642,8 @@ protected:
       * at the loop level \p lev.
       */
     bool should_distribute(const std::string &comp, int lev) const;
+
+    bool get_distributed_offset(const std::string &comp) const;
 
     /**
       * The set of all computations that have no computation scheduled before them.
@@ -1227,6 +1230,8 @@ class computation
 
 private:
 
+    bool should_offset_distributed_level = false;
+
     /**
       * Access function.  A map indicating how each computation should be stored
       * in memory.  It indicates in which buffer the computation should be stored
@@ -1783,6 +1788,8 @@ private:
       * the computation will be stored.
       */
     std::vector<isl_ast_expr *> &get_index_expr();
+
+    void clear_index_expr();
 
     /**
      * Get the union of the iteration domains of this computations and
@@ -2601,6 +2608,11 @@ public:
     void add_predicate(tiramisu::expr predicate, bool is_distributed_predicate=false);
 
     /**
+     * Generate an AST for just this computation. Used for distribution.
+     */
+    int generate_partial_ast();
+
+    /**
       * \brief Schedule this computation to run after the computation \p comp.
       *
       * \details This computation is placed after \p comp in the loop level \p level.
@@ -3226,6 +3238,14 @@ public:
                tiramisu::var L0_outer, tiramisu::var L0_inner);
     //@}
 
+    /**
+     * Does the same as the above split functions, but does some extra bookkeeping needed for distributing.
+     * @param L0
+     * @param sizeX
+     */
+    void distributed_split(tiramisu::var L0, int sizeX);
+    void distributed_split(tiramisu::var L0, int sizeX, tiramisu::var L0_outer, tiramisu::var L0_inner);
+
 
     /**
      * Fold the storage of the computation.
@@ -3747,6 +3767,13 @@ protected:
      * computation). Store the access in computation->access.
      */
     static isl_ast_node *stmt_code_generator(isl_ast_node *node, isl_ast_build *build, void *user);
+
+//    /**
+//     * Retrieve the access function of the ISL AST leaf node (which represents a
+//     * computation). Store the access in computation->access.
+//     */
+//    static int partial_stmt_code_generator(isl_ast_node *node, isl_ast_build *build, void *user);
+
 
     /**
      * Traverse a tiramisu expression (\p exp) and extract the access relations
