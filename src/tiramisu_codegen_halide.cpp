@@ -1263,47 +1263,6 @@ std::map<std::string, isl_ast_expr *> generator::compute_iterators_map(tiramisu:
     return iterators_map;
 }
 
-//int generator::partial_stmt_code_generator(isl_ast_node *node, isl_ast_build *build, void *user) {
-//    assert(node != NULL);
-//    assert(build != NULL);
-//
-//    DEBUG_FCT_NAME(3);
-//    DEBUG_INDENT(4);
-//
-//    tiramisu::function *func = (tiramisu::function *)user;
-//
-//    // Find the name of the computation associated to this AST leaf node.
-//    std::vector<tiramisu::computation *> comp_vec = generator::get_computation_by_node(func, node);
-//    assert(!comp_vec.empty() && "get_computation_by_node() returned an empty vector!");
-//    isl_union_map *sched = isl_ast_build_get_schedule(build);
-//    isl_union_set *sched_range = isl_union_map_domain(sched);
-//    assert((sched_range != NULL) && "Range of schedule is NULL.");
-//
-//    std::vector<tiramisu::computation *> filtered_comp_vec = generator::filter_computations_by_domain(comp_vec, sched_range);
-//    isl_union_set_free(sched_range);
-//
-//    for (auto comp: filtered_comp_vec)
-//    {
-//        // Mark "comp" as the computation associated with this node.
-//        isl_id *annotation_id = isl_id_alloc(func->get_isl_ctx(), "", (void *)comp);
-//        node = isl_ast_node_set_annotation(node, annotation_id);
-//
-//        assert((comp != NULL) && "Computation not found!");;
-//
-//        if (comp->has_accesses() == true)
-//        {
-//            isl_map *access = comp->get_access_relation_adapted_to_time_processor_domain();
-//            isl_ast_expr *idx_expr = create_isl_ast_index_expression(build, access);
-//            int num_args = isl_ast_expr_get_op_n_arg(idx_expr);
-//            isl_map_free(access);
-//            return num_args;
-//        }
-//
-//    }
-//
-//    return -1;
-//}
-
 /**
  * Retrieve the access function of the ISL AST leaf node (which represents a
  * computation). Store the access in computation->access.
@@ -3654,61 +3613,6 @@ Halide::Expr halide_expr_from_tiramisu_type(tiramisu::primitive_t ptype) {
         case p_float64: return Halide::Expr((double)0);
         default: { assert(false && "Bad type specified"); return Halide::Expr(); }
     }
-}
-
-int tiramisu::computation::generate_partial_ast() {
-    //    tiramisu::function f("f");
-    //    tiramisu::function *orig = this->fct;
-    //    this->fct = &f;
-    tiramisu::computation *copied = this;//->copy();
-    //    this->fct = orig;
-    isl_set_dump(this->get_iteration_domain());
-    isl_map_dump(copied->get_schedule());
-    this->fct->gen_time_space_domain();
-    // now f contains a copy of the computation
-
-    // Check that time_processor representation has already been computed,
-    assert(this->fct->get_trimmed_time_processor_domain() != NULL);
-    assert(this->fct->get_aligned_identity_schedules() != NULL);
-
-    isl_ctx *ctx = this->fct->get_isl_ctx();
-    assert(ctx != NULL);
-    isl_ast_build *ast_build;
-
-    // Rename updates so that they have different names because
-    // the code generator expects each unique name to have
-    // an expression, different computations that have the same
-    // name cannot have different expressions.
-    this->fct->rename_computations();
-
-    if (this->fct->get_program_context() == NULL)
-    {
-        ast_build = isl_ast_build_alloc(ctx);
-    }
-    else
-    {
-        ast_build = isl_ast_build_from_context(isl_set_copy(this->fct->get_program_context()));
-    }
-
-    isl_options_set_ast_build_atomic_upper_bound(ctx, 1);
-    isl_options_get_ast_build_exploit_nested_bounds(ctx);
-    isl_options_set_ast_build_group_coscheduled(ctx, 1);
-
-    ast_build = isl_ast_build_set_after_each_for(ast_build, &tiramisu::for_code_generator_after_for,
-                                                 NULL);
-
-    if (copied->has_accesses())
-    {
-        copied->set_access(copied->get_schedule());
-        isl_map *access = copied->get_access_relation_adapted_to_time_processor_domain();
-        isl_ast_expr *idx_expr = create_isl_ast_index_expression(ast_build, access);
-        int num_args = isl_ast_expr_get_op_n_arg(idx_expr);
-        isl_map_free(access);
-        return num_args;
-    }
-
-    return -1;
-
 }
 
 }

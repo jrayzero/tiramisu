@@ -1506,7 +1506,6 @@ private:
       */
     // @{
     void after_low_level(computation &comp, int level);
-    void after_low_level(computation &comp, std::vector<int> levels);
     // @}
 
     /**
@@ -1626,26 +1625,6 @@ private:
       * buffer and location specified by the access function.
       */
     void create_halide_assignment();
-
-    void create_halide_assignment2();
-
-    /**
-      * Apply a duplication transformation from iteration space to
-      * time-processor space.
-      * A duplication transformation duplicates the original computation,
-      * so the domain of the schedule has to be the iteration domain of
-      * the original computation.
-      *
-      * For example, to duplicate C0 into a first duplicate:
-      *
-      * C0[i, j] -> C0[1, 0, i, 0, j, 0]
-      *
-      * To duplicate C0 again
-      *
-      * C0[i, j] -> C0[2, 0, j, 0, i, 0]
-      *
-      */
-    void create_duplication_transformation(std::string map_str);
 
     /*
      * Create a new Tiramisu constant M = v*floor(N/v) and use it as
@@ -1982,15 +1961,6 @@ private:
       * Set the iteration domain of the computation
       */
     void set_iteration_domain(isl_set *domain);
-
-    /**
-     * Set whether a computation has multiple definitions.
-     * i.e., whether the computation is defined multiple times (i.e.,
-     * whether there are many computations with the same name). An
-     * update is a special case of a computation defined multiple
-     * times.
-     */
-    void set_has_multiple_definitions(bool val);
 
     /**
      * The iterators map is map between the original names of the iterators of a computation
@@ -2606,11 +2576,6 @@ public:
      * computation) into one condition around the whole block.
      */
     void add_predicate(tiramisu::expr predicate, bool is_distributed_predicate=false);
-
-    /**
-     * Generate an AST for just this computation. Used for distribution.
-     */
-    int generate_partial_ast();
 
     /**
       * \brief Schedule this computation to run after the computation \p comp.
@@ -3767,13 +3732,6 @@ protected:
      * computation). Store the access in computation->access.
      */
     static isl_ast_node *stmt_code_generator(isl_ast_node *node, isl_ast_build *build, void *user);
-
-//    /**
-//     * Retrieve the access function of the ISL AST leaf node (which represents a
-//     * computation). Store the access in computation->access.
-//     */
-//    static int partial_stmt_code_generator(isl_ast_node *node, isl_ast_build *build, void *user);
-
 
     /**
      * Traverse a tiramisu expression (\p exp) and extract the access relations
