@@ -1229,8 +1229,6 @@ std::map<std::string, isl_ast_expr *> generator::compute_iterators_map(tiramisu:
     isl_set *dom = isl_set_copy(comp->get_iteration_domain());
     isl_map *identity = isl_set_identity(isl_set_copy(dom));
     isl_map *schedule = isl_map_copy(comp->get_trimmed_union_of_schedules()); //isl_map_copy(isl_map_from_union_map(isl_ast_build_get_schedule(build)));
-    isl_map_dump(identity);
-    isl_map_dump(schedule);
     identity = isl_map_apply_domain(identity, schedule);
 
     DEBUG(3, tiramisu::str_dump("Creating an isl_ast_index_expression for the access :",
@@ -2329,7 +2327,6 @@ Halide::Expr generator::linearize_access(int dims, std::vector<Halide::Expr> &st
                                          isl_ast_expr *index_expr, bool is_first_level_dist)
 {
     assert(isl_ast_expr_get_op_n_arg(index_expr) > 1);
-    assert(!is_first_level_dist && "Not implemented yet");
 
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
@@ -2339,7 +2336,21 @@ Halide::Expr generator::linearize_access(int dims, std::vector<Halide::Expr> &st
     Halide::Expr index = 0;
     for (int i = dims; i >= 1; --i)
     {
-        isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i);
+
+        isl_ast_expr *operand = nullptr;
+        if (!is_first_level_dist || (is_first_level_dist && i != 1)) { // this is a rank level, don't use it in indexing
+            operand = isl_ast_expr_get_op_arg(index_expr, i);
+        } else { // this is going to be an addition of the outermost loop and the next loop. We drop the outermost
+            // loop because it is a rank loop
+            // hacky way to deal with when we might have a loop that is removed because it is only one iter (i.e. it's a single rank loop)
+            operand = isl_ast_expr_get_op_arg(index_expr, i);
+            if (isl_ast_expr_get_type(operand) == isl_ast_expr_op && isl_ast_expr_get_op_n_arg(operand) == 2) {
+                operand = isl_ast_expr_get_op_arg(operand, 1);
+            }
+
+        }
+
+//        isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i);
         Halide::Expr operand_h = halide_expr_from_isl_ast_expr(operand);
         index += operand_h * strides[dims - i];
         isl_ast_expr_free(operand);
@@ -3240,7 +3251,7 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
                     // If the consumer is in a distributed loop and the computation it is accessing is not,
                     // then we need to remove the distributed iterator from the linearized access because
                     // it is just a rank
-                    bool remove_rank_iter = comp->fct->should_distribute(comp->get_name(), 0) &&
+                    bool remove_rank_iter = comp && comp->fct->should_distribute(comp->get_name(), 0) &&
                                             !access_comp->fct->should_distribute(access_comp->get_name(), 0);
                     if (index_expr.size() == 0)
                     {

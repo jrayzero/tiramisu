@@ -7609,11 +7609,6 @@ send_recv tiramisu::computation::create_transfer(std::string send_recv_iter_dom_
     sr.s = s;
     sr.r = r;
 
-    // Replace accesses to the producer in the consumers with the receive function
-    for (auto c : consumers) {
-        tiramisu::generator::replace_expr_name(c->expression, producer->get_name(), recv_name);
-    }
-
     return sr;
 }
 

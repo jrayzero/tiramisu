@@ -32,9 +32,9 @@ add_executable(generated_dtest_02 distributed_tests/dtest_02_new.cpp)
 add_executable(dtest_02 distributed_tests/wrapper_dtest_02.cpp ${CMAKE_SOURCE_DIR}/build/generated_fct_tutorial_02_dtest.o)
 add_dependencies(dtest_02 generated_dtest_02)
 
-add_executable(generated_test_14 tests/test_14.cpp)
-add_executable(test_14 tests/wrapper_test_14.cpp ${CMAKE_SOURCE_DIR}/build/generated_fct_test_14.o)
-add_dependencies(test_14 generated_test_14)
+add_executable(generated_test_87 tests/test_87.cpp)
+add_executable(test_87 tests/wrapper_test_87.cpp ${CMAKE_SOURCE_DIR}/build/generated_fct_test_87.o)
+add_dependencies(test_87 generated_test_87)
 
 target_link_libraries(generated_dtest_01 tiramisu ${LIBS})
 target_link_libraries(dtest_01 tiramisu ${LIBS})
@@ -42,8 +42,8 @@ target_link_libraries(dtest_01 tiramisu ${LIBS})
 target_link_libraries(generated_dtest_02 tiramisu ${LIBS})
 target_link_libraries(dtest_02 tiramisu ${LIBS})
 
-target_link_libraries(generated_test_14 tiramisu ${LIBS})
-target_link_libraries(test_14 tiramisu ${LIBS})
+target_link_libraries(generated_test_87 tiramisu ${LIBS})
+target_link_libraries(test_87 tiramisu ${LIBS})
 
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/build/generated_fct_tutorial_01_dtest.o
         COMMAND generated_dtest_01
@@ -57,8 +57,8 @@ add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/build/generated_fct_tutorial_02_dt
         COMMENT "Running generated_dtest_02"
         SOURCES distributed_tests/dtest_02.cpp)
 
-add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/build/generated_fct_test_14.o
-        COMMAND generated_test_14
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/build/generated_fct_test_87.o
+        COMMAND generated_test_87
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        COMMENT "Running generated_test_14"
-        SOURCES tests/test_14.cpp)
+        COMMENT "Running generated_test_87"
+        SOURCES tests/test_87.cpp)

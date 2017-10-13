@@ -260,6 +260,7 @@ private:
       * This function is called automatically when gen_isl_ast()
       * or gen_time_processor_domain() are called.
       */
+public:
     void align_schedules();
 
     /**
@@ -650,6 +651,7 @@ protected:
       * Does not include allocation computations created using
       * allocate_and_map_buffer_automatically().
       */
+public:
     std::unordered_set<tiramisu::computation *> starting_computations;
 
     /**
@@ -1849,7 +1851,9 @@ private:
       * This identity schedule is an identity relation created from the
       * time-processor domain.
       */
+public:
     isl_map *gen_identity_schedule_for_time_space_domain();
+protected:
 
     /**
       * Returns all updates the have been defined for this computation using
@@ -2323,6 +2327,7 @@ protected:
       * cannot mix the use of the two in the same program because they are not compatible.
       */
     // @{
+public:
     void set_schedule(isl_map *map);
     void set_schedule(std::string map_str);
     // @}
