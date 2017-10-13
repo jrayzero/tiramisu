@@ -3532,8 +3532,9 @@ public:
       * e should be just a single access expression into the producer.
       */
     static send_recv create_transfer(std::string send_recv_iter_dom_str, std::string send_name, std::string recv_name,
-                                     tiramisu::channel *send_chan, tiramisu::channel *recv_chan, tiramisu::expr e,
-                                     std::vector<tiramisu::computation *> consumers, tiramisu::function *fct);
+                                         tiramisu::expr src, tiramisu::expr dest, tiramisu::channel *send_chan,
+                                         tiramisu::channel *recv_chan, tiramisu::expr e,
+                                         std::vector<tiramisu::computation *> consumers, tiramisu::function *fct);
 
     static void distribute(std::vector<std::vector<computation *>> ops, std::vector<int> predicates);
 
@@ -3924,6 +3925,8 @@ private:
 
     int msg_tag;
 
+    tiramisu::expr src;
+
     static int next_msg_tag;
 
 public:
@@ -3937,7 +3940,11 @@ public:
 
     int get_msg_tag() const;
 
+    tiramisu::expr get_src() const;
+
     void set_matching_recv(tiramisu::recv *matching_recv);
+
+    void set_src(tiramisu::expr src);
 
     virtual bool is_send() const override;
 
@@ -3950,6 +3957,8 @@ private:
 
     send *matching_send = nullptr;
 
+    tiramisu::expr dest;
+
 public:
 
     recv(std::string iteration_domain_str, tiramisu::computation *consumer, bool schedule_this,
@@ -3959,7 +3968,11 @@ public:
 
     tiramisu::send *get_matching_send() const;
 
+    tiramisu::expr get_dest() const;
+
     void set_matching_send(tiramisu::send *matching_send);
+
+    void set_dest(tiramisu::expr dest);
 
     tiramisu::computation *get_consumer() const;
 

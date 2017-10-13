@@ -61,23 +61,24 @@ int main(int argc, char **argv)
     // communication
     channel chan_sync_block("chan_sync_block", p_uint8, {FIFO, SYNC, BLOCK, MPI});
     send_recv fan_out = computation::create_transfer("{[p,i,j]: 1<=p<4 and p*160<=i<(p+1)*160 and 0<=j<768}",
-                                                     "send_0_1", "recv_0_1", &chan_sync_block, &chan_sync_block,
-                                                     c_input(var("i"), var("j")), {&(S0.get_update(1))}, &blurxy);
+                                                     "send_0_1", "recv_0_1",
+                                                     var("rank") /*This could also just be 0 since I know it is rank 0*/,
+                                                     var("p"), &chan_sync_block, &chan_sync_block,
+                                                     c_input(var("i"), var("j")),
+                                                     {&(S0.get_update(1))}, &blurxy);
     fan_out.s->before(S0.get_update(0), tiramisu::computation::root);
     S0.get_update(0).before(*fan_out.r, tiramisu::computation::root);
     fan_out.r->before(S0.get_update(1), tiramisu::computation::root);
 
-
     // Layer III
     buffer b_input("b_input", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint8, a_input, &blurxy);
-    buffer b_input_temp("b_input_temp", {tiramisu::expr(SIZE0)/4, tiramisu::expr(SIZE1)}, p_uint8, a_dist, &blurxy);
     buffer b_output("b_output", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint8, a_output, &blurxy);
     buffer b_temp("b_temp", {tiramisu::expr(SIZE0/4), tiramisu::expr(SIZE1)}, p_uint8, a_dist, &blurxy);
 
     c_input.set_access("{c_input[i,j]->b_input[i,j]}");
     S0.get_update(0).set_access("{S0_0[i,j]->b_output[i,j]}");
     S0.get_update(1).set_access("{S0_1[i,j]->b_temp[i,j]}");
-    fan_out.r->set_access("{recv_0_1[p,i,j]->b_input_temp[i,j]}");
+    fan_out.r->set_access("{recv_0_1[p,i,j]->b_input[i,j]}");
 
     // -------------------------------------------------------
     // Code Generation

@@ -2350,7 +2350,7 @@ Halide::Expr generator::linearize_access(int dims, std::vector<Halide::Expr> &st
 
         }
 
-//        isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i);
+        //        isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i);
         Halide::Expr operand_h = halide_expr_from_isl_ast_expr(operand);
         index += operand_h * strides[dims - i];
         isl_ast_expr_free(operand);
@@ -2397,6 +2397,21 @@ void tiramisu::computation::create_halide_assignment()
     }
     else {
         DEBUG(3, tiramisu::str_dump("This is not a let statement."));
+        if (this->is_send()) {
+            this->library_call_args[0] =
+                    replace_original_indices_with_transformed_indices(static_cast<send*>(this)->get_src(),
+                                                                      this->get_iterators_map());
+            this->library_call_args[2] =
+                    replace_original_indices_with_transformed_indices(static_cast<send*>(this)->get_matching_recv()->get_dest(),
+                                                                      this->get_iterators_map());
+        } else if (this->is_recv()) {
+            this->library_call_args[0] =
+                    replace_original_indices_with_transformed_indices(static_cast<recv*>(this)->get_dest(),
+                                                                      this->get_iterators_map());
+            this->library_call_args[2] =
+                    replace_original_indices_with_transformed_indices(static_cast<recv*>(this)->get_matching_send()->get_src(),
+                                                                      this->get_iterators_map());
+        }
 
         if (!this->is_library_call() || this->lhs_argument_idx != -1) { // This has an LHS to compute.
             Halide::Type type = halide_type_from_tiramisu_type(this->get_data_type());

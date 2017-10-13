@@ -7498,17 +7498,15 @@ void tiramisu::function::lift_ops_to_library_calls() {
         if ((*op_iter)->is_send()) {
             send *s = static_cast<send *>(*op_iter);
             recv *r = s->get_matching_recv();
-            tiramisu::expr s_pred = tiramisu::var("rank");//s->get_predicate().get_int_val() == -2 ? tiramisu::var("rank") : s->get_predicate();
-            tiramisu::expr r_pred(0);//r->get_predicate());
             tiramisu::expr tag(s->get_msg_tag());
             tiramisu::expr num_elements(s->get_num_elements());
             tiramisu::expr send_type(s->get_channel()->get_dtype());
             bool isnonblock = s->get_channel()->contains_attr(NONBLOCK);
             s->rhs_argument_idx = 4;
             s->library_call_args.resize(isnonblock ? 7 : 6);
-            s->library_call_args[0] = s_pred;
+            s->library_call_args[0] = s->get_src();
             s->library_call_args[1] = num_elements;
-            s->library_call_args[2] = r_pred;
+            s->library_call_args[2] = r->get_dest();
             s->library_call_args[3] = tag;
             s->library_call_args[5] = send_type;
             if (isnonblock) {
@@ -7518,17 +7516,15 @@ void tiramisu::function::lift_ops_to_library_calls() {
         } else if ((*op_iter)->is_recv()) {
             recv *r = static_cast<recv *>(*op_iter);
             send *s = r->get_matching_send();
-            tiramisu::expr s_pred(0);//s->get_predicate());
-            tiramisu::expr r_pred = tiramisu::var("rank");//r->get_predicate().get_int_val() == -2 ? tiramisu::var("rank") : r->get_predicate();
             tiramisu::expr tag(s->get_msg_tag());
             tiramisu::expr num_elements(r->get_num_elements());
             tiramisu::expr recv_type(s->get_channel()->get_dtype());
             bool isnonblock = r->get_channel()->contains_attr(NONBLOCK);
             r->lhs_argument_idx = 4;
             r->library_call_args.resize(isnonblock ? 7 : 6);
-            r->library_call_args[0] = r_pred;
+            r->library_call_args[0] = r->get_dest();
             r->library_call_args[1] = num_elements;
-            r->library_call_args[2] = s_pred;
+            r->library_call_args[2] = s->get_src();
             r->library_call_args[3] = tag;
             r->library_call_args[5] = recv_type;
             r->lhs_access_type = tiramisu::o_address_of;
@@ -7582,8 +7578,9 @@ bool tiramisu::wait::is_wait() const {
 }
 
 send_recv tiramisu::computation::create_transfer(std::string send_recv_iter_dom_str, std::string send_name, std::string recv_name,
-                                                tiramisu::channel *send_chan, tiramisu::channel *recv_chan, tiramisu::expr e,
-                                                std::vector<tiramisu::computation *> consumers, tiramisu::function *fct) {
+                                                 tiramisu::expr src, tiramisu::expr dest, tiramisu::channel *send_chan,
+                                                 tiramisu::channel *recv_chan, tiramisu::expr e,
+                                                 std::vector<tiramisu::computation *> consumers, tiramisu::function *fct) {
     assert(e.get_op_type() == tiramisu::o_access);
     tiramisu::computation *producer = fct->get_computation_by_name(e.get_name())[0];
 
@@ -7600,6 +7597,10 @@ send_recv tiramisu::computation::create_transfer(std::string send_recv_iter_dom_
     }
     isl_map *send_sched = s->gen_identity_schedule_for_iteration_domain();
     isl_map *recv_sched = r->gen_identity_schedule_for_iteration_domain();
+
+    s->set_src(src);
+    r->set_dest(dest);
+
     s->set_schedule(send_sched);
     r->set_schedule(recv_sched);
     s->set_matching_recv(r);
@@ -7658,6 +7659,22 @@ bool tiramisu::computation::is_distributed_predicate() const {
 
 bool tiramisu::function::needs_rank_call() const {
     return _needs_rank_call;
+}
+
+tiramisu::expr tiramisu::send::get_src() const {
+    return src;
+}
+
+void tiramisu::send::set_src(tiramisu::expr src) {
+    this->src = src;
+}
+
+tiramisu::expr tiramisu::recv::get_dest() const {
+    return dest;
+}
+
+void tiramisu::recv::set_dest(tiramisu::expr dest) {
+    this->dest = dest;
 }
 
 }
