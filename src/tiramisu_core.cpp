@@ -1101,7 +1101,7 @@ void function::gen_isl_ast()
     DEBUG(3, tiramisu::str_dump("Identity schedule intersect trimmed Time-Processor domain:",
                                 isl_union_map_to_str(umap)));
     DEBUG(3, tiramisu::str_dump("\n"));
-
+    isl_union_map_dump(umap);
     this->ast = isl_ast_build_node_from_schedule_map(ast_build, umap);
 
     isl_ast_build_free(ast_build);
@@ -1580,7 +1580,7 @@ void tiramisu::computation::separate(int dim, tiramisu::expr N, int v, int dim_s
         // computation.
         if (dim_sched_after == -2) {
             this->get_update(last_update_computation).after(*this, dim);
-        } else {
+        } else if (dim_sched_after != -3) { // -3 means don't do any scheduling
             this->get_update(last_update_computation).after(*this, dim_sched_after);
         }
 
@@ -2318,7 +2318,6 @@ void tiramisu::computation::set_low_level_schedule(isl_map *map)
     this->set_schedule(map);
 }
 
-
 struct param_pack_1
 {
     int in_dim;
@@ -2979,7 +2978,12 @@ void tiramisu::computation::after(computation &comp, int level)
 
     this->get_function()->starting_computations.erase(this);
 
-    this->get_function()->sched_graph_reversed[this][&comp] = level;
+    if (comp.is_recv()) {
+        this->get_function()->sched_graph_reversed[this].clear();
+        this->get_function()->sched_graph_reversed[this][&comp] = level;
+    } else {
+        this->get_function()->sched_graph_reversed[this][&comp] = level;
+    }
 
     assert(this->get_function()->sched_graph_reversed[this].size() < 2 &&
            "Node has more than one predecessor.");
@@ -4979,58 +4983,40 @@ int isl_ast_expr_get_depth(isl_ast_expr *node) {
     return 0;
 }
 
-
 void tiramisu::computation::distributed_split(tiramisu::var L0, int sizeX, tiramisu::var L0_outer,
                                               tiramisu::var L0_inner) {
-    for (auto comp : this->fct->body) {
-        // set dummy access functions if we don't have one (I don't really care what they are at this point)
-        std::vector<tiramisu::computation *> computations =
-                this->get_function()->get_computation_by_name(comp->get_name());
-        for (auto comp2 : computations) {
-            if (comp2->get_access_relation() == NULL) {
-                isl_map *dummy_acc = isl_set_identity(isl_set_copy(comp2->get_iteration_domain()));
-                dummy_acc = isl_map_set_tuple_name(dummy_acc, isl_dim_out, "b0");
-                comp2->set_access(dummy_acc);
-            }
-        }
+
+    // set an access function if we don't have one
+    if (this->get_access_relation() == NULL) {
+        isl_map *dummy_acc = isl_set_identity(isl_set_copy(this->get_iteration_domain()));
+        dummy_acc = isl_map_set_tuple_name(dummy_acc, isl_dim_out, "b0");
+        this->set_access(dummy_acc);
     }
-    this->fct->gen_time_space_domain();
-    this->fct->gen_isl_ast();
+
+    // create a new function that just has this in the body
+    tiramisu::function f("f" + std::to_string(id_counter++));
+    tiramisu::function *orig_f = this->fct;
+    tiramisu::expr orig_expr = this->expression;
+    this->expression = tiramisu::expr();
+    this->fct = &f;
+    f.add_computation(this);
+    f.gen_time_space_domain();
+    f.gen_isl_ast();
     isl_ast_expr *lhs_access = this->get_index_expr()[0];
-//    int n_levels_before_split = isl_ast_expr_get_op_n_arg(lhs_access);
     int n_levels_before_split = isl_ast_expr_get_depth(lhs_access);
     this->split(L0, sizeX, L0_outer, L0_inner);
-    for (auto comp : this->fct->body) {
-        // set dummy access functions if we don't have one (I don't really care what they are at this point)
-        std::vector<tiramisu::computation *> computations =
-                this->get_function()->get_computation_by_name(comp->get_name());
-        for (auto comp2 : computations) {
-            if (comp2->get_access_relation() == NULL) {
-                comp2->clear_index_expr();
-                isl_map *dummy_acc = isl_set_identity(isl_set_copy(comp2->get_iteration_domain()));
-                dummy_acc = isl_map_set_tuple_name(dummy_acc, isl_dim_out, "b0");
-                comp2->set_access(dummy_acc);
-            }
-        }
-    }
-    this->fct->gen_time_space_domain();
-    this->fct->gen_isl_ast();
+    this->clear_index_expr();
+    f.gen_time_space_domain();
+    f.gen_isl_ast();
     lhs_access = this->get_index_expr()[0];
     int n_levels_after_split = isl_ast_expr_get_depth(lhs_access);//isl_ast_expr_get_op_n_arg(lhs_access);
     if (n_levels_before_split == n_levels_after_split) {
         // Our split level is removed, so we need to remember this for later and take that into account!
         this->should_offset_distributed_level = true;
     }
-    for (auto comp : this->fct->body) {
-        // set dummy access functions if we don't have one (I don't really care what they are at this point)
-        std::vector<tiramisu::computation *> computations =
-                this->get_function()->get_computation_by_name(comp->get_name());
-        for (auto comp2 : computations) {
-            if (comp2->get_access_relation() == NULL) {
-                comp2->clear_index_expr();
-            }
-        }
-    }
+    this->clear_index_expr();
+    this->fct = orig_f;
+    this->expression = orig_expr;
 }
 
 void computation::split(tiramisu::var L0_var, int sizeX)
@@ -6670,7 +6656,6 @@ void tiramisu::computation::gen_time_space_domain()
 
     assert(this->get_iteration_domain() != NULL);
     assert(this->get_schedule() != NULL);
-
     time_processor_domain = isl_set_apply(
             isl_set_copy(this->get_iteration_domain()),
             isl_map_copy(this->get_schedule()));
@@ -7513,8 +7498,8 @@ void tiramisu::function::lift_ops_to_library_calls() {
         if ((*op_iter)->is_send()) {
             send *s = static_cast<send *>(*op_iter);
             recv *r = s->get_matching_recv();
-            tiramisu::expr s_pred = s->get_predicate().get_int_val() == -2 ? tiramisu::var("rank") : s->get_predicate();
-            tiramisu::expr r_pred(r->get_predicate());
+            tiramisu::expr s_pred = tiramisu::var("rank");//s->get_predicate().get_int_val() == -2 ? tiramisu::var("rank") : s->get_predicate();
+            tiramisu::expr r_pred(0);//r->get_predicate());
             tiramisu::expr tag(s->get_msg_tag());
             tiramisu::expr num_elements(s->get_num_elements());
             tiramisu::expr send_type(s->get_channel()->get_dtype());
@@ -7533,8 +7518,8 @@ void tiramisu::function::lift_ops_to_library_calls() {
         } else if ((*op_iter)->is_recv()) {
             recv *r = static_cast<recv *>(*op_iter);
             send *s = r->get_matching_send();
-            tiramisu::expr s_pred(s->get_predicate());
-            tiramisu::expr r_pred = r->get_predicate().get_int_val() == -2 ? tiramisu::var("rank") : r->get_predicate();
+            tiramisu::expr s_pred(0);//s->get_predicate());
+            tiramisu::expr r_pred = tiramisu::var("rank");//r->get_predicate().get_int_val() == -2 ? tiramisu::var("rank") : r->get_predicate();
             tiramisu::expr tag(s->get_msg_tag());
             tiramisu::expr num_elements(r->get_num_elements());
             tiramisu::expr recv_type(s->get_channel()->get_dtype());
