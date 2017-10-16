@@ -3489,7 +3489,7 @@ public:
       * This means that c0 is after c1 starting from loop level 1,
       * (before the loop level 1, c0 and c1 have the same order).
       */
-    const static var root;
+  //  const static var root;
 
     /**
       * Equivalent of computation::root but to be used with scheduling

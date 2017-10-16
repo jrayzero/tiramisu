@@ -21,9 +21,8 @@ std::map<std::string, computation *> computations_list;
 bool global::auto_data_mapping;
 
 // Used for the generation of new variable names.
+//const var computation::root = var("root");
 int id_counter = 0;
-
-const var computation::root = var("root");
 
 /**
  * Retrieve the access function of the ISL AST leaf node (which represents a
@@ -2978,12 +2977,21 @@ void tiramisu::computation::after(computation &comp, int level)
 
     this->get_function()->starting_computations.erase(this);
 
-    if (comp.is_recv()) {
+    /*    if (comp.is_recv()) {
+      if (this->get_function()->sched_graph_reversed[this].size() > 1) {
+        for (auto iter : this->get_function()->sched_graph_reversed[this]) {
+          if (iter->second == level) {
+            this->get_function()->sched_graph_reversed[this].remove(iter);
+            break;
+          }
+        }
+      } else {
         this->get_function()->sched_graph_reversed[this].clear();
-        this->get_function()->sched_graph_reversed[this][&comp] = level;
-    } else {
-        this->get_function()->sched_graph_reversed[this][&comp] = level;
-    }
+        }*/
+      this->get_function()->sched_graph_reversed[this][&comp] = level;
+      //    } else {
+      //        this->get_function()->sched_graph_reversed[this][&comp] = level;
+      //    }
 
     assert(this->get_function()->sched_graph_reversed[this].size() < 2 &&
            "Node has more than one predecessor.");
@@ -4985,11 +4993,13 @@ int isl_ast_expr_get_depth(isl_ast_expr *node) {
 
 int tiramisu::function::get_n_levels_from_codegen(tiramisu::computation *comp, bool count_ids) {
     // set an access function if we don't have one
+  bool reset_access_to_null = false;
     if (comp->get_access_relation() == NULL) {
         isl_map *dummy_acc = isl_set_identity(isl_set_copy(comp->get_iteration_domain()));
         std::string n = "b" + std::to_string(id_counter++);
         dummy_acc = isl_map_set_tuple_name(dummy_acc, isl_dim_out, n.c_str());
         comp->set_access(dummy_acc);
+        reset_access_to_null = true;
     }
 
     // create a new function that just has this in the body
@@ -5018,43 +5028,21 @@ int tiramisu::function::get_n_levels_from_codegen(tiramisu::computation *comp, b
     comp->clear_index_expr();
     comp->fct = orig_f;
     comp->expression = orig_expr;
+    if (reset_access_to_null) {
+      comp->access = NULL;
+    }
     return n_levels;
 }
 
 void tiramisu::computation::distributed_split(tiramisu::var L0, int sizeX, tiramisu::var L0_outer,
                                               tiramisu::var L0_inner) {
-
-//    // set an access function if we don't have one
-//    if (this->get_access_relation() == NULL) {
-//        isl_map *dummy_acc = isl_set_identity(isl_set_copy(this->get_iteration_domain()));
-//        dummy_acc = isl_map_set_tuple_name(dummy_acc, isl_dim_out, "b0");
-//        this->set_access(dummy_acc);
-//    }
-//
-//    // create a new function that just has this in the body
-//    tiramisu::function f("f" + std::to_string(id_counter++));
-//    tiramisu::function *orig_f = this->fct;
-//    tiramisu::expr orig_expr = this->expression;
-//    this->expression = tiramisu::expr();
-//    this->fct = &f;
-//    f.add_computation(this);
-//    f.gen_time_space_domain();
-//    f.gen_isl_ast();
-//    isl_ast_expr *lhs_access = this->get_index_expr()[0];
-    int n_levels_before_split = tiramisu::function::get_n_levels_from_codegen(this); //isl_ast_expr_get_depth(lhs_access);
+    int n_levels_before_split = tiramisu::function::get_n_levels_from_codegen(this);
     this->split(L0, sizeX, L0_outer, L0_inner);
-//    this->clear_index_expr();
-//    f.gen_time_space_domain();
-//    f.gen_isl_ast();
-//    lhs_access = this->get_index_expr()[0];
-    int n_levels_after_split = tiramisu::function::get_n_levels_from_codegen(this);//isl_ast_expr_get_depth(lhs_access);//isl_ast_expr_get_op_n_arg(lhs_access);
+    int n_levels_after_split = tiramisu::function::get_n_levels_from_codegen(this);
     if (n_levels_before_split == n_levels_after_split) {
         // Our split level is removed, so we need to remember this for later and take that into account!
         this->should_offset_distributed_level = true;
     }
-//    this->clear_index_expr();
-//    this->fct = orig_f;
-//    this->expression = orig_expr;
 }
 
 void computation::split(tiramisu::var L0_var, int sizeX)
@@ -7650,13 +7638,18 @@ send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, s
     int num_levels_r_after_codegen = tiramisu::function::get_n_levels_from_codegen(r, true) - 1;
     int num_levels_r_should_have = isl_set_n_dim(r_iter_domain);
 
+    std::cerr << "num_levels_s_after_codegen: " << num_levels_s_after_codegen << std::endl;
+    std::cerr << "num_levels_s_should_have: " << num_levels_s_should_have << std::endl;
+    std::cerr << "num_levels_r_after_codegen: " << num_levels_r_after_codegen << std::endl;
+    std::cerr << "num_levels_r_should_have: " << num_levels_r_should_have << std::endl;
+
     if (num_levels_s_after_codegen != num_levels_s_should_have) {
-        // Our split level is removed, so we need to remember this for later and take that into account!
-        s->should_offset_distributed_level = true;
+      // Our split level is removed, so we need to remember this for later and take that into account!
+      s->should_offset_distributed_level = true;
     }
     if (num_levels_r_after_codegen != num_levels_r_should_have) {
-        // Our split level is removed, so we need to remember this for later and take that into account!
-        r->should_offset_distributed_level = true;
+      // Our split level is removed, so we need to remember this for later and take that into account!
+      r->should_offset_distributed_level = true;
     }
 
     tiramisu::send_recv sr;
