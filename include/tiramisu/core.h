@@ -260,8 +260,9 @@ private:
       * This function is called automatically when gen_isl_ast()
       * or gen_time_processor_domain() are called.
       */
-public:
     void align_schedules();
+
+    static int get_n_levels_from_codegen(tiramisu::computation *comp, bool count_ids = false);
 
     /**
      * Get live in/out computations in the function.
@@ -3531,10 +3532,10 @@ public:
       * send_recv_iter_dom should be defined over the iterations of the producer that we need.
       * e should be just a single access expression into the producer.
       */
-    static send_recv create_transfer(std::string send_recv_iter_dom_str, std::string send_name, std::string recv_name,
-                                         tiramisu::expr src, tiramisu::expr dest, tiramisu::channel *send_chan,
-                                         tiramisu::channel *recv_chan, tiramisu::expr e,
-                                         std::vector<tiramisu::computation *> consumers, tiramisu::function *fct);
+    static send_recv create_transfer(std::string send_iter_domain, std::string recv_iter_domain, std::string send_name,
+                                     std::string recv_name, tiramisu::expr src, tiramisu::expr dest,
+                                     tiramisu::channel *send_chan, tiramisu::channel *recv_chan, tiramisu::expr e,
+                                     std::vector<tiramisu::computation *> consumers, tiramisu::function *fct);
 
     static void distribute(std::vector<std::vector<computation *>> ops, std::vector<int> predicates);
 

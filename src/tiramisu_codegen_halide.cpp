@@ -1798,7 +1798,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
         // current level was marked as such.
         size_t tt = 0;
         bool convert_to_conditional = false;
-        bool offset;
+        bool offset = false;
         while (tt < tagged_stmts.size())
         {
             if (tagged_stmts[tt] != "")
