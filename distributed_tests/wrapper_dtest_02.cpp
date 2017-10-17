@@ -13,13 +13,13 @@
 int main(int argc, char** argv) {
     MPI_Init(NULL, NULL);
 
-    float _input[ROWS*COLS];
+    uint32_t _input[ROWS*COLS];
     for (int i = 0; i < ROWS*COLS; i++) {
-        _input[i] = (float)i;
+        _input[i] = (uint32_t)i;
     }
 
-    Halide::Runtime::Buffer<float> input(_input, {COLS, ROWS});
-    Halide::Runtime::Buffer<float> output(COLS, ROWS);
+    Halide::Runtime::Buffer<uint32_t> input(_input, {COLS, ROWS});
+    Halide::Runtime::Buffer<uint32_t> output(COLS, ROWS);
 
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
