@@ -80,8 +80,8 @@ int main(int argc, char **argv)
     channel chan_sync_block("chan_sync_block", p_uint8, {FIFO, SYNC, BLOCK, MPI});
 
     send_recv fan_out = computation::create_transfer(
-            "{send_fan_out[q,p,i,j]: 0<=q<1 and 1<=p<4 and p*320<=i<(p+1)*320 and 0<=j<768}",
-            "{recv_fan_out[p,i,j]: 1<=p<4 and p*320<=i<(p+1)*320 and 0<=j<768}", 0, var("p"), &chan_sync_block,
+            "{send_fan_out[q,p,i,j]: 0<=q<1 and 1<=p<4 and p*320-1<=i<(p+1)*320+1 and 0<=j<768}",
+            "{recv_fan_out[p,i,j]: 1<=p<4 and p*320-1<=i<(p+1)*320+1 and 0<=j<768}", 0, var("p"), &chan_sync_block,
             &chan_sync_block, c_input(var("i"), var("j")), {&(c_blurx.get_update(1))}, &dtest_03);
     send_recv fan_in = computation::create_transfer(
             "{send_fan_in[p,i,j]: 1<=p<4 and p*320<=i<(p+1)*320 and 0<=j<768}",
@@ -108,7 +108,7 @@ int main(int argc, char **argv)
     // -------------------------------------------------------
 
     buffer b_input("b_input", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint8, a_input, &dtest_03);
-    b_input.distribute({tiramisu::expr(SIZE0 / 4), tiramisu::expr(SIZE1)}, "b_input_temp");
+    b_input.distribute({tiramisu::expr(SIZE0/4)+2, tiramisu::expr(SIZE1)}, "b_input_temp");
     buffer b_blurx("b_blurx", {tiramisu::expr(SIZE0)/4, tiramisu::expr(SIZE1)}, p_uint8, a_temporary, &dtest_03);
     buffer b_blury("b_blury", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint8, a_output, &dtest_03);
     buffer b_blury_temp("b_blury_temp", {tiramisu::expr(SIZE0)/4, tiramisu::expr(SIZE1)}, p_uint8, a_temporary, &dtest_03);
@@ -118,7 +118,7 @@ int main(int argc, char **argv)
     c_blurx.get_update(1).set_access("{c_blurx1[i,j]->b_blurx[i,j]}");
     c_blury.get_update(0).set_access("{c_blury0[i,j]->b_blury[i,j]}");
     c_blury.get_update(1).set_access("{c_blury1[i,j]->b_blury_temp[i,j]}");
-    fan_out.r->set_access("{recv_fan_out[p,i,j]->b_input_temp[i-p*320,j]}");
+    fan_out.r->set_access("{recv_fan_out[p,i,j]->b_input_temp[i-p*320+1,j]}");
     fan_in.r->set_access("{recv_fan_in[q,p,i,j]->b_blury[p*320+i,j]}");
 
     // -------------------------------------------------------
