@@ -1286,12 +1286,13 @@ private:
      */
     int duplicate_number;
 
+public:
     /**
       * An expression representing the computation
       * ("what" should be computed).
       */
     tiramisu::expr expression;
-
+private:
     /**
       * If has_multiple_definitions() is true, then this variable contains the
       * computation that was defined first among all the multiple definitions.
@@ -3542,10 +3543,10 @@ public:
       * send_recv_iter_dom should be defined over the iterations of the producer that we need.
       * e should be just a single access expression into the producer.
       */
-    static send_recv create_transfer(std::string send_iter_domain, std::string recv_iter_domain, std::string send_name,
-                                     std::string recv_name, tiramisu::expr src, tiramisu::expr dest,
-                                     tiramisu::channel *send_chan, tiramisu::channel *recv_chan, tiramisu::expr e,
-                                     std::vector<tiramisu::computation *> consumers, tiramisu::function *fct);
+    static send_recv create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr src,
+                                         tiramisu::expr dest, tiramisu::channel *send_chan, tiramisu::channel *recv_chan,
+                                         tiramisu::expr e, std::vector<tiramisu::computation *> consumers,
+                                         tiramisu::function *fct);
 
     static void distribute(std::vector<std::vector<computation *>> ops, std::vector<int> predicates);
 
@@ -3764,6 +3765,8 @@ protected:
                                                    const tiramisu::expr &exp,
                                                    std::vector<isl_map *> &accesses,
                                                    bool return_buffer_accesses);
+
+public:
 
     /**
      * Traverse a tiramisu expression (\p current_exp) until an expression with the specified name is found.

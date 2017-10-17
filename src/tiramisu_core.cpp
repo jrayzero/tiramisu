@@ -7609,24 +7609,22 @@ bool tiramisu::wait::is_wait() const {
     return true;
 }
 
-send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, std::string recv_iter_domain, std::string send_name,
-                                                 std::string recv_name, tiramisu::expr src, tiramisu::expr dest,
-                                                 tiramisu::channel *send_chan, tiramisu::channel *recv_chan, tiramisu::expr e,
-                                                 std::vector<tiramisu::computation *> consumers, tiramisu::function *fct) {
+send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr src,
+                                                 tiramisu::expr dest, tiramisu::channel *send_chan, tiramisu::channel *recv_chan,
+                                                 tiramisu::expr e, std::vector<tiramisu::computation *> consumers,
+                                                 tiramisu::function *fct) {
     assert(e.get_op_type() == tiramisu::o_access);
     tiramisu::computation *producer = fct->get_computation_by_name(e.get_name())[0];
 
     isl_set *s_iter_domain = isl_set_read_from_str(producer->get_ctx(), send_iter_domain.c_str());
     isl_set *r_iter_domain = isl_set_read_from_str(producer->get_ctx(), recv_iter_domain.c_str());
-    isl_set *send_domain = isl_set_set_tuple_name(s_iter_domain, send_name.c_str());
-    isl_set *recv_domain = isl_set_set_tuple_name(r_iter_domain, recv_name.c_str());
-    tiramisu::send *s = new tiramisu::send(isl_set_to_str(send_domain), producer, e, send_chan, true,
+    tiramisu::send *s = new tiramisu::send(isl_set_to_str(s_iter_domain), producer, e, send_chan, true,
                                            producer->get_function(), {1});
     tiramisu::recv *r = nullptr;
     if (!consumers.empty()) {
-        r = new tiramisu::recv(isl_set_to_str(recv_domain), consumers[0], true, fct, recv_chan);
+        r = new tiramisu::recv(isl_set_to_str(r_iter_domain), consumers[0], true, fct, recv_chan);
     } else {
-        r = new tiramisu::recv(isl_set_to_str(recv_domain), true, fct, recv_chan);
+        r = new tiramisu::recv(isl_set_to_str(r_iter_domain), true, fct, recv_chan);
     }
     isl_map *send_sched = s->gen_identity_schedule_for_iteration_domain();
     isl_map *recv_sched = r->gen_identity_schedule_for_iteration_domain();
