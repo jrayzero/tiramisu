@@ -1232,7 +1232,7 @@ void tiramisu::computation::tag_distribute_level(int dist_dim)
 
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
-
+    this->is_distributed = true;
     this->get_function()->add_distributed_dimension(this->get_name(), dist_dim, should_offset_distributed_level);
     this->get_function()->_needs_rank_call = true;
 
@@ -2918,7 +2918,7 @@ void tiramisu::computation::allocate_and_map_buffer_automatically(tiramisu::argu
     this->automatically_allocated_buffer = buff;
 
     tiramisu::computation *allocation;
-    if (type == tiramisu::a_temporary || type == tiramisu::a_dist)
+    if (type == tiramisu::a_temporary)
     {
         allocation = buff->allocate_at(*this, computation::root_dimension);
         allocation->set_name("_allocation_" + this->name);
@@ -2988,10 +2988,10 @@ void tiramisu::computation::after(computation &comp, int level)
       } else {
         this->get_function()->sched_graph_reversed[this].clear();
         }*/
-      this->get_function()->sched_graph_reversed[this][&comp] = level;
-      //    } else {
-      //        this->get_function()->sched_graph_reversed[this][&comp] = level;
-      //    }
+    this->get_function()->sched_graph_reversed[this][&comp] = level;
+    //    } else {
+    //        this->get_function()->sched_graph_reversed[this][&comp] = level;
+    //    }
 
     assert(this->get_function()->sched_graph_reversed[this].size() < 2 &&
            "Node has more than one predecessor.");
@@ -4993,11 +4993,12 @@ int isl_ast_expr_get_depth(isl_ast_expr *node) {
 
 int tiramisu::function::get_n_levels_from_codegen(tiramisu::computation *comp, bool count_ids) {
     // set an access function if we don't have one
-  bool reset_access_to_null = false;
+    bool reset_access_to_null = false;
     if (comp->get_access_relation() == NULL) {
         isl_map *dummy_acc = isl_set_identity(isl_set_copy(comp->get_iteration_domain()));
         std::string n = "b" + std::to_string(id_counter++);
         dummy_acc = isl_map_set_tuple_name(dummy_acc, isl_dim_out, n.c_str());
+        isl_map_dump(dummy_acc);
         comp->set_access(dummy_acc);
         reset_access_to_null = true;
     }
@@ -5029,7 +5030,7 @@ int tiramisu::function::get_n_levels_from_codegen(tiramisu::computation *comp, b
     comp->fct = orig_f;
     comp->expression = orig_expr;
     if (reset_access_to_null) {
-      comp->access = NULL;
+        comp->access = NULL;
     }
     return n_levels;
 }
@@ -5641,7 +5642,7 @@ Halide::Argument::Kind halide_argtype_from_tiramisu_argtype(tiramisu::argument_t
 {
     Halide::Argument::Kind res;
 
-    if (type == tiramisu::a_temporary || type == tiramisu::a_dist)
+    if (type == tiramisu::a_temporary)
     {
         tiramisu::error("Buffer type \"temporary\" can't be translated to Halide.\n", true);
     }
@@ -6008,8 +6009,6 @@ std::string str_from_tiramisu_type_argument(tiramisu::argument_t type)
             return "output";
         case tiramisu::a_temporary:
             return "temporary";
-        case tiramisu::a_dist:
-            return "dist";
         default:
             tiramisu::error("Tiramisu type not supported.", true);
             return "";
@@ -6057,7 +6056,7 @@ tiramisu::buffer::buffer(std::string name, std::vector<tiramisu::expr> dim_sizes
                          tiramisu::primitive_t type,
                          tiramisu::argument_t argt, tiramisu::function *fct):
         allocated(false), argtype(argt), auto_allocate(true), dim_sizes(dim_sizes), fct(fct),
-        name(name), type(type)
+        name(name), type(type), _distribute(false)
 {
     assert(!name.empty() && "Empty buffer name");
     assert(fct != NULL && "Input function is NULL");
@@ -6067,6 +6066,13 @@ tiramisu::buffer::buffer(std::string name, std::vector<tiramisu::expr> dim_sizes
 
     fct->add_buffer(std::pair<std::string, tiramisu::buffer *>(name, this));
 };
+
+void tiramisu::buffer::distribute(std::vector<tiramisu::expr> distributed_size, std::string name) {
+    this->_distribute = true;
+    tiramisu::buffer *new_buff = new tiramisu::buffer(name, distributed_size, this->type,
+                                                      tiramisu::a_temporary, this->fct);
+    this->distributed_buffer = new_buff;
+}
 
 /**
   * Return the type of the argument (if the buffer is an argument).
@@ -6144,25 +6150,25 @@ void tiramisu::buffer::dump(bool exhaustive) const
         std::cout << std::endl << std::endl;
     }
 }
-
-tiramisu::dist_buffer::dist_buffer(std::string name, std::vector<tiramisu::expr> dim_sizes,
-        tiramisu::primitive_t type, tiramisu::function *fct) : output_buffer(-1) {
-    buffer *b = new buffer(name, dim_sizes, type, tiramisu::a_dist, fct);
-    this->buffs.push_back(b);
-}
-
-tiramisu::dist_buffer::dist_buffer(std::vector<std::string> names, std::vector<std::vector<tiramisu::expr>> dim_sizes,
-        tiramisu::primitive_t type, tiramisu::function *fct) : output_buffer(-1) {
-    assert(names.size() == dim_sizes.size());
-    for (int i = 0; i < names.size(); i++) {
-        buffer *b = new buffer(names[i], dim_sizes[i], type, tiramisu::a_dist, fct);
-        this->buffs.push_back(b);
-    }
-}
-
-void tiramisu::dist_buffer::set_output_buffer(int idx) {
-    this->output_buffer = idx;
-}
+//
+//tiramisu::dist_buffer::dist_buffer(std::string name, std::vector<tiramisu::expr> dim_sizes,
+//                                   tiramisu::primitive_t type, tiramisu::function *fct) : output_buffer(-1) {
+//    buffer *b = new buffer(name, dim_sizes, type, tiramisu::a_dist, fct);
+//    this->buffs.push_back(b);
+//}
+//
+//tiramisu::dist_buffer::dist_buffer(std::vector<std::string> names, std::vector<std::vector<tiramisu::expr>> dim_sizes,
+//                                   tiramisu::primitive_t type, tiramisu::function *fct) : output_buffer(-1) {
+//    assert(names.size() == dim_sizes.size());
+//    for (int i = 0; i < names.size(); i++) {
+//        buffer *b = new buffer(names[i], dim_sizes[i], type, tiramisu::a_dist, fct);
+//        this->buffs.push_back(b);
+//    }
+//}
+//
+//void tiramisu::dist_buffer::set_output_buffer(int idx) {
+//    this->output_buffer = idx;
+//}
 
 Halide::Type halide_type_from_tiramisu_type(tiramisu::primitive_t type)
 {
@@ -7604,9 +7610,9 @@ bool tiramisu::wait::is_wait() const {
 }
 
 send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, std::string recv_iter_domain, std::string send_name,
-                                                std::string recv_name, tiramisu::expr src, tiramisu::expr dest,
-                                                tiramisu::channel *send_chan, tiramisu::channel *recv_chan, tiramisu::expr e,
-                                                std::vector<tiramisu::computation *> consumers, tiramisu::function *fct) {
+                                                 std::string recv_name, tiramisu::expr src, tiramisu::expr dest,
+                                                 tiramisu::channel *send_chan, tiramisu::channel *recv_chan, tiramisu::expr e,
+                                                 std::vector<tiramisu::computation *> consumers, tiramisu::function *fct) {
     assert(e.get_op_type() == tiramisu::o_access);
     tiramisu::computation *producer = fct->get_computation_by_name(e.get_name())[0];
 
@@ -7638,18 +7644,17 @@ send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, s
     int num_levels_r_after_codegen = tiramisu::function::get_n_levels_from_codegen(r, true) - 1;
     int num_levels_r_should_have = isl_set_n_dim(r_iter_domain);
 
-    std::cerr << "num_levels_s_after_codegen: " << num_levels_s_after_codegen << std::endl;
-    std::cerr << "num_levels_s_should_have: " << num_levels_s_should_have << std::endl;
-    std::cerr << "num_levels_r_after_codegen: " << num_levels_r_after_codegen << std::endl;
-    std::cerr << "num_levels_r_should_have: " << num_levels_r_should_have << std::endl;
-
     if (num_levels_s_after_codegen != num_levels_s_should_have) {
-      // Our split level is removed, so we need to remember this for later and take that into account!
-      s->should_offset_distributed_level = true;
+        // Our split level is removed, so we need to remember this for later and take that into account!
+        s->should_offset_distributed_level = true;
     }
     if (num_levels_r_after_codegen != num_levels_r_should_have) {
-      // Our split level is removed, so we need to remember this for later and take that into account!
-      r->should_offset_distributed_level = true;
+        // Our split level is removed, so we need to remember this for later and take that into account!
+        r->should_offset_distributed_level = true;
+    }
+
+    for (auto c : consumers) {
+        c->reads_from_recv = true;
     }
 
     tiramisu::send_recv sr;

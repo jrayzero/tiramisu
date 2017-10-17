@@ -129,8 +129,7 @@ enum argument_t
 {
     a_input,
     a_output,
-    a_temporary,
-    a_dist
+    a_temporary
 };
 
 /**
