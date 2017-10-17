@@ -21,7 +21,7 @@ std::map<std::string, computation *> computations_list;
 bool global::auto_data_mapping;
 
 // Used for the generation of new variable names.
-//const var computation::root = var("root");
+const var computation::root = var("root");
 int id_counter = 0;
 
 /**
