@@ -19,7 +19,7 @@ typedef std::vector<std::vector<computation *>> pred_group;
 int main(int argc, char **argv)
 {
     // Set default tiramisu options.
-    global::set_default_tiramisu_options();
+  global::set_default_tiramisu_options();
 
     // -------------------------------------------------------
     // Layer I
@@ -60,36 +60,38 @@ int main(int argc, char **argv)
 
     // communication
     channel chan_sync_block("chan_sync_block", p_uint8, {FIFO, SYNC, BLOCK, MPI});
+    // The requirements for the var naming here is a little wonky.
     send_recv fan_out = computation::create_transfer(
-            "{[rank,p,i,j]: 0<=rank<1 and 1<=p<4 and p*160<=i<(p+1)*160 and 0<=j<768}",
-            "{[p,i,j]: 1<=p<4 and p*160<=i<(p+1)*160 and 0<=j<768}", "send_0_1", "recv_0_1", 0, var("p"),
+                                                     "{[q,p,i,j]: 0<=q<1 and 1<=p<4 and p*160<=i<(p+1)*160 and 0<=j<768}",
+                                                     "{[p,i,j]: 1<=p<4 and p*160<=i<(p+1)*160 and 0<=j<768}", "send_0_1", "recv_0_1", 0, var("p"),
             &chan_sync_block, &chan_sync_block, c_input(var("i"), var("j")),
-            {&(S0.get_update(1))}, &blurxy);
+                                                     {&(S0.get_update(1))}, &blurxy);
     send_recv fan_in = computation::create_transfer(
-            "{[rank,p,i,j]: 1<=rank<4 and 1<=p<4 and p*160<=i<(p+1)*160 and 0<=j<768}",
-            "{[p,rank,i,j]: 0<=p<1 and 1<=rank<4 and p*160<=i<(p+1)*160 and 0<=j<768}", "send_1_0", "recv_1_0",
-            var("rank"), 0, &chan_sync_block, &chan_sync_block, S0.get_update(1)(var("i"), var("j")),
-            {}, &blurxy);
-    fan_out.s->tag_distribute_level(var("rank"));
+                                                    "{[p,i,j]: 1<=p<4 and p*160<=i<(p+1)*160 and 0<=j<768}",
+                                                    "{[p,k,i,j]: 0<=p<1 and 1<=k<4 and p*160<=i<(p+1)*160 and 0<=j<768}", "send_1_0", "recv_1_0",
+                                                    var("p"), 0, &chan_sync_block, &chan_sync_block, S0.get_update(1)(var("i")-var("p")*160, var("j")),
+                                                    {}, &blurxy);
+    fan_out.s->tag_distribute_level(var("q"));
     fan_out.r->tag_distribute_level(var("p"));
-    fan_in.s->tag_distribute_level(var("rank"));
+    fan_in.s->tag_distribute_level(var("p"));
     fan_in.r->tag_distribute_level(var("p"));
-
-    fan_out.s->before(S0.get_update(0), tiramisu::computation::root);
-    S0.get_update(0).before(*fan_out.r, tiramisu::computation::root);
-    fan_out.r->before(S0.get_update(1), tiramisu::computation::root);
-    fan_in.s->after(S0.get_update(1), tiramisu::computation::root);
-    fan_in.r->after(S0.get_update(0), tiramisu::computation::root);
+    
+    tiramisu::var root("root");
+    fan_out.s->before(S0.get_update(0), root);
+    S0.get_update(0).before(*fan_out.r, root);
+    fan_out.r->before(S0.get_update(1), root);
+    fan_in.s->after(S0.get_update(1), root);
+    fan_in.r->after(S0.get_update(0), root);
 
     // Layer III
     buffer b_input("b_input", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint8, a_input, &blurxy);
     buffer b_output("b_output", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint8, a_output, &blurxy);
-    buffer b_temp("b_temp", {tiramisu::expr(SIZE0/4), tiramisu::expr(SIZE1)}, p_uint8, a_dist, &blurxy);
+    buffer b_temp("b_temp", {tiramisu::expr(SIZE0/4), tiramisu::expr(SIZE1)}, p_uint8, a_temporary, &blurxy);
 
     c_input.set_access("{c_input[i,j]->b_input[i,j]}");
     S0.get_update(0).set_access("{S0_0[i,j]->b_output[i,j]}");
     S0.get_update(1).set_access("{S0_1[i,j]->b_temp[i,j]}");
-    fan_out.r->set_access("{recv_0_1[p,i,j]->b_input[i,j]}");
+    fan_out.r->set_access("{recv_0_1[p,i,j]->b_input[i-p*160,j]}");
     fan_in.r->set_access("{recv_1_0[p,k,i,j]->b_output[k*160+i,j]}");
 
     // -------------------------------------------------------
