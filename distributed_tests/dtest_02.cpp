@@ -26,23 +26,23 @@ int main(int argc, char **argv)
     // -------------------------------------------------------
 
     /*
-     * Declare a function blurxy.
+     * Declare a function dtest_02.
      * Declare two arguments (tiramisu buffers) for the function: b_input0 and b_blury0
      * Declare an invariant for the function.
      */
-    function blurxy("blurxy");
+    function dtest_02("dtest_02");
 
-    constant p0("N", expr((int32_t) SIZE0), p_int32, true, NULL, 0, &blurxy);
-    constant p1("M", expr((int32_t) SIZE1), p_int32, true, NULL, 0, &blurxy);
+    constant p0("N", expr((int32_t) SIZE0), p_int32, true, NULL, 0, &dtest_02);
+    constant p1("M", expr((int32_t) SIZE1), p_int32, true, NULL, 0, &dtest_02);
 
     // Declare the computations c_blurx and c_blury.
-    computation c_input("[N,M]->{c_input[i,j]: 0<=i<N and 0<=j<M}", expr(), false, p_uint32, &blurxy);
+    computation c_input("[N,M]->{c_input[i,j]: 0<=i<N and 0<=j<M}", expr(), false, p_uint32, &dtest_02);
 
     var i("i"), j("j");
 
     expr e1 = (c_input(i,j) + (uint32_t)10);
 
-    computation S0("[N,M]->{S0[i,j]: 0<=i<N and 0<=j<M}", e1, true, p_uint32, &blurxy);
+    computation S0("[N,M]->{S0[i,j]: 0<=i<N and 0<=j<M}", e1, true, p_uint32, &dtest_02);
 
     // Layer II
 
@@ -65,12 +65,12 @@ int main(int argc, char **argv)
             "{[q,p,i,j]: 0<=q<1 and 1<=p<4 and p*320<=i<(p+1)*320 and 0<=j<768}",
             "{[p,i,j]: 1<=p<4 and p*320<=i<(p+1)*320 and 0<=j<768}", "send_0_1", "recv_0_1", 0, var("p"),
             &chan_sync_block, &chan_sync_block, c_input(var("i"), var("j")),
-            {&(S0.get_update(1))}, &blurxy);
+            {&(S0.get_update(1))}, &dtest_02);
     send_recv fan_in = computation::create_transfer(
             "{[p,i,j]: 1<=p<4 and p*320<=i<(p+1)*320 and 0<=j<768}",
             "{[q,p,i,j]: 0<=q<1 and 1<=p<4 and q*320<=i<(q+1)*320 and 0<=j<768}", "send_1_0", "recv_1_0",
             var("p"), 0, &chan_sync_block, &chan_sync_block, S0.get_update(1)(var("i")-var("p")*320, var("j")),
-            {}, &blurxy);
+            {}, &dtest_02);
     fan_out.s->tag_distribute_level(var("q"));
     fan_out.r->tag_distribute_level(var("p"));
     fan_in.s->tag_distribute_level(var("p"));
@@ -85,10 +85,10 @@ int main(int argc, char **argv)
 
     // Layer III
     // Distribute this input buffer
-    buffer b_input("b_input", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint32, a_input, &blurxy);
+    buffer b_input("b_input", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint32, a_input, &dtest_02);
     b_input.distribute({tiramisu::expr(SIZE0 / 4), tiramisu::expr(SIZE1)}, "b_input_temp");
-    buffer b_output("b_output", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint32, a_output, &blurxy);
-    buffer b_temp("b_temp", {tiramisu::expr(SIZE0/4), tiramisu::expr(SIZE1)}, p_uint32, a_temporary, &blurxy);
+    buffer b_output("b_output", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint32, a_output, &dtest_02);
+    buffer b_temp("b_temp", {tiramisu::expr(SIZE0/4), tiramisu::expr(SIZE1)}, p_uint32, a_temporary, &dtest_02);
 
     c_input.set_access("{c_input[i,j]->b_input[i,j]}");
     S0.get_update(0).set_access("{S0_0[i,j]->b_output[i,j]}");
@@ -100,21 +100,21 @@ int main(int argc, char **argv)
     // Code Generation
     // -------------------------------------------------------
 
-    // Set the arguments to blurxy
-    blurxy.set_arguments({&b_input, &b_output});
+    // Set the arguments to dtest_02
+    dtest_02.set_arguments({&b_input, &b_output});
     // Generate code
-    blurxy.gen_time_space_domain();
-    blurxy.lift_ops_to_library_calls();
-    blurxy.gen_isl_ast();
-    blurxy.gen_halide_stmt();
-    blurxy.gen_halide_obj("build/generated_fct_dtest_02.o");
+    dtest_02.gen_time_space_domain();
+    dtest_02.lift_ops_to_library_calls();
+    dtest_02.gen_isl_ast();
+    dtest_02.gen_halide_stmt();
+    dtest_02.gen_halide_obj("build/generated_fct_dtest_02.o");
 
     // Some debugging
-    blurxy.dump_iteration_domain();
-    blurxy.dump_halide_stmt();
+    dtest_02.dump_iteration_domain();
+    dtest_02.dump_halide_stmt();
 
-    // Dump all the fields of the blurxy class.
-    blurxy.dump(true);
+    // Dump all the fields of the dtest_02 class.
+    dtest_02.dump(true);
 
     return 0;
 }
