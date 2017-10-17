@@ -12,27 +12,30 @@
 
 int main(int argc, char** argv) {
     MPI_Init(NULL, NULL);
-
-    uint32_t _input[ROWS*COLS];
-    for (int i = 0; i < ROWS*COLS; i++) {
-        _input[i] = (uint32_t)i;
-    }
-
-    Halide::Runtime::Buffer<uint32_t> input(_input, {COLS, ROWS});
-    Halide::Runtime::Buffer<uint32_t> output(COLS, ROWS);
-
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    dtest_02(input, output);
-
     if (rank == 0) {
-        int ctr = 0;
-        for (int row = 0; row < ROWS; row++) {
-            for (int col = 0; col < COLS; col++) {
-                assert(output(col, row) == (ctr++ + 10));
-            }
-        }
+      uint32_t _input[ROWS*COLS];
+      for (int i = 0; i < ROWS*COLS; i++) {
+        _input[i] = (uint32_t)i;
+      }
+      
+      Halide::Runtime::Buffer<uint32_t> input(_input, {COLS, ROWS});
+      Halide::Runtime::Buffer<uint32_t> output(COLS, ROWS);
+      
+      dtest_02(input, output);
+      
+      int ctr = 0;
+      for (int row = 0; row < ROWS; row++) {
+	for (int col = 0; col < COLS; col++) {
+	  assert(output(col, row) == (ctr++ + 10));
+	}
+      }
+    } else {
+      
+      Halide::Runtime::Buffer<uint32_t> input(0,0);
+      Halide::Runtime::Buffer<uint32_t> output(0,0);
+      dtest_02(input, output);
     }
 
     MPI_Finalize();
