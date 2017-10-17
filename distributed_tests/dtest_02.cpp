@@ -36,87 +36,72 @@ int main(int argc, char **argv)
     constant p1("M", expr((int32_t) SIZE1), p_int32, true, NULL, 0, &blurxy);
 
     // Declare the computations c_blurx and c_blury.
-    computation c_input("[N]->{c_input[i,j]: 0<=i<N and 0<=j<N}", expr(), false, p_uint8, &blurxy);
+    computation c_input("[N,M]->{c_input[i,j]: 0<=i<N and 0<=j<M}", expr(), false, p_uint32, &blurxy);
 
     var i("i"), j("j");
 
-    expr e1 = (c_input(i - 1, j) +
-               c_input(i    , j) +
-               c_input(i + 1, j)) / (uint8_t)3;
+    expr e1 = (c_input(i,j) + (uint32_t)10);
 
-    computation c_blurx("[N,M]->{c_blurx[i,j]: 0<i<N and 0<j<M}", e1, true, p_uint8, &blurxy);
+    computation S0("[N,M]->{S0[i,j]: 0<=i<N and 0<=j<M}", e1, true, p_uint32, &blurxy);
 
-    expr e2 = (c_blurx(i, j - 1) +
-               c_blurx(i, j) +
-               c_blurx(i, j + 1)) / (uint8_t)3;
-
-    computation c_blury("[N,M]->{c_blury[i,j]: 1<i<N-1 and 1<j<M-1}", e2, true, p_uint8, &blurxy);
-
-    // -------------------------------------------------------
     // Layer II
-    // -------------------------------------------------------
 
-    // Do just 2 nodes for now
-    std::vector<ppair> blurx_domain_splits = {ppair("c_blurx0", "[N,M]->{c_blurx[i,j]: 0<i<N/2 and 0<j<M}"),
-                                              ppair("c_blurx1", "[N,M]->{c_blurx[i,j]: N/2<=i<N-1 and 0<j<M}")};
-    std::vector<ppair> blury_domain_splits = {ppair("c_blury0", "[N,M]->{c_blury[i,j]: 1<i<N/2 and 1<j<M-1}"),
-                                              ppair("c_blury1", "[N,M]->{c_blury[i,j]: N/2<=i<N-1 and 1<j<M-1}")};
+    S0.separate(0, expr((int32_t)SIZE0 / 4), 4, -3);
 
-    std::vector<computation *> blurx_parts = c_blurx.partition<computation>(blurx_domain_splits);
-    std::vector<computation *> blury_parts = c_blury.partition<computation>(blury_domain_splits);
+    S0.get_update(0).rename_computation("S0_0");
+    S0.get_update(1).rename_computation("S0_1");
 
-    channel chan_sync_block("chan_sync_block", p_uint8, {FIFO, SYNC, BLOCK, MPI});
+    var p("p"), i_inner("i_inner");
+    S0.get_update(0).distributed_split(i, 320, p, i_inner);
+    S0.get_update(1).distributed_split(i, 320, p, i_inner);
+    S0.get_update(0).tag_distribute_level(p);
+    S0.get_update(1).tag_distribute_level(p);
 
-    send_recv n0n1 = computation::create_transfer("[N,M]->{[i,j]: N/2-1<=i<N and 0<=j<M}", "send_0_1", "recv_0_1",
-                                                  &chan_sync_block, &chan_sync_block, c_input(var("i"), var("j")),
-                                                  {blurx_parts[1]}, &blurxy);
-    send_recv n1n0 = computation::create_transfer("[N,M]->{[i,j]: N/2<=i<N and 0<=j<M}", "send_1_0", "recv_1_0",
-                                                  &chan_sync_block, &chan_sync_block,
-                                                  (*blury_parts[1])(var("i"), var("j")), {}, &blurxy);
 
-    // node 0 scheduling
-    n0n1.s->set_low_level_schedule("{send_0_1[i,j]->send_0_1[0,0,i,0,j,0]}");
-    blurx_parts[0]->set_low_level_schedule("{c_blurx0[i,j]->c_blurx0[0,1,i,0,j,0]}");
-    blury_parts[0]->set_low_level_schedule("{c_blury0[i,j]->c_blury0[0,2,i,0,j,0]}");
-    n1n0.r->set_low_level_schedule("{recv_1_0[i,j]->recv_1_0[0,3,i,0,j,0]}");
+    // communication
+    channel chan_sync_block("chan_sync_block", p_uint32, {FIFO, SYNC, BLOCK, MPI});
+    // The requirements for the var naming here is a little wonky.
+    send_recv fan_out = computation::create_transfer(
+            "{[q,p,i,j]: 0<=q<1 and 1<=p<4 and p*320<=i<(p+1)*320 and 0<=j<768}",
+            "{[p,i,j]: 1<=p<4 and p*320<=i<(p+1)*320 and 0<=j<768}", "send_0_1", "recv_0_1", 0, var("p"),
+            &chan_sync_block, &chan_sync_block, c_input(var("i"), var("j")),
+            {&(S0.get_update(1))}, &blurxy);
+    send_recv fan_in = computation::create_transfer(
+            "{[p,i,j]: 1<=p<4 and p*320<=i<(p+1)*320 and 0<=j<768}",
+            "{[q,p,i,j]: 0<=q<1 and 1<=p<4 and q*320<=i<(q+1)*320 and 0<=j<768}", "send_1_0", "recv_1_0",
+            var("p"), 0, &chan_sync_block, &chan_sync_block, S0.get_update(1)(var("i")-var("p")*320, var("j")),
+            {}, &blurxy);
+    fan_out.s->tag_distribute_level(var("q"));
+    fan_out.r->tag_distribute_level(var("p"));
+    fan_in.s->tag_distribute_level(var("p"));
 
-    // node 1 scheduling
-    n0n1.r->set_low_level_schedule("{recv_0_1[i,j]->recv_0_1[0,0,i,0,j,0]}");
-    blurx_parts[1]->set_low_level_schedule("{c_blurx1[i,j]->c_blurx1[0,1,i,0,j,0]}");
-    blury_parts[1]->set_low_level_schedule("{c_blury1[i,j]->c_blury1[0,2,i,0,j,0]}");
-    n1n0.s->set_low_level_schedule("{send_1_0[i,j]->send_1_0[0,3,i,0,j,0]}");
+    fan_in.r->tag_distribute_level(var("q"));
 
-    pred_group groups = {{&c_input, n0n1.s, blurx_parts[0], blury_parts[0], n1n0.r}, {n0n1.r, blurx_parts[1],
-                                            blury_parts[1], n1n0.s}};
-    computation::distribute(groups, {0, 1});
+    fan_out.s->before(S0.get_update(0), computation::root);
+    S0.get_update(0).before(*fan_out.r, computation::root);
+    fan_out.r->before(S0.get_update(1), computation::root);
+    fan_in.s->after(S0.get_update(1), computation::root);
+    fan_in.r->after(S0.get_update(0), computation::root);
 
-    // -------------------------------------------------------
     // Layer III
-    // -------------------------------------------------------
+    // Distribute this input buffer
+    buffer b_input("b_input", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint32, a_input, &blurxy);
+    b_input.distribute({tiramisu::expr(SIZE0 / 4), tiramisu::expr(SIZE1)}, "b_input_temp");
+    buffer b_output("b_output", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint32, a_output, &blurxy);
+    buffer b_temp("b_temp", {tiramisu::expr(SIZE0/4), tiramisu::expr(SIZE1)}, p_uint32, a_temporary, &blurxy);
 
-    buffer b_input0("b_input0", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint8, a_input, &blurxy);
-    buffer b_input1("b_input1", {tiramisu::expr(SIZE0)/2 + 1, tiramisu::expr(SIZE1)}, p_uint8, a_temporary, &blurxy);
-
-    buffer b_blury0("b_blury0", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint8, a_output, &blurxy);
-    buffer b_blury("b_blury1", {tiramisu::expr(SIZE0)/2, tiramisu::expr(SIZE1)}, p_uint8, a_temporary, &blurxy);
-
-    buffer b_blurx0("b_blurx0", {tiramisu::expr(SIZE0), tiramisu::expr(SIZE1)}, p_uint8, a_temporary, &blurxy);
-    buffer b_blurx1("b_blurx1", {tiramisu::expr(SIZE0)/2, tiramisu::expr(SIZE1)}, p_uint8, a_temporary, &blurxy);
-
-    c_input.set_access("{c_input[i,j]->b_input0[i,j]}");
-    blurx_parts[0]->set_access("{c_blurx0[i,j]->b_blurx0[i,j]}");
-    blurx_parts[1]->set_access("[N]->{c_blurx1[i,j]->b_blurx1[i-N/2,j]}");
-    blury_parts[0]->set_access("{c_blury0[i,j]->b_blury0[i,j]}");
-    blury_parts[1]->set_access("[N]->{c_blury1[i,j]->b_blury1[i-N/2,j]}");
-    n0n1.r->set_access("[N]->{recv_0_1[i,j]->b_input1[i-(N/2-1),j]}");
-    n1n0.r->set_access("{recv_1_0[i,j]->b_blury0[i,j]}");
+    c_input.set_access("{c_input[i,j]->b_input[i,j]}");
+    S0.get_update(0).set_access("{S0_0[i,j]->b_output[i,j]}");
+    S0.get_update(1).set_access("{S0_1[i,j]->b_temp[i,j]}");
+    fan_out.r->set_access("{recv_0_1[p,i,j]->b_input_temp[i-p*320,j]}");
+    fan_in.r->set_access("{recv_1_0[q,k,i,j]->b_output[k*320+i,j]}");
 
     // -------------------------------------------------------
     // Code Generation
     // -------------------------------------------------------
 
     // Set the arguments to blurxy
-    blurxy.set_arguments({&b_input0, &b_blury0});
+    blurxy.set_arguments({&b_input, &b_output});
     // Generate code
     blurxy.gen_time_space_domain();
     blurxy.lift_ops_to_library_calls();

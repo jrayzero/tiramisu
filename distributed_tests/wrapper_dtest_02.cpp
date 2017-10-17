@@ -7,16 +7,19 @@
 #include "Halide.h"
 #include "wrapper_dtest_02.h"
 
+#define ROWS 1280
+#define COLS 768
+
 int main(int argc, char** argv) {
     MPI_Init(NULL, NULL);
 
-    float _input[1280*768];
-    for (int i = 0; i < 1280*768; i++) {
+    float _input[ROWS*COLS];
+    for (int i = 0; i < ROWS*COLS; i++) {
         _input[i] = (float)i;
     }
 
-    Halide::Runtime::Buffer<float> input(_input, {1280,768});
-    Halide::Runtime::Buffer<float> output(1280,768);
+    Halide::Runtime::Buffer<float> input(_input, {COLS, ROWS});
+    Halide::Runtime::Buffer<float> output(COLS, ROWS);
 
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -25,9 +28,9 @@ int main(int argc, char** argv) {
 
     if (rank == 0) {
         int ctr = 0;
-        for (int row = 0; row < 1280; row++) {
-            for (int col = 0; col < 768; col++) {
-                assert(output(col, row) == (ctr++ + 4));
+        for (int row = 0; row < ROWS; row++) {
+            for (int col = 0; col < COLS; col++) {
+                assert(output(col, row) == (ctr++ + 10));
             }
         }
     }

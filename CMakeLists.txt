@@ -28,7 +28,7 @@ add_executable(generated_dtest_01 distributed_tests/dtest_01.cpp)
 add_executable(dtest_01 distributed_tests/wrapper_dtest_01.cpp ${CMAKE_SOURCE_DIR}/build/generated_fct_tutorial_01_dtest.o)
 add_dependencies(dtest_01 generated_dtest_01)
 
-add_executable(generated_dtest_02 distributed_tests/dtest_02_new.cpp)
+add_executable(generated_dtest_02 distributed_tests/dtest_02.cpp)
 add_executable(dtest_02 distributed_tests/wrapper_dtest_02.cpp ${CMAKE_SOURCE_DIR}/build/generated_fct_tutorial_02_dtest.o)
 add_dependencies(dtest_02 generated_dtest_02)
 
@@ -55,7 +55,7 @@ add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/build/generated_fct_tutorial_02_dt
         COMMAND generated_dtest_02
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMENT "Running generated_dtest_02"
-        SOURCES distributed_tests/dtest_02.cpp)
+        SOURCES distributed_tests/dtest_03.cpp)
 
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/build/generated_fct_test_87.o
         COMMAND generated_test_87
