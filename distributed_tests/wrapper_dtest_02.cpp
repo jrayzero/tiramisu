@@ -1,33 +1,35 @@
 //
-// Created by Jessica Ray on 10/6/17.
+// Created by Jessica Ray on 10/3/17.
 //
 
-#include "wrapper_dtest_02.h"
-#include "Halide.h"
-#include "halide_image_io.h"
-#include "tiramisu/utils.h"
-#include <cstdlib>
-#include <iostream>
 #include <mpi.h>
+#include <iostream>
+#include "Halide.h"
+#include "wrapper_dtest_02.h"
 
-
-#define NN 10
-
-int main(int, char **)
-{
-
+int main(int argc, char** argv) {
     MPI_Init(NULL, NULL);
-    Halide::Buffer<uint8_t> image = Halide::Tools::load_image("./images/rgb.png");
-    Halide::Buffer<uint8_t> output_buf(image.extent(0), image.extent(1));
 
-    blurxy(image.raw_buffer(), output_buf.raw_buffer());
+    float _input[1280*768];
+    for (int i = 0; i < 1280*768; i++) {
+        _input[i] = (float)i;
+    }
+
+    Halide::Runtime::Buffer<float> input(_input, {1280,768});
+    Halide::Runtime::Buffer<float> output(1280,768);
 
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+    dtest_02(input, output);
+
     if (rank == 0) {
-        copy_buffer(output_buf, image);
-        Halide::Tools::save_image(image, "./build/dtest_02.png");
+        int ctr = 0;
+        for (int row = 0; row < 1280; row++) {
+            for (int col = 0; col < 768; col++) {
+                assert(output(col, row) == (ctr++ + 4));
+            }
+        }
     }
 
     MPI_Finalize();
@@ -35,3 +37,4 @@ int main(int, char **)
 
     return 0;
 }
+

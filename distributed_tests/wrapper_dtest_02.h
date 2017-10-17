@@ -1,9 +1,9 @@
 //
-// Created by Jessica Ray on 10/6/17.
+// Created by Jessica Ray on 10/3/17.
 //
 
-#ifndef TIRAMISU_WRAPPER_DTEST_02_H
-#define TIRAMISU_WRAPPER_DTEST_02_H
+#ifndef TIRAMISU_WRAPPER_DTEST_01_H
+#define TIRAMISU_WRAPPER_DTEST_01_H
 
 #include <tiramisu/utils.h>
 
@@ -11,13 +11,13 @@
 extern "C" {
 #endif
 
-int blurxy(halide_buffer_t *_b_input_buffer, halide_buffer_t *_b_blury_buffer);
-int blurxy_argv(void **args);
-// Result is never null and points to constant static data
-const struct halide_filter_metadata_t *blurxy_metadata();
+int dtest_02(halide_buffer_t *, halide_buffer_t *);
+int dtest_02_argv(void **args);
+
+const struct halide_filter_metadata_t dtest_02_metadata();
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-#endif //TIRAMISU_WRAPPER_DTEST_02_H
+#endif //TIRAMISU_WRAPPER_DTEST_01_H
