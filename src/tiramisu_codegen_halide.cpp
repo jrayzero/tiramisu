@@ -3023,7 +3023,7 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
                     computations_vector[0]->req_access_map = orig;
                 }
                 isl_map *acc = access_comp->get_access_relation_adapted_to_time_processor_domain();
-                if (!comp->is_send() && comp->is_distributed) {
+                if (comp && !comp->is_send() && comp->is_distributed) {
                     std::string buff_name = isl_map_get_tuple_name(acc, isl_dim_out);
                     tiramisu::buffer *dist_buff = fct->get_buffers().find(buff_name)->second;
                     bool is_buffer_distributed = dist_buff->_distribute;
