@@ -46,14 +46,14 @@ int main(int argc, char **argv)
     // Layer II
     // -------------------------------------------------------
 
-    S0.separate(0, expr((int32_t)SIZE0 / 4), 4, -3);
+    S0.separate_at(0, SIZE0, SIZE0/4, -3);
 
     S0.get_update(0).rename_computation("S0_0");
     S0.get_update(1).rename_computation("S0_1");
 
     var p("p"), i_inner("i_inner");
-    S0.get_update(0).distributed_split(i, 320, p, i_inner);
-    S0.get_update(1).distributed_split(i, 320, p, i_inner);
+    S0.get_update(0).split(i, 320, p, i_inner);
+    S0.get_update(1).split(i, 320, p, i_inner);
     S0.get_update(0).tag_distribute_level(p);
     S0.get_update(1).tag_distribute_level(p);
 
