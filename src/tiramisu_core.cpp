@@ -1597,7 +1597,7 @@ void tiramisu::computation::separate(int dim, tiramisu::expr N, int v, int dim_s
     DEBUG_INDENT(-4);
 }
 
-void tiramisu::computation::separate_at(int dim, tiramisu::expr N, expr separate_at, int dim_sched_after)
+void tiramisu::computation::separate_at(int dim, tiramisu::expr N, expr separate_point, int dim_sched_after)
 {
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
@@ -1607,7 +1607,7 @@ void tiramisu::computation::separate_at(int dim, tiramisu::expr N, expr separate
     DEBUG(3, tiramisu::str_dump("Generating the time-space domain."));
     this->gen_time_space_domain();
 
-    tiramisu::constant middle("m_" + std::to_string(id_counter++), separate_at, tiramisu::p_int32, true, NULL, 0,
+    tiramisu::constant middle("m_" + std::to_string(id_counter++), separate_point, tiramisu::p_int32, true, NULL, 0,
                               this->fct);
 
     //////////////////////////////////////////////////////////////////////////////
@@ -5325,6 +5325,156 @@ void computation::split(int L0, int sizeX)
     DEBUG_INDENT(-4);
 }
 
+void tiramisu::computation::split_at(tiramisu::var L0_var, int split_point, tiramisu::var L0_outer,
+                                     tiramisu::var L0_inner) {
+    DEBUG_FCT_NAME(3);
+    DEBUG_INDENT(4);
+
+    assert(L0_var.get_name().length() > 0);
+    std::vector<int> dimensions =
+            this->get_loop_level_numbers_from_dimension_names({L0_var.get_name()});
+    this->check_dimensions_validity(dimensions);
+    int L0 = dimensions[0];
+    this->assert_names_not_assigned({L0_outer.get_name(), L0_inner.get_name()});
+
+    this->split_at(L0, split_point);
+    this->set_loop_level_names({L0, L0+1}, {L0_outer.get_name(), L0_inner.get_name()});
+
+    DEBUG_INDENT(-4);
+}
+
+void tiramisu::computation::split_at(int L0, int _sizeX)
+{
+    DEBUG_FCT_NAME(3);
+    DEBUG_INDENT(4);
+
+    int inDim0 = loop_level_into_dynamic_dimension(L0);
+
+    assert(this->get_schedule() != NULL);
+    assert(inDim0 >= 0);
+    assert(inDim0 < isl_space_dim(isl_map_get_space(this->get_schedule()), isl_dim_out));
+
+    isl_map *schedule = this->get_schedule();
+    int duplicate_ID = isl_map_get_static_dim(schedule, 0);
+
+    schedule = isl_map_copy(schedule);
+    schedule = isl_map_set_tuple_id(schedule, isl_dim_out,
+                                    isl_id_alloc(this->get_ctx(), this->get_name().c_str(), NULL));
+
+
+    DEBUG(3, tiramisu::str_dump("Original schedule: ", isl_map_to_str(schedule)));
+    DEBUG(3, tiramisu::str_dump("Splitting dimension " + std::to_string(inDim0)
+                                + " with split size " + std::to_string(_sizeX)));
+
+    std::string inDim0_str;
+
+    std::string outDim0_str = generate_new_variable_name();
+    std::string outDim1_str = generate_new_variable_name();
+
+    int n_dims = isl_map_dim(this->get_schedule(), isl_dim_out);
+    std::vector<isl_id *> dimensions;
+    std::vector<std::string> dimensions_str;
+    tiramisu::constant sizeX("m_" + std::to_string(id_counter++), _sizeX, tiramisu::p_int32, true, NULL, 0, this->fct);
+    std::string map = "{";//"[" + sizeX.get_name() + "]->{";
+
+    // -----------------------------------------------------------------
+    // Preparing a map to split the duplicate computation.
+    // -----------------------------------------------------------------
+
+    map = map + this->get_name() + "[";
+
+    for (int i = 0; i < n_dims; i++)
+    {
+        if (i == 0)
+        {
+            std::string dim_str = generate_new_variable_name();
+            dimensions_str.push_back(dim_str);
+            map = map + dim_str;
+        }
+        else
+        {
+            std::string dim_str = generate_new_variable_name();
+            dimensions_str.push_back(dim_str);
+            map = map + dim_str;
+
+            if (i == inDim0)
+            {
+                inDim0_str = dim_str;
+            }
+        }
+
+        if (i != n_dims - 1)
+        {
+            map = map + ",";
+        }
+    }
+
+    map = map + "] -> " + this->get_name() + "[";
+
+    for (int i = 0; i < n_dims; i++)
+    {
+        if (i == 0)
+        {
+            map = map + dimensions_str[i];
+            dimensions.push_back(isl_id_alloc(
+                    this->get_ctx(),
+                    dimensions_str[i].c_str(),
+                    NULL));
+        }
+        else if (i != inDim0)
+        {
+            map = map + dimensions_str[i];
+            dimensions.push_back(isl_id_alloc(
+                    this->get_ctx(),
+                    dimensions_str[i].c_str(),
+                    NULL));
+        }
+        else
+        {
+            map = map + outDim0_str + ", 0, " + outDim1_str;
+            isl_id *id0 = isl_id_alloc(this->get_ctx(),
+                                       outDim0_str.c_str(), NULL);
+            isl_id *id1 = isl_id_alloc(this->get_ctx(),
+                                       outDim1_str.c_str(), NULL);
+            dimensions.push_back(id0);
+            dimensions.push_back(id1);
+        }
+
+        if (i != n_dims - 1)
+        {
+            map = map + ",";
+        }
+    }
+
+    map = map + "] : " + dimensions_str[0] + " = " + std::to_string(duplicate_ID) + " and " +
+          outDim0_str + " = floor(" + inDim0_str + "/" +
+            std::to_string(_sizeX) + ") and " + outDim1_str + " = (" +
+          inDim0_str + "%" + std::to_string(_sizeX) + ")}";
+
+    isl_map *transformation_map = isl_map_read_from_str(this->get_ctx(), map.c_str());
+
+    for (int i = 0; i < dimensions.size(); i++)
+        transformation_map = isl_map_set_dim_id(
+                transformation_map, isl_dim_out, i, isl_id_copy(dimensions[i]));
+
+    transformation_map = isl_map_set_tuple_id(
+            transformation_map, isl_dim_in,
+            isl_map_get_tuple_id(isl_map_copy(schedule), isl_dim_out));
+    isl_id *id_range = isl_id_alloc(this->get_ctx(), this->get_name().c_str(), NULL);
+    transformation_map = isl_map_set_tuple_id(transformation_map, isl_dim_out, id_range);
+
+    DEBUG(3, tiramisu::str_dump("Transformation map : ",
+                                isl_map_to_str(transformation_map)));
+
+    schedule = isl_map_apply_range(isl_map_copy(schedule), isl_map_copy(transformation_map));
+
+    DEBUG(3, tiramisu::str_dump("Schedule after splitting: ", isl_map_to_str(schedule)));
+
+    this->set_schedule(schedule);
+
+    DEBUG_INDENT(-4);
+}
+
 // Methods related to the tiramisu::function class.
 
 std::string tiramisu::function::get_gpu_thread_iterator(const std::string &comp, int lev0) const
@@ -7747,6 +7897,8 @@ send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, s
     r->set_schedule(recv_sched);
     s->set_matching_recv(r);
     r->set_matching_send(s);
+
+    // TODO update this to not do the codegen stuff and all of that. Use constants.
 
     int num_levels_s_after_codegen = tiramisu::function::get_n_levels_from_codegen(s, true) - 1;
     int num_levels_s_should_have = isl_set_n_dim(s_iter_domain);

@@ -75,6 +75,7 @@ int main(int argc, char **argv)
     by.separate_at(0, 3, tiramisu::expr(1), -3); // split by the color channel
     by.get_update(0).rename_computation("by_0");
     by.get_update(1).rename_computation("by_1");
+
     bx.get_update(0).tag_distribute_level(c);
     bx.get_update(1).tag_distribute_level(c);
     by.get_update(0).tag_distribute_level(c);

@@ -2014,6 +2014,8 @@ private:
       */
     void split(int L0, int sizeX);
 
+    void split_at(int L0, int sizeX);
+
     /**
       * Identical to
       *    void tag_gpu_level(tiramisu::var L0, tiramisu::var L1);
@@ -2958,7 +2960,7 @@ public:
          */
     void separate(int dim, tiramisu::expr N, int v, int dim_sched_after = -2);
 
-    void separate_at(int dim, tiramisu::expr N, expr separate_at, int dim_sched_after = -2);
+    void separate_at(int dim, tiramisu::expr N, expr separate_point, int dim_sched_after = -2);
 
     /**
       * Generate the time-space domain of the computation.
@@ -3221,6 +3223,8 @@ public:
     void split(tiramisu::var L0, int sizeX,
                tiramisu::var L0_outer, tiramisu::var L0_inner);
     //@}
+
+    void split_at(var L0_var, int split_point, tiramisu::var L0_outer, tiramisu::var L0_inner);
 
     /**
      * Does the same as the above split functions, but does some extra bookkeeping needed for distributing.

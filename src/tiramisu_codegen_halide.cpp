@@ -2264,17 +2264,19 @@ Halide::Expr generator::linearize_access(int dims, const halide_dimension_t *sha
         isl_ast_expr *operand = nullptr;
         if (!is_first_level_dist || (is_first_level_dist && i != 1)) {
             operand = isl_ast_expr_get_op_arg(index_expr, i);
-        } else { // this is going to be an addition of the outermost loop and the next loop. We drop the outermost
-            // loop because it is a rank loop
-            operand = isl_ast_expr_get_op_arg(index_expr, i);
-            if (isl_ast_expr_get_type(operand) == isl_ast_expr_op && isl_ast_expr_get_op_n_arg(operand) == 2) {
-                operand = isl_ast_expr_get_op_arg(operand, 1);
-            }
-
+            //        }
+            //        else { // this is going to be an addition of the outermost loop and the next loop. We drop the outermost
+            //            // loop because it is a rank loop
+            //            operand = isl_ast_expr_get_op_arg(index_expr, i);
+            //            if (isl_ast_expr_get_type(operand) == isl_ast_expr_op && isl_ast_expr_get_op_n_arg(operand) == 2) {
+            //                operand = isl_ast_expr_get_op_arg(operand, 1);
+            //            }
+            //
+            //        }
+            Halide::Expr operand_h = halide_expr_from_isl_ast_expr(operand);
+            index += operand_h * shape[dims - i].stride;
+            isl_ast_expr_free(operand);
         }
-        Halide::Expr operand_h = halide_expr_from_isl_ast_expr(operand);
-        index += operand_h * shape[dims - i].stride;
-        isl_ast_expr_free(operand);
     }
 
     DEBUG_INDENT(-4);
@@ -3101,8 +3103,8 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
                     // If the consumer is in a distributed loop and the computation it is accessing is not,
                     // then we need to remove the distributed iterator from the linearized access because
                     // it is just a rank
-                    bool remove_rank_iter = comp && comp->fct->should_distribute(comp->get_name(), 0) &&
-                                            !access_comp->fct->should_distribute(access_comp->get_name(), 0);
+                    bool remove_rank_iter = comp && comp->fct->should_distribute(comp->get_name(), 0);// &&
+//                                            !access_comp->fct->should_distribute(access_comp->get_name(), 0);
                     if (index_expr.size() == 0)
                     {
                         DEBUG(10, tiramisu::str_dump("index_expr is empty. Retrieving access indices directly from the tiramisu access expression without scheduling."));
