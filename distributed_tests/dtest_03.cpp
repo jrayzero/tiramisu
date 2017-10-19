@@ -86,9 +86,15 @@ int main(int argc, char **argv)
             "[Ny, Nx]->{send_0_1[c,z,y,x]: 0<=c<1 and 1<=z<3 and 0<=y<Ny and 0<=x<Nx}",
             "[Ny, Nx]->{recv_0_1[z,y,x]: 1<=z<3 and 0<=y<Ny and 0<=x<Nx}", 0, z, &chan_sync_block,
             &chan_sync_block, blur_input(z, y, x), {&bx.get_update(1)}, &dtest_03);
+    send_recv fan_in = computation::create_transfer(
+            "[Ny, Nx]->{send_1_0[z,y,x]: 1<=z<3 and 0<=y<Ny and 0<=x<Nx}",
+            "[Ny, Nx]->{recv_1_0[c,z,y,x]: 0<=c<1 and 1<=z<3 and 0<=y<Ny and 0<=x<Nx}", z, 0, &chan_sync_block,
+            &chan_sync_block, by.get_update(1)(0, y, x), {}, &dtest_03);
 
     fan_out.s->tag_distribute_level(c);
     fan_out.r->tag_distribute_level(z);
+    fan_in.s->tag_distribute_level(z);
+    fan_in.r->tag_distribute_level(c);
 
     // I believe these are for boundary constraints or something like that
     dtest_03.add_context_constraints("[Nc, Ny, Nx, Mc, My, Mx]->{: Nc=3 and Mc=3 and Ny=3514 and My=3512 and Nx=2104 and Mx=2104}");
@@ -97,6 +103,8 @@ int main(int argc, char **argv)
     fan_out.r->before(bx.get_update(1), computation::root);
     bx.get_update(1).before(by.get_update(0), computation::root);
     by.get_update(0).before(by.get_update(1), computation::root);
+    by.get_update(1).before(*fan_in.s, computation::root);
+    fan_in.s->before(*fan_in.r, computation::root);
 
     // TODO need to figure out how to automate this conversion
     generator::replace_expr_name(by.get_update(0).expression, "bx", "bx_0");
@@ -107,14 +115,14 @@ int main(int argc, char **argv)
     // -------------------------------------------------------
 
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(SIZE2), tiramisu::expr(SIZE1), tiramisu::expr(SIZE0)},
-                             tiramisu::p_uint8, tiramisu::a_input, &dtest_03);
+                                tiramisu::p_uint8, tiramisu::a_input, &dtest_03);
     buff_input.distribute({1, tiramisu::expr(SIZE1), tiramisu::expr(SIZE0)}, "b_input_temp");
     tiramisu::buffer buff_bx("buff_bx", {1, tiramisu::expr(by_ext_1 + 2), tiramisu::expr(by_ext_0)},
                              tiramisu::p_uint8, tiramisu::a_temporary, &dtest_03);
     tiramisu::buffer buff_by("buff_by", {tiramisu::expr(by_ext_2), tiramisu::expr(by_ext_1), tiramisu::expr(by_ext_0)},
                              tiramisu::p_uint8, tiramisu::a_output, &dtest_03);
     tiramisu::buffer buff_by_inter("buff_by_inter", {1, tiramisu::expr(by_ext_1), tiramisu::expr(by_ext_0)},
-                             tiramisu::p_uint8, tiramisu::a_temporary, &dtest_03);
+                                   tiramisu::p_uint8, tiramisu::a_temporary, &dtest_03);
 
     blur_input.set_access("{blur_input[i2, i1, i0]->buff_input[i2, i1, i0]}");
     fan_out.r->set_access("{recv_0_1[z,y,x]->b_input_temp[0, y, x]}");
@@ -122,6 +130,7 @@ int main(int argc, char **argv)
     bx.get_update(1).set_access("{bx_1[c, y, x]->buff_bx[c, y, x]}");
     by.get_update(0).set_access("{by_0[c, y, x]->buff_by[c, y, x]}");
     by.get_update(1).set_access("{by_1[c, y, x]->buff_by_inter[c, y, x]}");
+    fan_in.r->set_access("{recv_1_0[z,c,y,x]->buff_by[c,y,x]}");
 
     dtest_03.set_arguments({&buff_input, &buff_by});
     // Generate code
