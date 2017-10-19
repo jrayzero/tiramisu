@@ -31,7 +31,7 @@ int main(int argc, char **argv)
     // Layer I
     // -------------------------------------------------------
 
-    Halide::Buffer<uint8_t> in_image = Halide::Tools::load_image("/Users/JRay/ClionProjects/tiramisu/images/rgb.png");
+    Halide::Buffer<uint8_t> in_image = Halide::Tools::load_image("./images/rgb.png");
     int SIZE0 = in_image.extent(0);
     int SIZE1 = in_image.extent(1);
     int SIZE2 = in_image.extent(2);
@@ -93,9 +93,9 @@ int main(int argc, char **argv)
             "[Ny, Nx]->{recv_0_1[z,y,x]: 1<=z<3 and 0<=y<Ny and 0<=x<Nx}", 0, z, &chan_sync_block,
             &chan_sync_block, blur_input(z, y, x), {&bx.get_update(1)}, &dtest_03);
     send_recv fan_in = computation::create_transfer(
-            "[Ny, Nx]->{send_1_0[z,y,x]: 1<=z<3 and 0<=y<Ny and 0<=x<Nx}",
-            "[Ny, Nx, one]->{recv_1_0[c,z,y,x]: 0<=c<one and 1<=z<3 and 0<=y<Ny and 0<=x<Nx}", z, 0, &chan_sync_block,
-            &chan_sync_block, by.get_update(1)(0, y, x), {}, &dtest_03);
+						    "[My, Mx]->{send_1_0[z,y,x]: 1<=z<3 and 0<=y<My and 0<=x<Mx}",
+						    "[My, Mx, one]->{recv_1_0[c,z,y,x]: 0<=c<one and 1<=z<3 and 0<=y<My and 0<=x<Mx}", z, 0, &chan_sync_block,
+						    &chan_sync_block, by.get_update(1)(0, y, x), {}, &dtest_03);
 
     fan_out.s->tag_distribute_level(c);
     fan_out.r->tag_distribute_level(z);
