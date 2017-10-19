@@ -1237,9 +1237,17 @@ class computation
     friend constant;
     friend computation_tester;
 
+public:
+
+    void drop_rank_iter();
+
+    bool should_drop_rank_iter() const;
+
 private:
 
     bool should_offset_distributed_level = false;
+
+    bool drop_rank_iter_from_index = false;
 
     bool is_distributed = false;
 

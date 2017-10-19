@@ -59,16 +59,16 @@ int main(int argc, char **argv)
 
     // communication
     channel chan_sync_block("chan_sync_block", p_uint32, {FIFO, SYNC, BLOCK, MPI});
-    
+    tiramisu::constant one("one", tiramisu::expr(1), tiramisu::p_int32, true, NULL, 0, &dtest_02);
     send_recv fan_out = computation::create_transfer(
-            "{send_0_1[q,p,i,j]: 0<=q<1 and 1<=p<4 and p*320<=i<(p+1)*320 and 0<=j<768}",
+            "[one]->{send_0_1[q,p,i,j]: 0<=q<one and 1<=p<4 and p*320<=i<(p+1)*320 and 0<=j<768}",
             "{recv_0_1[p,i,j]: 1<=p<4 and p*320<=i<(p+1)*320 and 0<=j<768}", 0, var("p"), &chan_sync_block,
             &chan_sync_block, c_input(var("i"), var("j")),
             {&(S0.get_update(1))}, &dtest_02);
 
     send_recv fan_in =
             computation::create_transfer("{send_1_0[p,i,j]: 1<=p<4 and p*320<=i<(p+1)*320 and 0<=j<768}",
-                                         "{recv_1_0[q,p,i,j]: 0<=q<1 and 1<=p<4 and q*320<=i<(q+1)*320 and 0<=j<768}",
+                                         "[one]->{recv_1_0[q,p,i,j]: 0<=q<one and 1<=p<4 and q*320<=i<(q+1)*320 and 0<=j<768}",
                                          var("p"), 0, &chan_sync_block, &chan_sync_block,
                                          S0.get_update(1)(var("i") - var("p") * 320, var("j")), {}, &dtest_02);
 
@@ -76,6 +76,8 @@ int main(int argc, char **argv)
     fan_out.r->tag_distribute_level(var("p"));
     fan_in.s->tag_distribute_level(var("p"));
     fan_in.r->tag_distribute_level(var("q"));
+    S0.get_update(0).drop_rank_iter();
+    S0.get_update(1).drop_rank_iter();
 
     fan_out.s->before(S0.get_update(0), computation::root);
     S0.get_update(0).before(*fan_out.r, computation::root);

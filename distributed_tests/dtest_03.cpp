@@ -81,15 +81,20 @@ int main(int argc, char **argv)
     by.get_update(0).tag_distribute_level(c);
     by.get_update(1).tag_distribute_level(c);
 
-    channel chan_sync_block("chan_sync_block", p_uint8, {FIFO, SYNC, BLOCK, MPI});
+    bx.get_update(0).drop_rank_iter();
+    bx.get_update(1).drop_rank_iter();
+    by.get_update(0).drop_rank_iter();
+    by.get_update(1).drop_rank_iter();
 
+    channel chan_sync_block("chan_sync_block", p_uint8, {FIFO, SYNC, BLOCK, MPI});
+    tiramisu::constant one("one", tiramisu::expr(1), tiramisu::p_int32, true, NULL, 0, &dtest_03);
     send_recv fan_out = computation::create_transfer(
-            "[Ny, Nx]->{send_0_1[c,z,y,x]: 0<=c<1 and 1<=z<3 and 0<=y<Ny and 0<=x<Nx}",
+            "[Ny, Nx, one]->{send_0_1[c,z,y,x]: 0<=c<one and 1<=z<3 and 0<=y<Ny and 0<=x<Nx}",
             "[Ny, Nx]->{recv_0_1[z,y,x]: 1<=z<3 and 0<=y<Ny and 0<=x<Nx}", 0, z, &chan_sync_block,
             &chan_sync_block, blur_input(z, y, x), {&bx.get_update(1)}, &dtest_03);
     send_recv fan_in = computation::create_transfer(
             "[Ny, Nx]->{send_1_0[z,y,x]: 1<=z<3 and 0<=y<Ny and 0<=x<Nx}",
-            "[Ny, Nx]->{recv_1_0[c,z,y,x]: 0<=c<1 and 1<=z<3 and 0<=y<Ny and 0<=x<Nx}", z, 0, &chan_sync_block,
+            "[Ny, Nx, one]->{recv_1_0[c,z,y,x]: 0<=c<one and 1<=z<3 and 0<=y<Ny and 0<=x<Nx}", z, 0, &chan_sync_block,
             &chan_sync_block, by.get_update(1)(0, y, x), {}, &dtest_03);
 
     fan_out.s->tag_distribute_level(c);

@@ -7900,19 +7900,19 @@ send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, s
 
     // TODO update this to not do the codegen stuff and all of that. Use constants.
 
-    int num_levels_s_after_codegen = tiramisu::function::get_n_levels_from_codegen(s, true) - 1;
-    int num_levels_s_should_have = isl_set_n_dim(s_iter_domain);
-    int num_levels_r_after_codegen = tiramisu::function::get_n_levels_from_codegen(r, true) - 1;
-    int num_levels_r_should_have = isl_set_n_dim(r_iter_domain);
-
-    if (num_levels_s_after_codegen != num_levels_s_should_have) {
-        // Our split level is removed, so we need to remember this for later and take that into account!
-        s->should_offset_distributed_level = true;
-    }
-    if (num_levels_r_after_codegen != num_levels_r_should_have) {
-        // Our split level is removed, so we need to remember this for later and take that into account!
-        r->should_offset_distributed_level = true;
-    }
+//    int num_levels_s_after_codegen = tiramisu::function::get_n_levels_from_codegen(s, true) - 1;
+//    int num_levels_s_should_have = isl_set_n_dim(s_iter_domain);
+//    int num_levels_r_after_codegen = tiramisu::function::get_n_levels_from_codegen(r, true) - 1;
+//    int num_levels_r_should_have = isl_set_n_dim(r_iter_domain);
+//
+//    if (num_levels_s_after_codegen != num_levels_s_should_have) {
+//        // Our split level is removed, so we need to remember this for later and take that into account!
+//        s->should_offset_distributed_level = true;
+//    }
+//    if (num_levels_r_after_codegen != num_levels_r_should_have) {
+//        // Our split level is removed, so we need to remember this for later and take that into account!
+//        r->should_offset_distributed_level = true;
+//    }
 
     for (auto c : consumers) {
         c->reads_from_recv = true;
@@ -7987,6 +7987,14 @@ tiramisu::expr tiramisu::recv::get_dest() const {
 
 void tiramisu::recv::set_dest(tiramisu::expr dest) {
     this->dest = dest;
+}
+
+void tiramisu::computation::drop_rank_iter() {
+    this->drop_rank_iter_from_index = true;
+}
+
+bool tiramisu::computation::should_drop_rank_iter() const {
+    return this->drop_rank_iter_from_index;
 }
 
 }
