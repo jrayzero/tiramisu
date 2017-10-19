@@ -2958,6 +2958,8 @@ public:
          */
     void separate(int dim, tiramisu::expr N, int v, int dim_sched_after = -2);
 
+    void separate_at(int dim, tiramisu::expr N, expr separate_at, int dim_sched_after = -2);
+
     /**
       * Generate the time-space domain of the computation.
       *

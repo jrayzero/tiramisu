@@ -1597,6 +1597,117 @@ void tiramisu::computation::separate(int dim, tiramisu::expr N, int v, int dim_s
     DEBUG_INDENT(-4);
 }
 
+void tiramisu::computation::separate_at(int dim, tiramisu::expr N, expr separate_at, int dim_sched_after)
+{
+    DEBUG_FCT_NAME(3);
+    DEBUG_INDENT(4);
+
+    DEBUG(3, tiramisu::str_dump("Separating the computation at level " + std::to_string(dim)));
+
+    DEBUG(3, tiramisu::str_dump("Generating the time-space domain."));
+    this->gen_time_space_domain();
+
+    tiramisu::constant middle("m_" + std::to_string(id_counter++), separate_at, tiramisu::p_int32, true, NULL, 0,
+                              this->fct);
+
+    //////////////////////////////////////////////////////////////////////////////
+
+    // We create the constraint (i < middle)
+    DEBUG(3, tiramisu::str_dump("Constructing the constraint (i<middle)"));
+    std::string constraint;
+    constraint = "";
+    for (int i=0; i<isl_map_dim(this->get_schedule(), isl_dim_param); i++)
+    {
+        if (i==0)
+            constraint += "[" + middle.get_name() + ",";
+        constraint += isl_map_get_dim_name(this->get_schedule(), isl_dim_param, i);
+        if (i!=isl_map_dim(this->get_schedule(), isl_dim_param)-1)
+            constraint += ",";
+        else
+            constraint += "]->";
+    }
+    constraint += "{" + this->get_name() + "[0,";
+    for (int i=1; i<isl_map_dim(this->get_schedule(), isl_dim_out); i++)
+    {
+        if ((i%2==0) && (isl_map_has_dim_name(this->get_schedule(), isl_dim_out, i)==true))
+            constraint += isl_map_get_dim_name(this->get_schedule(), isl_dim_out, i);
+        else
+            constraint += "o" + std::to_string(i);
+        if (i != isl_map_dim(this->get_schedule(), isl_dim_out)-1)
+            constraint += ",";
+    }
+    constraint += "]: ";
+
+    std::string constraint1 = constraint +
+                              this->get_dimension_name_for_loop_level(dim) + " < " + middle.get_name() + "}";
+    DEBUG(3, tiramisu::str_dump("The constraint is:" + constraint1));
+
+    // We create the constraint (i >= v*floor(N/v))
+    DEBUG(3, tiramisu::str_dump("Constructing the constraint (i>=middle)"));
+    std::string constraint2 = constraint +
+                              this->get_dimension_name_for_loop_level(dim) + " >= " + middle.get_name() + "}";
+    DEBUG(3, tiramisu::str_dump("The constraint is:" + constraint2));
+
+    //////////////////////////////////////////////////////////////////////////////
+
+    isl_set *constraint2_isl = isl_set_read_from_str(this->get_ctx(), constraint2.c_str());
+    if (isl_set_is_empty(isl_map_range(isl_map_intersect_range(isl_map_copy(this->get_schedule()), constraint2_isl))) == false)
+    {
+        DEBUG(3, tiramisu::str_dump("The separate computation is not empty."));
+
+        // Create the separated computation.
+        // First, create the domain of the separated computation (which is identical to
+        // the domain of the original computation). Both also have the same name.
+        // TODO: create copy functions for all the classes so that we can copy the objects
+        // we need to have this->get_expr().copy()
+        int last_update_computation = this->get_updates().size();
+
+        std::string domain_str = std::string(isl_set_to_str(this->get_iteration_domain()));
+        this->add_definitions(domain_str,
+                              this->get_expr(),
+                              this->should_schedule_this_computation(),
+                              this->get_data_type(),
+                              this->get_function());
+
+        // Set the schedule of the newly created computation (separated
+        // computation) to be equal to the schedule of the original computation.
+        isl_map *new_schedule = isl_map_copy(this->get_schedule());
+        this->get_update(last_update_computation).set_schedule(new_schedule);
+
+        // Create the access relation of the separated computation (by replacing its name).
+        if (this->get_access_relation() != NULL)
+        {
+            DEBUG(3, tiramisu::str_dump("Creating the access function of the separated computation.\n"));
+            this->get_update(last_update_computation).set_access(isl_map_copy(this->get_access_relation()));
+
+            DEBUG(3, tiramisu::str_dump("Access of the separated computation:",
+                                        isl_map_to_str(this->get_update(last_update_computation).get_access_relation())));
+        }
+
+        this->get_update(last_update_computation).add_schedule_constraint("", constraint2.c_str());
+
+        // Mark the separated computation to be executed after the original (full)
+        // computation.
+        if (dim_sched_after == -2) {
+            this->get_update(last_update_computation).after(*this, dim);
+        } else if (dim_sched_after != -3) { // -3 means don't do any scheduling
+            this->get_update(last_update_computation).after(*this, dim_sched_after);
+        }
+
+        DEBUG(3, tiramisu::str_dump("The separate computation:"); this->get_update(last_update_computation).dump());
+    }
+    else
+    {
+        DEBUG(3, tiramisu::str_dump("The separate computation is empty. Thus not added."));
+    }
+
+    this->add_schedule_constraint("", constraint1.c_str());
+
+    DEBUG(3, tiramisu::str_dump("The original computation:"); this->dump());
+
+    DEBUG_INDENT(-4);
+}
+
 void tiramisu::computation::set_iteration_domain(isl_set *domain)
 {
     this->iteration_domain = domain;

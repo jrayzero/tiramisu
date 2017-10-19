@@ -1993,9 +1993,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
         else
         {
             isl_ast_expr *expr = isl_ast_node_user_get_expr(node);
-            isl_ast_expr_dump(expr);
             isl_ast_expr *arg = isl_ast_expr_get_op_arg(expr, 0);
-            isl_ast_expr_dump(arg);
             isl_id *id = isl_ast_expr_get_id(arg);
             isl_ast_expr_free(expr);
             isl_ast_expr_free(arg);
@@ -2559,9 +2557,6 @@ void tiramisu::computation::create_halide_assignment()
                 // so no need to transform this->index_expr separately.
                 tiramisu::expr tiramisu_rhs = replace_original_indices_with_transformed_indices(this->expression,
                                                                                                 this->get_iterators_map());
-                for (auto ie : this->index_expr) {
-                    isl_ast_expr_dump(ie);
-                }
                 this->stmt = Halide::Internal::Store::make(
                         lhs_buffer_name,
                         generator::halide_expr_from_tiramisu_expr(this->get_function(), this->index_expr, tiramisu_rhs,
