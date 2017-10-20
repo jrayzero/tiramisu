@@ -650,7 +650,7 @@ void generator::traverse_expr_and_extract_accesses(const tiramisu::function *fct
         {
             isl_map *access_to_buff = isl_map_copy(access_op_comp->get_access_relation());
             // If our current computation is distributed, check if the buffer accessed in the access_op_comp is distributed. If so, need to change which buffer we are pointing to
-            if (!comp->is_send() && comp->is_distributed) {
+	    /*            if (!comp->is_send() && comp->is_distributed) {
                 std::string buff_name = isl_map_get_tuple_name(access_to_buff, isl_dim_out);
                 tiramisu::buffer *dist_buff = fct->get_buffers().find(buff_name)->second;
                 bool is_buffer_distributed = dist_buff->_distribute;
@@ -658,7 +658,7 @@ void generator::traverse_expr_and_extract_accesses(const tiramisu::function *fct
                     access_to_buff = isl_map_set_tuple_name(access_to_buff, isl_dim_out,
                                                             dist_buff->distributed_buffer->get_name().c_str());
                 }
-            }
+		}*/
             DEBUG(3, tiramisu::str_dump("The access of this computation to buffers (before re-adapting its domain into the domain of the current access) : ",
                                         isl_map_to_str(access_to_buff)));
 
@@ -3032,7 +3032,7 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
                     computations_vector[0]->req_access_map = orig;
                 }
                 isl_map *acc = access_comp->get_access_relation_adapted_to_time_processor_domain();
-                if (comp && !comp->is_send() && comp->is_distributed) {
+		/*                if (comp && !comp->is_send() && comp->is_distributed) {
                     std::string buff_name = isl_map_get_tuple_name(acc, isl_dim_out);
                     tiramisu::buffer *dist_buff = fct->get_buffers().find(buff_name)->second;
                     bool is_buffer_distributed = dist_buff->_distribute;
@@ -3040,7 +3040,7 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
                         acc = isl_map_set_tuple_name(acc, isl_dim_out,
                                                      dist_buff->distributed_buffer->get_name().c_str());
                     }
-                }
+		    }*/
                 if (comp && comp->is_wait()) {
                     // swap back
                     isl_map *orig = computations_vector[0]->get_access_relation();

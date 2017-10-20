@@ -12,13 +12,7 @@
 #include <Halide.h>
 #include "halide_image_io.h"
 
-#define USE_FIXED_VALUES 0
-#define SEPARATED 0
-
 using namespace tiramisu;
-
-// TODO need to separate the bx computation so that rank0 reads from b_input, not b_input_temp
-// Add fan_in communication
 
 int main(int argc, char **argv)
 {
@@ -66,6 +60,9 @@ int main(int argc, char **argv)
                  bx(c, (y + tiramisu::expr((int32_t)2)), x)) /
                 tiramisu::expr((uint8_t)3)), true, tiramisu::p_uint8, &dtest_03);
 
+
+    tiramisu::constant size1("SIZE1", tiramisu::expr(SIZE1), tiramisu::p_int32, true, NULL, 0, &dtest_03);
+    tiramisu::constant size0("SIZE0", tiramisu::expr(SIZE0), tiramisu::p_int32, true, NULL, 0, &dtest_03);
     // -------------------------------------------------------
     // Layer II
     // -------------------------------------------------------
@@ -81,22 +78,17 @@ int main(int argc, char **argv)
     by.get_update(0).tag_distribute_level(c);
     by.get_update(1).tag_distribute_level(c);
 
-    bx.get_update(0).drop_rank_iter();
-    bx.get_update(1).drop_rank_iter();
-    by.get_update(0).drop_rank_iter();
-    by.get_update(1).drop_rank_iter();
-
     channel chan_sync_block("chan_sync_block", p_uint8, {FIFO, SYNC, BLOCK, MPI});
     tiramisu::constant one("one", tiramisu::expr(1), tiramisu::p_int32, true, NULL, 0, &dtest_03);
     send_recv fan_out = computation::create_transfer(
-            "[Ny, Nx, one]->{send_0_1[c,z,y,x]: 0<=c<one and 1<=z<3 and 0<=y<Ny and 0<=x<Nx}",
-            "[Ny, Nx]->{recv_0_1[z,y,x]: 1<=z<3 and 0<=y<Ny and 0<=x<Nx}", 0, z, &chan_sync_block,
+            "[SIZE1, SIZE0, one]->{send_0_1[c,z,y,x]: 0<=c<one and 1<=z<3 and 0<=y<SIZE1 and 0<=x<SIZE0}",
+            "[SIZE1, SIZE0]->{recv_0_1[z,y,x]: 1<=z<3 and 0<=y<SIZE1 and 0<=x<SIZE0}", 0, z, &chan_sync_block,
             &chan_sync_block, blur_input(z, y, x), {&bx.get_update(1)}, &dtest_03);
     send_recv fan_in = computation::create_transfer(
 						    "[My, Mx]->{send_1_0[z,y,x]: 1<=z<3 and 0<=y<My and 0<=x<Mx}",
 						    "[My, Mx, one]->{recv_1_0[c,z,y,x]: 0<=c<one and 1<=z<3 and 0<=y<My and 0<=x<Mx}", z, 0, &chan_sync_block,
 						    &chan_sync_block, by.get_update(1)(0, y, x), {}, &dtest_03);
-
+    
     fan_out.s->tag_distribute_level(c);
     fan_out.r->tag_distribute_level(z);
     fan_in.s->tag_distribute_level(z);
@@ -115,6 +107,7 @@ int main(int argc, char **argv)
     // TODO need to figure out how to automate this conversion
     generator::replace_expr_name(by.get_update(0).expression, "bx", "bx_0");
     generator::replace_expr_name(by.get_update(1).expression, "bx", "bx_1");
+    generator::replace_expr_name(bx.get_update(1).expression, "blur_input", "recv_0_1");
 
     // -------------------------------------------------------
     // Layer III
@@ -122,21 +115,24 @@ int main(int argc, char **argv)
 
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(SIZE2), tiramisu::expr(SIZE1), tiramisu::expr(SIZE0)},
                                 tiramisu::p_uint8, tiramisu::a_input, &dtest_03);
-    buff_input.distribute({1, tiramisu::expr(SIZE1), tiramisu::expr(SIZE0)}, "b_input_temp");
-    tiramisu::buffer buff_bx("buff_bx", {1, tiramisu::expr(by_ext_1 + 2), tiramisu::expr(by_ext_0)},
+    tiramisu::buffer buff_bx("buff_bx", {tiramisu::expr(by_ext_1 + 2), tiramisu::expr(by_ext_0)},
+                             tiramisu::p_uint8, tiramisu::a_temporary, &dtest_03);
+    tiramisu::buffer buff_input_temp("buff_input_temp", {tiramisu::expr(SIZE1), tiramisu::expr(SIZE0)},
+                             tiramisu::p_uint8, tiramisu::a_temporary, &dtest_03);
+    tiramisu::buffer buff_bx_inter("buff_bx_inter", {tiramisu::expr(by_ext_1 + 2), tiramisu::expr(by_ext_0)},
                              tiramisu::p_uint8, tiramisu::a_temporary, &dtest_03);
     tiramisu::buffer buff_by("buff_by", {tiramisu::expr(by_ext_2), tiramisu::expr(by_ext_1), tiramisu::expr(by_ext_0)},
                              tiramisu::p_uint8, tiramisu::a_output, &dtest_03);
-    tiramisu::buffer buff_by_inter("buff_by_inter", {1, tiramisu::expr(by_ext_1), tiramisu::expr(by_ext_0)},
+    tiramisu::buffer buff_by_inter("buff_by_inter", {tiramisu::expr(by_ext_1), tiramisu::expr(by_ext_0)},
                                    tiramisu::p_uint8, tiramisu::a_temporary, &dtest_03);
-
+    
     blur_input.set_access("{blur_input[i2, i1, i0]->buff_input[i2, i1, i0]}");
-    fan_out.r->set_access("{recv_0_1[z,y,x]->b_input_temp[0, y, x]}");
-    bx.get_update(0).set_access("{bx_0[c, y, x]->buff_bx[c, y, x]}");
-    bx.get_update(1).set_access("{bx_1[c, y, x]->buff_bx[c, y, x]}");
+    fan_out.r->set_access("{recv_0_1[z,y,x]->buff_input_temp[y, x]}");
+    bx.get_update(0).set_access("{bx_0[c, y, x]->buff_bx[y, x]}");
+    bx.get_update(1).set_access("{bx_1[c, y, x]->buff_bx_inter[y, x]}");
     by.get_update(0).set_access("{by_0[c, y, x]->buff_by[c, y, x]}");
-    by.get_update(1).set_access("{by_1[c, y, x]->buff_by_inter[c, y, x]}");
-    fan_in.r->set_access("{recv_1_0[z,c,y,x]->buff_by[c,y,x]}");
+    by.get_update(1).set_access("{by_1[c, y, x]->buff_by_inter[y, x]}");
+    fan_in.r->set_access("{recv_1_0[z,c,y,x]->buff_by[c,y,x]}"); 
 
     dtest_03.set_arguments({&buff_input, &buff_by});
     // Generate code
