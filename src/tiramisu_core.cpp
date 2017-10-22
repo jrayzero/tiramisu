@@ -6470,6 +6470,9 @@ Halide::Type halide_type_from_tiramisu_type(tiramisu::primitive_t type)
         case tiramisu::p_boolean:
             t = Halide::Bool();
             break;
+        case tiramisu::p_req_ptr:
+            t = Halide::Handle();
+            break;
         default:
             tiramisu::error("Tiramisu type cannot be translated to Halide type.", true);
     }

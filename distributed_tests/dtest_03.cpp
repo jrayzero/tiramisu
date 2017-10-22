@@ -25,7 +25,7 @@ int main(int argc, char **argv)
     // Layer I
     // -------------------------------------------------------
 
-    Halide::Buffer<uint8_t> in_image = Halide::Tools::load_image("./images/rgb.png");
+    Halide::Buffer<uint8_t> in_image = Halide::Tools::load_image("/Users/JRay/ClionProjects/tiramisu/images/rgb.png");
     int SIZE0 = in_image.extent(0);
     int SIZE1 = in_image.extent(1);
     int SIZE2 = in_image.extent(2);
@@ -90,11 +90,13 @@ int main(int argc, char **argv)
 						    "[My, Mx, one]->{recv_1_0[c,z,y,x]: 0<=c<one and 1<=z<3 and 0<=y<My and 0<=x<Mx}", z, 0, &chan_sync,
 						    &chan_sync, by.get_update(1)(0, y, x), {}, &dtest_03);
 
-    tiramisu::wait wait_fan_out(fan_out.r->operator()(z, y, x), &dtest_03);
+    tiramisu::wait wait_fan_out_r(fan_out.r->operator()(z, y, x), &dtest_03);
+    tiramisu::wait wait_fan_out_s(fan_out.s->operator()(c, z, y, x), &dtest_03);
     
     fan_out.s->tag_distribute_level(c);
     fan_out.r->tag_distribute_level(z);
-    wait_fan_out.tag_distribute_level(z);
+    wait_fan_out_r.tag_distribute_level(z);
+    wait_fan_out_s.tag_distribute_level(c);
     fan_in.s->tag_distribute_level(z);
     fan_in.r->tag_distribute_level(c);
 
@@ -102,12 +104,13 @@ int main(int argc, char **argv)
     dtest_03.add_context_constraints("[Nc, Ny, Nx, Mc, My, Mx]->{: Nc=3 and Mc=3 and Ny=3514 and My=3512 and Nx=2104 and Mx=2104}");
     fan_out.s->before(bx.get_update(0), computation::root);
     bx.get_update(0).before(*fan_out.r, computation::root);
-    fan_out.r->before(wait_fan_out, computation::root);
-    wait_fan_out.before(bx.get_update(1), computation::root);   
+    fan_out.r->before(wait_fan_out_r, computation::root);
+    wait_fan_out_r.before(bx.get_update(1), computation::root);
     bx.get_update(1).before(by.get_update(0), computation::root);
     by.get_update(0).before(by.get_update(1), computation::root);
     by.get_update(1).before(*fan_in.s, computation::root);
-    fan_in.s->before(*fan_in.r, computation::root);
+    fan_in.s->before(wait_fan_out_s, computation::root);
+    wait_fan_out_s.before(*fan_in.r, z);
 
     // TODO need to figure out how to automate this conversion
     generator::replace_expr_name(by.get_update(0).expression, "bx", "bx_0");
@@ -116,7 +119,8 @@ int main(int argc, char **argv)
 
     fan_out.s->collapse_many({collapser(3, 0, 2112), collapser(2, 0, 3520)});
     fan_out.r->collapse_many({collapser(2, 0, 2112), collapser(1, 0, 3520)});
-    wait_fan_out.collapse_many({collapser(2, 0, 2112), collapser(1, 0, 3520)});
+    wait_fan_out_r.collapse_many({collapser(2, 0, 2112), collapser(1, 0, 3520)});
+    wait_fan_out_s.collapse_many({collapser(3, 0, 2112), collapser(2, 0, 3520)});
 
     fan_in.s->collapse_many({collapser(2, 0, 2104), collapser(1, 0, 3512)});
     fan_in.r->collapse_many({collapser(3, 0, 2104), collapser(2, 0, 3512)});
@@ -149,10 +153,14 @@ int main(int argc, char **argv)
     bx.get_update(1).set_access("{bx_1[c, y, x]->buff_bx_inter[y, x]}");
     by.get_update(0).set_access("{by_0[c, y, x]->buff_by[c, y, x]}");
     by.get_update(1).set_access("{by_1[c, y, x]->buff_by_inter[y, x]}");
-    fan_in.r->set_access("{recv_1_0[z,c,y,x]->buff_by[c,y,x]}"); 
+    fan_in.r->set_access("{recv_1_0[z,c,y,x]->buff_by[c,y,x]}");
 
-    buffer fan_out_req_buff("fan_out_req_buff", {tiramisu::expr(SIZE1), tiramisu::expr(SIZE2)}, tiramisu::p_req_ptr, a_temporary, &dtest_03);
-    fan_out.r->set_req_access("{recv_0_1[z,y,x]->recv01_req_buff[y,x]}");
+    buffer fan_out_req_r_buff("fan_out_req_r_buff", {tiramisu::expr(SIZE1), tiramisu::expr(SIZE2)}, tiramisu::p_req_ptr,
+                              a_temporary, &dtest_03);
+    buffer fan_out_req_s_buff("fan_out_req_s_buff", {2}, tiramisu::p_req_ptr,
+                              a_temporary, &dtest_03);
+    fan_out.r->set_req_access("{recv_0_1[z,y,x]->fan_out_req_r_buff[y,x]}");
+    fan_out.s->set_req_access("{send_0_1[c,z,y,x]->fan_out_req_s_buff[z-1]}");
 
     dtest_03.set_arguments({&buff_input, &buff_by});
     // Generate code
@@ -160,7 +168,7 @@ int main(int argc, char **argv)
     dtest_03.lift_ops_to_library_calls();
     dtest_03.gen_isl_ast();
     dtest_03.gen_halide_stmt();
-    dtest_03.gen_halide_obj("build/generated_fct_dtest_03.o");
+    dtest_03.gen_halide_obj("/Users/JRay/ClionProjects/tiramisu/build/generated_fct_dtest_03.o");
 
     // Some debugging
     dtest_03.dump_halide_stmt();
