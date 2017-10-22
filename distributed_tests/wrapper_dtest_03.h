@@ -11,12 +11,12 @@
 extern "C" {
 #endif
 
-int blurxy(halide_buffer_t *_b_input_buffer, halide_buffer_t *_b_blury_buffer);
-int blurxy_argv(void **args);
+int dtest_03(halide_buffer_t *_b_input_buffer, halide_buffer_t *_b_blury_buffer);
+int dtest_03_argv(void **args);
 // Result is never null and points to constant static data
-const struct halide_filter_metadata_t *blurxy_metadata();
+const struct halide_filter_metadata_t *dtest_03_metadata();
 
 #ifdef __cplusplus
 }  // extern "C"
-
+#endif
 #endif //TIRAMISU_WRAPPER_DTEST_03_H

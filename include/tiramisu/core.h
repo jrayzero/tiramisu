@@ -3942,6 +3942,8 @@ public:
 
     tiramisu::expr get_num_elements() const;
 
+    void set_req_access(std::string req_access_map_str);
+
 };
 
 class send : public communicator {
