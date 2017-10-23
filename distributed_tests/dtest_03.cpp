@@ -93,7 +93,7 @@ int main(int argc, char **argv)
     tiramisu::wait wait_fan_out_r(fan_out.r->operator()(z, y, x), &dtest_03);
     tiramisu::wait wait_fan_out_s(fan_out.s->operator()(c, z, y, x), &dtest_03);
 
-    wait_fan_out_r.separate_at(0, SIZE1, 6, -3);
+    wait_fan_out_r.separate_at(1, SIZE1, 6, -3);
     
     fan_out.s->tag_distribute_level(c);
     fan_out.r->tag_distribute_level(z);
@@ -107,24 +107,30 @@ int main(int argc, char **argv)
     dtest_03.add_context_constraints("[Nc, Ny, Nx, Mc, My, Mx]->{: Nc=3 and Mc=3 and Ny=3514 and My=3512 and Nx=2104 and Mx=2104}");
     fan_out.s->before(bx.get_update(0), computation::root);
     bx.get_update(0).before(*fan_out.r, computation::root);
-    fan_out.r->before(wait_fan_out_r, computation::root);
+    fan_out.r->before(wait_fan_out_r.get_update(0), computation::root);
+
+//    wait_fan_out_r.get_update(0).after(*fan_out.r, y);//before(wait_fan_out_r.get_update(1), computation::root);
     wait_fan_out_r.get_update(0).before(wait_fan_out_r.get_update(1), computation::root);
-    wait_fan_out_r.get_update(1).before(bx.get_update(1), computation::root);
+    wait_fan_out_r.get_update(1).before(bx.get_update(1), y);//computation::root);
+
     bx.get_update(1).before(by.get_update(0), computation::root);
     by.get_update(0).before(by.get_update(1), computation::root);
     by.get_update(1).before(*fan_in.s, computation::root);
     fan_in.s->before(wait_fan_out_s, computation::root);
     wait_fan_out_s.before(*fan_in.r, z);
 
+    wait_fan_out_r.get_update(1).shift(y, -6);
+
     // TODO need to figure out how to automate this conversion
     generator::replace_expr_name(by.get_update(0).expression, "bx", "bx_0");
     generator::replace_expr_name(by.get_update(1).expression, "bx", "bx_1");
     generator::replace_expr_name(bx.get_update(1).expression, "blur_input", "recv_0_1");
 
-    fan_out.s->collapse_many({collapser(3, 0, 2112)/*, collapser(2, 0, 3520)*/});
-    fan_out.r->collapse_many({collapser(2, 0, 2112)/*, collapser(1, 0, 3520)*/});
-    wait_fan_out_r.collapse_many({collapser(2, 0, 2112)/*, collapser(1, 0, 3520)*/});
-    wait_fan_out_s.collapse_many({collapser(3, 0, 2112)/*, collapser(2, 0, 3520)*/});
+    fan_out.s->collapse_many({collapser(3, 0, 2112)});
+    fan_out.r->collapse_many({collapser(2, 0, 2112)});
+    static_cast<tiramisu::wait*>(&wait_fan_out_r.get_update(0))->collapse_many({collapser(2, 0, 2112)});
+    static_cast<tiramisu::wait*>(&wait_fan_out_r.get_update(1))->collapse_many({collapser(2, 0, 2112)});
+    wait_fan_out_s.collapse_many({collapser(3, 0, 2112)});
 
     fan_in.s->collapse_many({collapser(2, 0, 2104), collapser(1, 0, 3512)});
     fan_in.r->collapse_many({collapser(3, 0, 2104), collapser(2, 0, 3512)});
