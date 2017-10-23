@@ -1,3 +1,4 @@
+
 //
 // Created by Jessica Ray on 10/17/17.
 //
@@ -19,15 +20,20 @@ int main(int, char **)
         Halide::Buffer<uint8_t> image = Halide::Tools::load_image("./images/rgb.png");
         Halide::Buffer<uint8_t> output_buf(image.extent(0) - 8, image.extent(1) - 8, image.channels());
 	Halide::Buffer<uint8_t> ref = Halide::Tools::load_image("./images/reference_blurxy.png");
+	  auto start1 = std::chrono::high_resolution_clock::now();
+	  dtest_03(image.raw_buffer(), output_buf.raw_buffer());
+	  auto end1 = std::chrono::high_resolution_clock::now();
+	  std::chrono::duration<double,std::milli> duration1 = end1 - start1;
+	  duration_vector_1.push_back(duration1);
+	  compare_buffers("dtest_03", output_buf, ref);
+	  print_time("performance_CPU.csv", "blurxy_dist",
+		     {"Tiramisu_dist"},
+		     {median(duration_vector_1)});
 
-        dtest_03(image.raw_buffer(), output_buf.raw_buffer());
-	compare_buffers("dtest_03", output_buf, ref);
-	//        Halide::Tools::save_image(output_buf, "./build/dtest_03.png");
-	//	std::cerr << "Done" << std::endl;
     } else {
         Halide::Buffer<uint8_t> image(0,0);
         Halide::Buffer<uint8_t> output_buf(0,0);
-        dtest_03(image.raw_buffer(), output_buf.raw_buffer());
+	  dtest_03(image.raw_buffer(), output_buf.raw_buffer());
     }
 
     return 0;

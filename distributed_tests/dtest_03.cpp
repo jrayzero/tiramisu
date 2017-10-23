@@ -84,13 +84,21 @@ int main(int argc, char **argv)
     send_recv fan_in = computation::create_transfer(
 						    "[My, Mx]->{send_1_0[z,y,x]: 1<=z<3 and 0<=y<My and 0<=x<Mx}",
 						    "[My, Mx, one]->{recv_1_0[c,z,y,x]: 0<=c<one and 1<=z<3 and 0<=y<My and 0<=x<Mx}", z, 0, &chan,
-						    &chan, by.get_update(1)(0, y, x), {}, &dtest_03);
+						    &chan_sync, by.get_update(1)(0, y, x), {}, &dtest_03);
 
     tiramisu::wait wait_fan_out_r(fan_out.r->operator()(z, y, x), &dtest_03);
     wait_fan_out_r.separate_at(1, SIZE1, 6, -3);
+    wait_fan_out_r.get_update(0).rename_computation("wait_r_0");
+    wait_fan_out_r.get_update(1).rename_computation("wait_r_1");
+    //    wait_fan_out_r.get_update(0).set_schedule_this_comp(false);
+    //    wait_fan_out_r.get_update(1).set_schedule_this_comp(false);
+    tiramisu::wait wait_fan_out_s(fan_out.s->operator()(c, z, y, x), &dtest_03);
     tiramisu::wait wait_fan_in_s(fan_in.s->operator()(z,y,x), &dtest_03);
     tiramisu::wait wait_fan_in_r(fan_in.r->operator()(c,z,y,x), &dtest_03);
-
+    //   wait_fan_out_s.set_schedule_this_comp(false);
+    //    wait_fan_in_s.set_schedule_this_comp(false);
+    wait_fan_in_r.set_schedule_this_comp(false);
+	//
     /*
      * Tag distribute level
      */
@@ -103,6 +111,7 @@ int main(int argc, char **argv)
     fan_out.r->tag_distribute_level(z);
     wait_fan_out_r.get_update(0).tag_distribute_level(z);
     wait_fan_out_r.get_update(1).tag_distribute_level(z);
+    wait_fan_out_s.tag_distribute_level(c);
     fan_in.s->tag_distribute_level(z);
     fan_in.r->tag_distribute_level(c);
     wait_fan_in_s.tag_distribute_level(z);
@@ -119,6 +128,7 @@ int main(int argc, char **argv)
      */
 
     fan_out.s->collapse_many({collapser(3, 0, 2112)});
+    wait_fan_out_s.collapse_many({collapser(3, 0, 2112)});
     fan_out.r->collapse_many({collapser(2, 0, 2112)});
     fan_in.s->collapse_many({collapser(2, 0, 2104)});
     fan_in.r->collapse_many({collapser(3, 0, 2104)});
@@ -132,17 +142,19 @@ int main(int argc, char **argv)
      * Ordering
      */
 
-    fan_out.s->before(bx.get_update(0), computation::root);
+    //    fan_out.s->before(bx.get_update(0), computation::root);
+    fan_out.s->before(wait_fan_out_s, computation::root);
+    wait_fan_out_s.before(bx.get_update(0), computation::root);
     bx.get_update(0).before(*fan_out.r, computation::root);
     fan_out.r->before(wait_fan_out_r.get_update(0), computation::root);
     wait_fan_out_r.get_update(0).before(wait_fan_out_r.get_update(1), computation::root);
-    wait_fan_out_r.get_update(1).before(bx.get_update(1), y);
+    wait_fan_out_r.get_update(1).before(bx.get_update(1), computation::root);//y);
     bx.get_update(1).before(by.get_update(0), computation::root);
     by.get_update(0).before(by.get_update(1), computation::root);
-    by.get_update(1).before(*fan_in.s, y);
+    by.get_update(1).before(*fan_in.s, computation::root);//y);
     fan_in.r->after(by.get_update(0), computation::root);
     wait_fan_in_s.after(*fan_in.s, computation::root);
-    wait_fan_in_r.after(*fan_in.r, computation::root);
+    wait_fan_in_r.after(*fan_in.r, z);//computation::root);
 
     /*
      * Name replacement
@@ -152,6 +164,10 @@ int main(int argc, char **argv)
     generator::replace_expr_name(by.get_update(0).expression, "bx", "bx_0");
     generator::replace_expr_name(by.get_update(1).expression, "bx", "bx_1");
     generator::replace_expr_name(bx.get_update(1).expression, "blur_input", "recv_0_1");
+
+    /*
+     * Other scheduling
+     */
 
     //    bx.get_update(0).tag_parallel_level(y);
     //    bx.get_update(1).tag_parallel_level(y);
