@@ -560,6 +560,19 @@ void tiramisu::computation::add_definitions(std::string iteration_domain_str,
     this->updates.push_back(new_c);
 }
 
+void tiramisu::wait::add_definitions(std::string iteration_domain_str,
+				     tiramisu::expr e,
+				     bool schedule_this_computation, tiramisu::primitive_t t,
+				     tiramisu::function *fct)
+{
+    tiramisu::computation *new_c = new tiramisu::wait(iteration_domain_str, e,
+						      schedule_this_computation, fct);
+    new_c->is_first = false;
+    new_c->first_definition = this;
+    this->updates.push_back(new_c);
+}
+
+
 void tiramisu::function::dump_dep_graph()
 {
 
@@ -7651,7 +7664,7 @@ bool tiramisu::recv::is_recv() const {
  * Wait
  */
 
-tiramisu::wait::wait(tiramisu::expr rhs, tiramisu::function *fct) : communicator() {
+  tiramisu::wait::wait(tiramisu::expr rhs, tiramisu::function *fct) : communicator(), rhs(rhs) {
     assert(rhs.get_op_type() == tiramisu::o_access && "The RHS expression for a wait should be an access!");
     tiramisu::computation *op = fct->get_computation_by_name(rhs.get_name())[0];
     isl_set *dom = isl_set_copy(op->get_iteration_domain());
@@ -7661,6 +7674,11 @@ tiramisu::wait::wait(tiramisu::expr rhs, tiramisu::function *fct) : communicator
     _is_library_call = true;
     library_call_name = "wait";
 }
+
+  tiramisu::wait::wait(std::string iteration_domain_str, tiramisu::expr rhs, bool schedule_this, tiramisu::function *fct) : communicator(iteration_domain_str, rhs, schedule_this, tiramisu::p_async, fct), rhs(rhs) {
+  _is_library_call = true;
+  library_call_name = "wait";
+  }
 
 wait_type tiramisu::wait::get_wait_type() const {
     return this->_wait_type;

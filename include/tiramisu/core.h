@@ -1236,6 +1236,7 @@ class computation
     friend buffer;
     friend constant;
     friend computation_tester;
+    friend wait;
 
 public:
 
@@ -2588,7 +2589,7 @@ public:
      * An example of using this function is available in test_26.
      *
      */
-    void add_definitions(std::string iteration_domain_str, tiramisu::expr e,
+    virtual void add_definitions(std::string iteration_domain_str, tiramisu::expr e,
                          bool schedule_this_computation, tiramisu::primitive_t t,
                          tiramisu::function *fct);
 
@@ -4015,13 +4016,21 @@ private:
 
     wait_type _wait_type;
 
+    tiramisu::expr rhs;
+
 public:
 
     wait(tiramisu::expr rhs, tiramisu::function *fct);
 
+    wait(std::string iteration_domain_str, tiramisu::expr rhs, bool schedule_this, tiramisu::function *fct);
+
     tiramisu::wait_type get_wait_type() const;
 
     std::vector<tiramisu::computation *> get_op_to_wait_on() const;
+
+    virtual void add_definitions(std::string iteration_domain_str, tiramisu::expr e,
+                         bool schedule_this_computation, tiramisu::primitive_t t,
+                         tiramisu::function *fct) override;
 
     virtual bool is_wait() const override;
 
