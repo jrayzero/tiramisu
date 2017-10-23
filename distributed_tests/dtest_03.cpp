@@ -73,11 +73,6 @@ int main(int argc, char **argv)
     by.get_update(0).rename_computation("by_0");
     by.get_update(1).rename_computation("by_1");
 
-    bx.get_update(0).tag_distribute_level(c);
-    bx.get_update(1).tag_distribute_level(c);
-    by.get_update(0).tag_distribute_level(c);
-    by.get_update(1).tag_distribute_level(c);
-
     channel chan_sync("chan_sync", p_uint8, {FIFO, SYNC, BLOCK, MPI});
     channel chan("chan", p_uint8, {FIFO, ASYNC, NONBLOCK, MPI});
     tiramisu::constant one("one", tiramisu::expr(1), tiramisu::p_int32, true, NULL, 0, &dtest_03);
@@ -91,49 +86,64 @@ int main(int argc, char **argv)
 						    &chan_sync, by.get_update(1)(0, y, x), {}, &dtest_03);
 
     tiramisu::wait wait_fan_out_r(fan_out.r->operator()(z, y, x), &dtest_03);
-    tiramisu::wait wait_fan_out_s(fan_out.s->operator()(c, z, y, x), &dtest_03);
-
     wait_fan_out_r.separate_at(1, SIZE1, 6, -3);
-    
+
+    /*
+     * Tag distribute level
+     */
+
+    bx.get_update(0).tag_distribute_level(c);
+    bx.get_update(1).tag_distribute_level(c);
+    by.get_update(0).tag_distribute_level(c);
+    by.get_update(1).tag_distribute_level(c);    
     fan_out.s->tag_distribute_level(c);
     fan_out.r->tag_distribute_level(z);
     wait_fan_out_r.get_update(0).tag_distribute_level(z);
     wait_fan_out_r.get_update(1).tag_distribute_level(z);
-    wait_fan_out_s.tag_distribute_level(c);
     fan_in.s->tag_distribute_level(z);
     fan_in.r->tag_distribute_level(c);
 
-    // I believe these are for boundary constraints or something like that
+    /*
+     * Additional constraints
+     */
+
     dtest_03.add_context_constraints("[Nc, Ny, Nx, Mc, My, Mx]->{: Nc=3 and Mc=3 and Ny=3514 and My=3512 and Nx=2104 and Mx=2104}");
+
+
+    /*
+     * Scheduling
+     */
+
+    fan_out.s->collapse_many({collapser(3, 0, 2112)});
+    fan_out.r->collapse_many({collapser(2, 0, 2112)});
+    fan_in.s->collapse_many({collapser(2, 0, 2104)});
+    fan_in.r->collapse_many({collapser(3, 0, 2104)});
+    wait_fan_out_r.get_update(1).shift(y, -6);
+    static_cast<tiramisu::wait*>(&wait_fan_out_r.get_update(0))->collapse_many({collapser(2, 0, 2112)});
+    static_cast<tiramisu::wait*>(&wait_fan_out_r.get_update(1))->collapse_many({collapser(2, 0, 2112)});
+
+    /*
+     * Ordering
+     */
+
     fan_out.s->before(bx.get_update(0), computation::root);
     bx.get_update(0).before(*fan_out.r, computation::root);
     fan_out.r->before(wait_fan_out_r.get_update(0), computation::root);
-
-//    wait_fan_out_r.get_update(0).after(*fan_out.r, y);//before(wait_fan_out_r.get_update(1), computation::root);
     wait_fan_out_r.get_update(0).before(wait_fan_out_r.get_update(1), computation::root);
     wait_fan_out_r.get_update(1).before(bx.get_update(1), y);//computation::root);
-
     bx.get_update(1).before(by.get_update(0), computation::root);
     by.get_update(0).before(by.get_update(1), computation::root);
-    by.get_update(1).before(*fan_in.s, computation::root);
-    fan_in.s->before(wait_fan_out_s, computation::root);
-    wait_fan_out_s.before(*fan_in.r, z);
+    by.get_update(1).before(*fan_in.s, y);
+    fan_in.r->after(by.get_update(0), z);
 
-    wait_fan_out_r.get_update(1).shift(y, -6);
+    /*
+     * Name replacement
+     */
 
     // TODO need to figure out how to automate this conversion
     generator::replace_expr_name(by.get_update(0).expression, "bx", "bx_0");
     generator::replace_expr_name(by.get_update(1).expression, "bx", "bx_1");
     generator::replace_expr_name(bx.get_update(1).expression, "blur_input", "recv_0_1");
-
-    fan_out.s->collapse_many({collapser(3, 0, 2112)});
-    fan_out.r->collapse_many({collapser(2, 0, 2112)});
-    static_cast<tiramisu::wait*>(&wait_fan_out_r.get_update(0))->collapse_many({collapser(2, 0, 2112)});
-    static_cast<tiramisu::wait*>(&wait_fan_out_r.get_update(1))->collapse_many({collapser(2, 0, 2112)});
-    wait_fan_out_s.collapse_many({collapser(3, 0, 2112)});
-
-    fan_in.s->collapse_many({collapser(2, 0, 2104), collapser(1, 0, 3512)});
-    fan_in.r->collapse_many({collapser(3, 0, 2104), collapser(2, 0, 3512)});
 
     //    bx.get_update(0).tag_parallel_level(y);
     //    bx.get_update(1).tag_parallel_level(y);
