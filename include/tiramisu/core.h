@@ -2355,6 +2355,8 @@ public:
     void set_schedule(std::string map_str);
     // @}
 
+    void set_schedule_this_comp(bool should_schedule);
+
 protected:
 
     /**

@@ -8022,4 +8022,8 @@ void tiramisu::communicator::set_req_access(std::string req_access_map_str) {
   this->req_access_map = isl_map_read_from_str(this->get_ctx(), req_access_map_str.c_str());
 }
 
+  void tiramisu::computation::set_schedule_this_comp(bool should_schedule) {
+    this->schedule_this_computation = should_schedule;
+  }
+
 }
