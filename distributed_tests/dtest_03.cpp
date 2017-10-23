@@ -75,6 +75,7 @@ int main(int argc, char **argv)
     by.get_update(1).rename_computation("by_1");
 
     channel chan("chan", p_uint8, {FIFO, ASYNC, NONBLOCK, MPI});
+    channel chan_sync_nonblock("chan_sync_nonblock", p_uint8, {FIFO, SYNC, NONBLOCK, MPI});
     channel chan_sync("chan", p_uint8, {FIFO, SYNC, BLOCK, MPI});
     tiramisu::constant one("one", tiramisu::expr(1), tiramisu::p_int32, true, NULL, 0, &dtest_03);
     send_recv fan_out = computation::create_transfer(
@@ -83,22 +84,18 @@ int main(int argc, char **argv)
             &chan, blur_input(z, y, x), {&bx.get_update(1)}, &dtest_03);
     send_recv fan_in = computation::create_transfer(
 						    "[My, Mx]->{send_1_0[z,y,x]: 1<=z<3 and 0<=y<My and 0<=x<Mx}",
-						    "[My, Mx, one]->{recv_1_0[c,z,y,x]: 0<=c<one and 1<=z<3 and 0<=y<My and 0<=x<Mx}", z, 0, &chan,
+						    "[My, Mx, one]->{recv_1_0[c,z,y,x]: 0<=c<one and 1<=z<3 and 0<=y<My and 0<=x<Mx}", z, 0, &chan_sync_nonblock, /*make this wait for the recv to be completed so that we can get correct timing*/
 						    &chan_sync, by.get_update(1)(0, y, x), {}, &dtest_03);
 
     tiramisu::wait wait_fan_out_r(fan_out.r->operator()(z, y, x), &dtest_03);
+    tiramisu::wait wait_fan_out_s(fan_out.s->operator()(c, z, y, x), &dtest_03);
+    tiramisu::wait wait_fan_in_s(fan_in.s->operator()(z,y,x), &dtest_03);
     wait_fan_out_r.separate_at(1, SIZE1, 6, -3);
     wait_fan_out_r.get_update(0).rename_computation("wait_r_0");
     wait_fan_out_r.get_update(1).rename_computation("wait_r_1");
-    //    wait_fan_out_r.get_update(0).set_schedule_this_comp(false);
-    //    wait_fan_out_r.get_update(1).set_schedule_this_comp(false);
-    tiramisu::wait wait_fan_out_s(fan_out.s->operator()(c, z, y, x), &dtest_03);
-    tiramisu::wait wait_fan_in_s(fan_in.s->operator()(z,y,x), &dtest_03);
     tiramisu::wait wait_fan_in_r(fan_in.r->operator()(c,z,y,x), &dtest_03);
-    //   wait_fan_out_s.set_schedule_this_comp(false);
-    //    wait_fan_in_s.set_schedule_this_comp(false);
     wait_fan_in_r.set_schedule_this_comp(false);
-	//
+
     /*
      * Tag distribute level
      */
@@ -141,7 +138,6 @@ int main(int argc, char **argv)
     /*
      * Ordering
      */
-
     //    fan_out.s->before(bx.get_update(0), computation::root);
     fan_out.s->before(wait_fan_out_s, computation::root);
     wait_fan_out_s.before(bx.get_update(0), computation::root);
@@ -168,6 +164,7 @@ int main(int argc, char **argv)
     /*
      * Other scheduling
      */
+    
 
     //    bx.get_update(0).tag_parallel_level(y);
     //    bx.get_update(1).tag_parallel_level(y);
