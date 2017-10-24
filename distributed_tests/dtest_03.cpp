@@ -11,7 +11,11 @@
 #include <string.h>
 #include <Halide.h>
 #include "halide_image_io.h"
-#include "../t_blur_sizes.h"
+//#include "../t_blur_sizes.h"
+
+#define COLS 100000
+#define ROWS 100000
+#define CHANNELS 3
 
 using namespace tiramisu;
 
@@ -67,8 +71,8 @@ int main(int argc, char **argv)
                 tiramisu::expr((uint8_t)3)), true, tiramisu::p_uint8, &dtest_03);
 
 
-    tiramisu::constant size1("SIZE1", tiramisu::expr(SIZE1), tiramisu::p_int32, true, NULL, 0, &dtest_03);
-    tiramisu::constant size0("SIZE0", tiramisu::expr(SIZE0), tiramisu::p_int32, true, NULL, 0, &dtest_03);
+//    tiramisu::constant size1("SIZE1", tiramisu::expr(SIZE1), tiramisu::p_int32, true, NULL, 0, &dtest_03);
+//    tiramisu::constant size0("SIZE0", tiramisu::expr(SIZE0), tiramisu::p_int32, true, NULL, 0, &dtest_03);
     // -------------------------------------------------------
     // Layer II
     // -------------------------------------------------------
@@ -85,18 +89,18 @@ int main(int argc, char **argv)
     channel chan_sync("chan", p_uint8, {FIFO, SYNC, BLOCK, MPI});
     tiramisu::constant one("one", tiramisu::expr(1), tiramisu::p_int32, true, NULL, 0, &dtest_03);
     send_recv fan_out = computation::create_transfer(
-            "[SIZE1, SIZE0, one]->{send_0_1[c,z,y,x]: 0<=c<one and 1<=z<3 and 0<=y<SIZE1 and 0<=x<SIZE0}",
-            "[SIZE1, SIZE0]->{recv_0_1[z,y,x]: 1<=z<3 and 0<=y<SIZE1 and 0<=x<SIZE0}", 0, z, &chan,
+            "[Ny, Nx, one]->{send_0_1[c,z,y,x]: 0<=c<one and 1<=z<3 and 0<=y<Ny+8 and 0<=x<Nx+8}",
+            "[Ny, Nx, Nc]->{recv_0_1[z,y,x]: 1<=z<Nc and 0<=y<Ny+8 and 0<=x<Nx+8}", 0, z, &chan,
             &chan, blur_input(z, y, x), {&bx.get_update(1)}, &dtest_03);
     send_recv fan_in = computation::create_transfer(
-						    "[My, Mx]->{send_1_0[z,y,x]: 1<=z<3 and 0<=y<My and 0<=x<Mx}",
-						    "[My, Mx, one]->{recv_1_0[c,z,y,x]: 0<=c<one and 1<=z<3 and 0<=y<My and 0<=x<Mx}", z, 0, &chan_sync_nonblock, /*make this wait for the recv to be completed so that we can get correct timing*/
+						    "[My, Mx, Mc]->{send_1_0[z,y,x]: 1<=z<Mc and 0<=y<My and 0<=x<Mx}",
+						    "[My, Mx, Mc, one]->{recv_1_0[c,z,y,x]: 0<=c<one and 1<=z<Mc and 0<=y<My and 0<=x<Mx}", z, 0, &chan_sync_nonblock, /*make this wait for the recv to be completed so that we can get correct timing*/
 						    &chan_sync, by.get_update(1)(0, y, x), {}, &dtest_03);
 
     tiramisu::wait wait_fan_out_r(fan_out.r->operator()(z, y, x), &dtest_03);
     tiramisu::wait wait_fan_out_s(fan_out.s->operator()(c, z, y, x), &dtest_03);
     tiramisu::wait wait_fan_in_s(fan_in.s->operator()(z,y,x), &dtest_03);
-    wait_fan_out_r.separate_at(1, SIZE1, 6, -3);
+    wait_fan_out_r.separate_at(1, SIZE1, 8, -3);
     wait_fan_out_r.get_update(0).rename_computation("wait_r_0");
     wait_fan_out_r.get_update(1).rename_computation("wait_r_1");
     tiramisu::wait wait_fan_in_r(fan_in.r->operator()(c,z,y,x), &dtest_03);
@@ -135,7 +139,7 @@ int main(int argc, char **argv)
     fan_out.r->collapse_many({collapser(2, 0, SIZE0)});
     fan_in.s->collapse_many({collapser(2, 0, by_ext_0)});
     fan_in.r->collapse_many({collapser(3, 0, by_ext_0)});
-    wait_fan_out_r.get_update(1).shift(y, -6);
+    wait_fan_out_r.get_update(1).shift(y, -8); // TODO update this when change the above split
     static_cast<tiramisu::wait*>(&wait_fan_out_r.get_update(0))->collapse_many({collapser(2, 0, SIZE0)});
     static_cast<tiramisu::wait*>(&wait_fan_out_r.get_update(1))->collapse_many({collapser(2, 0, SIZE0)});
     wait_fan_in_s.collapse_many({collapser(2, 0, by_ext_0)});
@@ -150,7 +154,7 @@ int main(int argc, char **argv)
     bx.get_update(0).before(*fan_out.r, computation::root);
     fan_out.r->before(wait_fan_out_r.get_update(0), computation::root);
     wait_fan_out_r.get_update(0).before(wait_fan_out_r.get_update(1), computation::root);
-    wait_fan_out_r.get_update(1).before(bx.get_update(1), y);//computation::root);
+    wait_fan_out_r.get_update(1).before(bx.get_update(1), y);
     bx.get_update(1).before(by.get_update(0), computation::root);
     by.get_update(0).before(by.get_update(1), computation::root);
     by.get_update(1).before(*fan_in.s, computation::root);//y);
@@ -175,8 +179,8 @@ int main(int argc, char **argv)
     //    bx.get_update(0).tag_parallel_level(var("y1"));
     //    by.get_update(0).split(y, 40000, var("y1"), var("y2"));
     //    by.get_update(0).tag_parallel_level(var("y1"));
-    bx.get_update(0).vectorize(x, 8);
-    by.get_update(0).vectorize(x, 8);
+//    bx.get_update(0).vectorize(x, 8);
+//    by.get_update(0).vectorize(x, 8);
 
     //    bx.get_update(1).vectorize(x, 8);
     //    by.get_update(1).vectorize(x, 8);
@@ -231,7 +235,7 @@ int main(int argc, char **argv)
     dtest_03.lift_ops_to_library_calls();
     dtest_03.gen_isl_ast();
     dtest_03.gen_halide_stmt();
-    dtest_03.gen_halide_obj("./build/generated_fct_dtest_03.o");
+    dtest_03.gen_halide_obj("/Users/JRay/ClionProjects/tiramisu/build/generated_fct_dtest_03.o");
 
     // Some debugging
     dtest_03.dump_halide_stmt();
