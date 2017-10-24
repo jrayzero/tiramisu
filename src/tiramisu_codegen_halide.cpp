@@ -2600,7 +2600,7 @@ void tiramisu::computation::create_halide_assignment()
                     Halide::Expr result;
                     if (this->lhs_access_type == tiramisu::o_lin_index) {
                         result = lhs_index;
-                    } else if (lhs_tiramisu_buffer->get_argument_type() == tiramisu::a_input) {
+                    } else if (lhs_tiramisu_buffer->get_argument_type() != tiramisu::a_temporary) {
                         Halide::Buffer<> buffer = Halide::Buffer<>(
                                 type,
                                 NULL,
