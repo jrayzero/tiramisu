@@ -11,7 +11,7 @@
 #include <string.h>
 #include <Halide.h>
 #include "halide_image_io.h"
-#include "../t_blur_sizes.h"
+//#include "../t_blur_sizes.h"
 
 using namespace tiramisu;
 
@@ -27,9 +27,9 @@ int main(int argc, char **argv)
     // -------------------------------------------------------
 
     //    Halide::Buffer<uint8_t> in_image = Halide::Tools::load_image("./images/rgb.png");
-    int SIZE0 = ROWS;//in_image.extent(0);
-    int SIZE1 = COLS;//in_image.extent(1);
-    int SIZE2 = CHANNELS;//in_image.extent(2);
+    int SIZE0 = 75000;//ROWS;//in_image.extent(0);
+    int SIZE1 = 75000;//COLS;//in_image.extent(1);
+    int SIZE2 = 3;//CHANNELS;//in_image.extent(2);
 
     int by_ext_2 = SIZE2;
     int by_ext_1 = SIZE1 - 8;
@@ -188,7 +188,7 @@ int main(int argc, char **argv)
     wait_fan_out_r.get_update(0).before(bx.get_update(1), computation::root);
     bx.get_update(1).before(by.get_update(0), computation::root);
     by.get_update(0).before(by.get_update(1), computation::root);
-    by.get_update(1).before(*fan_in.s, computation::root);
+    by.get_update(1).before(*fan_in.s, x);//computation::root);
     fan_in.r->after(by.get_update(0), computation::root);
     wait_fan_in_s.after(*fan_in.s, computation::root);
     wait_fan_in_r.after(*fan_in.r, z);
@@ -218,19 +218,19 @@ int main(int argc, char **argv)
     by.get_update(1).set_access("{by_1[c, y, x]->buff_by_inter[y, x]}");
     fan_in.r->set_access("{recv_1_0[z,c,y,x]->buff_by[c,y,x]}");
 
-    buffer fan_out_req_r_buff("fan_out_req_r_buff", {SIZE1}, tiramisu::p_req_ptr,
-                              a_temporary, &dtest_03);
-    buffer fan_out_req_s_buff("fan_out_req_s_buff", {2, SIZE1}, tiramisu::p_req_ptr,
-                              a_temporary, &dtest_03);
-    fan_out.r->set_req_access("{recv_0_1[z,y,x]->fan_out_req_r_buff[y]}");
-    fan_out.s->set_req_access("{send_0_1[c,z,y,x]->fan_out_req_s_buff[z-1, y]}");
-
-    buffer fan_in_req_r_buff("fan_in_req_r_buff", {2, by_ext_1}, tiramisu::p_req_ptr,
-                             a_temporary, &dtest_03);
-    buffer fan_in_req_s_buff("fan_in_req_s_buff", {by_ext_1}, tiramisu::p_req_ptr,
-                             a_temporary, &dtest_03);
-    fan_in.r->set_req_access("{recv_1_0[c,z,y,x]->fan_in_req_r_buff[z-1, y]}");
-    fan_in.s->set_req_access("{send_1_0[z,y,x]->fan_in_req_s_buff[y]}");
+//    buffer fan_out_req_r_buff("fan_out_req_r_buff", {SIZE1}, tiramisu::p_req_ptr,
+//                              a_temporary, &dtest_03);
+//    buffer fan_out_req_s_buff("fan_out_req_s_buff", {2, SIZE1}, tiramisu::p_req_ptr,
+//                              a_temporary, &dtest_03);
+//    fan_out.r->set_req_access("{recv_0_1[z,y,x]->fan_out_req_r_buff[y]}");
+//    fan_out.s->set_req_access("{send_0_1[c,z,y,x]->fan_out_req_s_buff[z-1, y]}");
+//
+//    buffer fan_in_req_r_buff("fan_in_req_r_buff", {2, by_ext_1}, tiramisu::p_req_ptr,
+//                             a_temporary, &dtest_03);
+//    buffer fan_in_req_s_buff("fan_in_req_s_buff", {by_ext_1}, tiramisu::p_req_ptr,
+//                             a_temporary, &dtest_03);
+//    fan_in.r->set_req_access("{recv_1_0[c,z,y,x]->fan_in_req_r_buff[z-1, y]}");
+//    fan_in.s->set_req_access("{send_1_0[z,y,x]->fan_in_req_s_buff[y]}");
     
     dtest_03.set_arguments({&buff_input, &buff_bx, &buff_input_temp, &buff_bx_inter, &buff_by_inter, &buff_by});
     // Generate code
