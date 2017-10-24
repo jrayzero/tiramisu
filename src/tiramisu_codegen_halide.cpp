@@ -1858,6 +1858,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
 
                     // Since this statement is treated, remove it from the list of
                     // tagged statements so that it does not get treated again later.
+		    fct.remove_vectorized_dim(tagged_stmts[tt], level);
                     tagged_stmts[tt] = "";
                     break;
                 }

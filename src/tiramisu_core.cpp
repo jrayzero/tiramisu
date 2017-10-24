@@ -691,6 +691,23 @@ const std::vector<std::string> &function::get_iterator_names() const
     return iterator_names;
 }
 
+  void tiramisu::function::remove_vectorized_dim(const std::string &comp, int lev) {
+    bool found = false;
+    int i = 0;
+    for (const auto &pd : this->vector_dimensions)
+    {
+      //        if ((pd.first == comp) && (pd.second == lev))
+        if ((std::get<0>(pd) == comp) && (std::get<1>(pd) == lev))
+        {
+            found = true;
+            break;
+        }
+        i++;
+    }
+    assert(found && "Didn't find vectorized dimension to remove");
+    this->vector_dimensions.erase(this->vector_dimensions.begin() + i);
+  }
+
 void tiramisu::function::remove_parallel_dim(const std::string &comp, int lev) {
     bool found = false;
     int i = 0;

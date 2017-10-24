@@ -649,6 +649,8 @@ protected:
 
     void remove_parallel_dim(const std::string &comp, int lev);
 
+    void remove_vectorized_dim(const std::string &comp, int lev);
+
     void remove_distributed_dim(const std::string &comp, int lev);
 
     /**

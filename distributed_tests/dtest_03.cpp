@@ -11,7 +11,7 @@
 #include <string.h>
 #include <Halide.h>
 #include "halide_image_io.h"
-//#include "../t_blur_sizes.h"
+#include "../t_blur_sizes.h"
 
 using namespace tiramisu;
 
@@ -26,10 +26,10 @@ int main(int argc, char **argv)
     // Layer I
     // -------------------------------------------------------
 
-    //Halide::Buffer<uint8_t> in_image = Halide::Tools::load_image("./images/rgb.png");
-    int SIZE0 = 1000;//in_image.extent(0);
-    int SIZE1 = 1000;//in_image.extent(1);
-    int SIZE2 = 3;//in_image.extent(2);
+    Halide::Buffer<uint8_t> in_image = Halide::Tools::load_image("./images/rgb.png");
+    int SIZE0 = in_image.extent(0);
+    int SIZE1 = in_image.extent(1);
+    int SIZE2 = in_image.extent(2);
 
     int by_ext_2 = SIZE2;
     int by_ext_1 = SIZE1 - 8;
@@ -66,9 +66,6 @@ int main(int argc, char **argv)
                  bx(c, (y + tiramisu::expr((int32_t)2)), x)) /
                 tiramisu::expr((uint8_t)3)), true, tiramisu::p_uint8, &dtest_03);
 
-
-    //    tiramisu::constant size1("SIZE1", tiramisu::expr(SIZE1), tiramisu::p_int32, true, NULL, 0, &dtest_03);
-    //    tiramisu::constant size0("SIZE0", tiramisu::expr(SIZE0), tiramisu::p_int32, true, NULL, 0, &dtest_03);
     // -------------------------------------------------------
     // Layer II
     // -------------------------------------------------------
@@ -129,28 +126,36 @@ int main(int argc, char **argv)
     wait_fan_in_r.collapse_many({collapser(3, 0, by_ext_0)});
 
     /*
-     * Name replacement
-     */
-
-    /*
      * Other scheduling
      */
 
     bx.get_update(0).split(y, 100, var("y1"), var("y2"));
     bx.get_update(0).tag_parallel_level(var("y1"));
     bx.get_update(0).set_loop_level_names({0}, {"c"}); // split changes the name, so need to change it back so I can reference it
-    //        by.get_update(0).split(y, 1000, var("y1"), var("y2"));
-    //by.get_update(0).tag_parallel_level(var("y1"));
-    //    bx.get_update(0).vectorize(x, 8);
-    //    by.get_update(0).vectorize(x, 8);
+    bx.get_update(0).set_loop_level_names({3}, {"x"}); // split changes the name, so need to change it back so I can reference it
+    bx.get_update(0).vectorize(x, 8);
 
-    //    bx.get_update(1).vectorize(x, 8);
-    //    by.get_update(1).vectorize(x, 8);
+    by.get_update(0).split(y, 100, var("y1"), var("y2"));
+    by.get_update(0).tag_parallel_level(var("y1"));
+    by.get_update(0).set_loop_level_names({0}, {"c"}); // split changes the name, so need to change it back so I can reference it
 
-    //    bx.get_update(0).tag_parallel_level(y);
-    //    bx.get_update(1).tag_parallel_level(y);
-    //    by.get_update(0).tag_parallel_level(y);
-    //    by.get_update(1).tag_parallel_level(y);
+    by.get_update(1).split(y, 100, var("y1"), var("y2"));
+    by.get_update(1).tag_parallel_level(var("y1"));
+    by.get_update(1).set_loop_level_names({0}, {"c"}); // split changes the name, so need to change it back so I can reference it
+
+    wait_fan_out_s.split(y, 100, var("y1"), var("y2"));
+    wait_fan_out_s.set_loop_level_names({0}, {"c"}); // split changes the name, so need to change it back so I can reference it
+    wait_fan_out_s.set_loop_level_names({1}, {"z"}); // split changes the name, so need to change it back so I can reference it
+    wait_fan_out_s.tag_parallel_level(var("y1"));
+    wait_fan_out_s.tag_parallel_level(var("z"));
+
+    wait_fan_out_r.get_update(1).split(y, 100, var("y1"), var("y2"));
+    wait_fan_out_r.get_update(1).set_loop_level_names({0}, {"z"}); // split changes the name, so need to change it back so I can reference it
+    wait_fan_out_r.get_update(1).tag_parallel_level(var("y1"));
+
+    bx.get_update(1).split(y, 100, var("y1"), var("y2"));
+    bx.get_update(1).set_loop_level_names({0}, {"c"}); // split changes the name, so need to change it back so I can reference it
+    bx.get_update(1).tag_parallel_level(var("y1"));
 
     /*
      * Tag distribute level
@@ -179,7 +184,7 @@ int main(int argc, char **argv)
     bx.get_update(0).before(*fan_out.r, computation::root);
     fan_out.r->before(wait_fan_out_r.get_update(0), computation::root);
     wait_fan_out_r.get_update(0).before(wait_fan_out_r.get_update(1), computation::root);
-    wait_fan_out_r.get_update(1).before(bx.get_update(1), y);
+    wait_fan_out_r.get_update(1).before(bx.get_update(1), computation::root);//var("y2"));
     bx.get_update(1).before(by.get_update(0), computation::root);
     by.get_update(0).before(by.get_update(1), computation::root);
     by.get_update(1).before(*fan_in.s, computation::root);//y);
