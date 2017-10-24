@@ -26,10 +26,10 @@ int main(int argc, char **argv)
     // Layer I
     // -------------------------------------------------------
 
-    Halide::Buffer<uint8_t> in_image = Halide::Tools::load_image("./images/rgb.png");
-    int SIZE0 = in_image.extent(0);
-    int SIZE1 = in_image.extent(1);
-    int SIZE2 = in_image.extent(2);
+    //    Halide::Buffer<uint8_t> in_image = Halide::Tools::load_image("./images/rgb.png");
+    int SIZE0 = ROWS;//in_image.extent(0);
+    int SIZE1 = COLS;//in_image.extent(1);
+    int SIZE2 = CHANNELS;//in_image.extent(2);
 
     int by_ext_2 = SIZE2;
     int by_ext_1 = SIZE1 - 8;
@@ -77,27 +77,29 @@ int main(int argc, char **argv)
     by.get_update(0).rename_computation("by_0");
     by.get_update(1).rename_computation("by_1");
 
-    channel chan("chan", p_uint8, {FIFO, ASYNC, NONBLOCK, MPI});
-    channel chan_sync_nonblock("chan_sync_nonblock", p_uint8, {FIFO, SYNC, NONBLOCK, MPI});
-    channel chan_sync("chan", p_uint8, {FIFO, SYNC, BLOCK, MPI});
+    channel chan("chan", p_uint8, {FIFO, SYNC, BLOCK, MPI});
+    channel chan1("chan", p_uint8, {FIFO, ASYNC, BLOCK, MPI});
+    channel chan2("chan", p_uint8, {FIFO, ASYNC, NONBLOCK, MPI});
+    //    channel chan_sync_nonblock("chan_sync_nonblock", p_uint8, {FIFO, SYNC, NONBLOCK, MPI});
+    //    channel chan_sync("chan", p_uint8, {FIFO, SYNC, BLOCK, MPI});
     tiramisu::constant one("one", tiramisu::expr(1), tiramisu::p_int32, true, NULL, 0, &dtest_03);
     send_recv fan_out = computation::create_transfer(
             "[Ny, Nx, Nc, one]->{send_0_1[c,z,y,x]: 0<=c<one and 1<=z<Nc and 0<=y<Ny+6 and 0<=x<Nx+8}",
             "[Ny, Nx, Nc]->{recv_0_1[z,y,x]: 1<=z<Nc and 0<=y<Ny+6 and 0<=x<Nx+8}", 0, z, &chan,
             &chan, blur_input(z, y, x), {&bx.get_update(1)}, &dtest_03);
     send_recv fan_in = computation::create_transfer(
-            "[My, Mx, Mc]->{send_1_0[z,y,x]: 1<=z<Mc and 0<=y<My and 0<=x<Mx}",
-            "[My, Mx, Mc, one]->{recv_1_0[c,z,y,x]: 0<=c<one and 1<=z<Mc and 0<=y<My and 0<=x<Mx}", z, 0, &chan_sync_nonblock, /*make this wait for the recv to be completed so that we can get correct timing*/
-            &chan_sync, by.get_update(1)(0, y, x), {}, &dtest_03);
+						    "[My, Mx, Mc]->{send_1_0[z,y,x]: 1<=z<Mc and 0<=y<My and 0<=x<Mx}",//My and 0<=x<Mx}",
+            "[My, Mx, Mc, one]->{recv_1_0[c,z,y,x]: 0<=c<one and 1<=z<Mc and 0<=y<My and 0<=x<Mx}", z, 0, &chan, /*make this wait for the recv to be completed so that we can get correct timing*/
+            &chan, by.get_update(1)(0, y, x), {}, &dtest_03);
 
     tiramisu::wait wait_fan_out_r(fan_out.r->operator()(z, y, x), &dtest_03);
     tiramisu::wait wait_fan_out_s(fan_out.s->operator()(c, z, y, x), &dtest_03);
     tiramisu::wait wait_fan_in_s(fan_in.s->operator()(z,y,x), &dtest_03);
-    wait_fan_out_r.separate_at(1, SIZE1, 6, -3);
-    wait_fan_out_r.get_update(0).rename_computation("wait_r_0");
-    wait_fan_out_r.get_update(1).rename_computation("wait_r_1");
     tiramisu::wait wait_fan_in_r(fan_in.r->operator()(c,z,y,x), &dtest_03);
+    wait_fan_out_r.set_schedule_this_comp(false);
+    wait_fan_out_s.set_schedule_this_comp(false);
     wait_fan_in_r.set_schedule_this_comp(false);
+    wait_fan_in_s.set_schedule_this_comp(false);
 
     // TODO need to figure out how to automate this conversion
     generator::replace_expr_name(by.get_update(0).expression, "bx", "bx_0");
@@ -114,49 +116,49 @@ int main(int argc, char **argv)
      * Collapsing
      */
 
-    fan_out.s->collapse_many({collapser(3, 0, SIZE0)});
+    /*    fan_out.s->collapse_many({collapser(3, 0, SIZE0)});
     wait_fan_out_s.collapse_many({collapser(3, 0, SIZE0)});
+    wait_fan_out_r.collapse_many({collapser(2, 0, SIZE0)});
     fan_out.r->collapse_many({collapser(2, 0, SIZE0)});
     fan_in.s->collapse_many({collapser(2, 0, by_ext_0)});
     fan_in.r->collapse_many({collapser(3, 0, by_ext_0)});
-    wait_fan_out_r.get_update(1).shift(y, -6);
-    static_cast<tiramisu::wait*>(&wait_fan_out_r.get_update(0))->collapse_many({collapser(2, 0, SIZE0)});
-    static_cast<tiramisu::wait*>(&wait_fan_out_r.get_update(1))->collapse_many({collapser(2, 0, SIZE0)});
     wait_fan_in_s.collapse_many({collapser(2, 0, by_ext_0)});
-    wait_fan_in_r.collapse_many({collapser(3, 0, by_ext_0)});
+    wait_fan_in_r.collapse_many({collapser(3, 0, by_ext_0)});*/
 
     /*
      * Other scheduling
      */
 
-    bx.get_update(0).split(y, 100, var("y1"), var("y2"));
+    /*    bx.get_update(0).split(y, 2500, var("y1"), var("y2"));
     bx.get_update(0).tag_parallel_level(var("y1"));
     bx.get_update(0).set_loop_level_names({3}, {"x"}); // split changes the name, so need to change it back so I can reference it
-//    bx.get_update(0).set_loop_level_names({3}, {"x"}); // split changes the name, so need to change it back so I can reference it
     bx.get_update(0).vectorize(x, 8);
     bx.get_update(0).set_loop_level_names({0, 3}, {"c", "x"}); // split changes the name, so need to change it back so I can reference it
 
-    by.get_update(0).split(y, 100, var("y1"), var("y2"));
+    bx.get_update(1).split(y, 2500, var("y1"), var("y2"));
+    bx.get_update(1).tag_parallel_level(var("y1"));
+    bx.get_update(1).set_loop_level_names({3}, {"x"}); // split changes the name, so need to change it back so I can reference it
+    bx.get_update(1).set_loop_level_names({0, 3}, {"c", "x"}); // split changes the name, so need to change it back so I can reference it
+
+    by.get_update(0).split(y, 2500, var("y1"), var("y2"));
     by.get_update(0).tag_parallel_level(var("y1"));
+    by.get_update(0).set_loop_level_names({3}, {"x"}); // split changes the name, so need to change it back so I can reference it
+    by.get_update(0).vectorize(x, 8);
     by.get_update(0).set_loop_level_names({0}, {"c"}); // split changes the name, so need to change it back so I can reference it
 
-    by.get_update(1).split(y, 100, var("y1"), var("y2"));
+    by.get_update(1).split(y, 2500, var("y1"), var("y2"));
     by.get_update(1).tag_parallel_level(var("y1"));
+    by.get_update(1).set_loop_level_names({3}, {"x"}); // split changes the name, so need to change it back so I can reference it
     by.get_update(1).set_loop_level_names({0}, {"c"}); // split changes the name, so need to change it back so I can reference it
 
-    wait_fan_out_s.split(y, 100, var("y1"), var("y2"));
-    wait_fan_out_s.set_loop_level_names({0}, {"c"}); // split changes the name, so need to change it back so I can reference it
-    wait_fan_out_s.set_loop_level_names({1}, {"z"}); // split changes the name, so need to change it back so I can reference it
-    wait_fan_out_s.tag_parallel_level(var("y1"));
-    wait_fan_out_s.tag_parallel_level(var("z"));
+    wait_fan_out_s.split(y, 5000, var("y1"), var("y2"));
+    wait_fan_out_s.set_loop_level_names({0, 1}, {"c", "z"}); // split changes the name, so need to change it back so I can reference it
+    
+    wait_fan_out_r.get_update(0).split(y, 2500, var("y1"), var("y2"));
+    wait_fan_out_r.get_update(0).set_loop_level_names({0}, {"z"}); // split changes the name, so need to change it back so I can reference it
 
-    wait_fan_out_r.get_update(1).split(y, 100, var("y1"), var("y2"));
-    wait_fan_out_r.get_update(1).set_loop_level_names({0}, {"z"}); // split changes the name, so need to change it back so I can reference it
-    wait_fan_out_r.get_update(1).tag_parallel_level(var("y1"));
-
-    bx.get_update(1).split(y, 100, var("y1"), var("y2"));
-    bx.get_update(1).set_loop_level_names({0}, {"c"}); // split changes the name, so need to change it back so I can reference it
-    bx.get_update(1).tag_parallel_level(var("y1"));
+    fan_out.s->tag_parallel_level(z);
+    */
 
     /*
      * Tag distribute level
@@ -169,7 +171,6 @@ int main(int argc, char **argv)
     fan_out.s->tag_distribute_level(c);
     fan_out.r->tag_distribute_level(z);
     wait_fan_out_r.get_update(0).tag_distribute_level(z);
-    wait_fan_out_r.get_update(1).tag_distribute_level(z);
     wait_fan_out_s.tag_distribute_level(c);
     fan_in.s->tag_distribute_level(z);
     fan_in.r->tag_distribute_level(c);
@@ -184,14 +185,13 @@ int main(int argc, char **argv)
     wait_fan_out_s.before(bx.get_update(0), computation::root);
     bx.get_update(0).before(*fan_out.r, computation::root);
     fan_out.r->before(wait_fan_out_r.get_update(0), computation::root);
-    wait_fan_out_r.get_update(0).before(wait_fan_out_r.get_update(1), computation::root);
-    wait_fan_out_r.get_update(1).before(bx.get_update(1), computation::root);//var("y2"));
+    wait_fan_out_r.get_update(0).before(bx.get_update(1), computation::root);
     bx.get_update(1).before(by.get_update(0), computation::root);
     by.get_update(0).before(by.get_update(1), computation::root);
-    by.get_update(1).before(*fan_in.s, computation::root);//y);
+    by.get_update(1).before(*fan_in.s, computation::root);
     fan_in.r->after(by.get_update(0), computation::root);
     wait_fan_in_s.after(*fan_in.s, computation::root);
-    wait_fan_in_r.after(*fan_in.r, z);//computation::root);
+    wait_fan_in_r.after(*fan_in.r, z);
 
     // -------------------------------------------------------
     // Layer III
@@ -231,7 +231,7 @@ int main(int argc, char **argv)
                              a_temporary, &dtest_03);
     fan_in.r->set_req_access("{recv_1_0[c,z,y,x]->fan_in_req_r_buff[z-1, y]}");
     fan_in.s->set_req_access("{send_1_0[z,y,x]->fan_in_req_s_buff[y]}");
-
+    
     dtest_03.set_arguments({&buff_input, &buff_bx, &buff_input_temp, &buff_bx_inter, &buff_by_inter, &buff_by});
     // Generate code
     dtest_03.gen_time_space_domain();
