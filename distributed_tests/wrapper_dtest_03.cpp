@@ -14,7 +14,11 @@
 
 int main(int, char **)
 {
-    MPI_Init(NULL, NULL);
+  //    MPI_Init(NULL, NULL);
+  int provided = -1;
+  MPI_Init_thread(NULL, NULL, MPI_THREAD_FUNNELED, &provided);
+  std::cerr << "provided: " << provided << std::endl;
+  std::cerr << "wanted: " << MPI_THREAD_FUNNELED << std::endl;
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
