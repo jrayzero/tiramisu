@@ -561,12 +561,12 @@ void tiramisu::computation::add_definitions(std::string iteration_domain_str,
 }
 
 void tiramisu::wait::add_definitions(std::string iteration_domain_str,
-				     tiramisu::expr e,
-				     bool schedule_this_computation, tiramisu::primitive_t t,
-				     tiramisu::function *fct)
+                                     tiramisu::expr e,
+                                     bool schedule_this_computation, tiramisu::primitive_t t,
+                                     tiramisu::function *fct)
 {
     tiramisu::computation *new_c = new tiramisu::wait(iteration_domain_str, e,
-						      schedule_this_computation, fct);
+                                                      schedule_this_computation, fct);
     new_c->is_first = false;
     new_c->first_definition = this;
     this->updates.push_back(new_c);
@@ -689,6 +689,38 @@ isl_ast_node *function::get_isl_ast() const
 const std::vector<std::string> &function::get_iterator_names() const
 {
     return iterator_names;
+}
+
+void tiramisu::function::remove_parallel_dim(const std::string &comp, int lev) {
+    bool found = false;
+    int i = 0;
+    for (const auto &pd : this->parallel_dimensions)
+    {
+        if ((pd.first == comp) && (pd.second == lev))
+        {
+            found = true;
+            break;
+        }
+        i++;
+    }
+    assert(found && "Didn't find parallel dimension to remove");
+    this->parallel_dimensions.erase(this->parallel_dimensions.begin() + i);
+}
+
+void tiramisu::function::remove_distributed_dim(const std::string &comp, int lev) {
+    bool found = false;
+    int i = 0;
+    for (const auto &pd : this->distributed_dimensions)
+    {
+        if ((pd.first == comp) && (pd.second == lev))
+        {
+            found = true;
+            break;
+        }
+        i++;
+    }
+    assert(found && "Didn't find distributed dimension to remove");
+    this->distributed_dimensions.erase(this->distributed_dimensions.begin() + i);
 }
 
 /**
@@ -5461,7 +5493,7 @@ void tiramisu::computation::split_at(int L0, int _sizeX)
 
     map = map + "] : " + dimensions_str[0] + " = " + std::to_string(duplicate_ID) + " and " +
           outDim0_str + " = floor(" + inDim0_str + "/" +
-            std::to_string(_sizeX) + ") and " + outDim1_str + " = (" +
+          std::to_string(_sizeX) + ") and " + outDim1_str + " = (" +
           inDim0_str + "%" + std::to_string(_sizeX) + ")}";
 
     isl_map *transformation_map = isl_map_read_from_str(this->get_ctx(), map.c_str());
@@ -7664,7 +7696,7 @@ bool tiramisu::recv::is_recv() const {
  * Wait
  */
 
-  tiramisu::wait::wait(tiramisu::expr rhs, tiramisu::function *fct) : communicator(), rhs(rhs) {
+tiramisu::wait::wait(tiramisu::expr rhs, tiramisu::function *fct) : communicator(), rhs(rhs) {
     assert(rhs.get_op_type() == tiramisu::o_access && "The RHS expression for a wait should be an access!");
     tiramisu::computation *op = fct->get_computation_by_name(rhs.get_name())[0];
     isl_set *dom = isl_set_copy(op->get_iteration_domain());
@@ -7675,10 +7707,10 @@ bool tiramisu::recv::is_recv() const {
     library_call_name = "wait";
 }
 
-  tiramisu::wait::wait(std::string iteration_domain_str, tiramisu::expr rhs, bool schedule_this, tiramisu::function *fct) : communicator(iteration_domain_str, rhs, schedule_this, tiramisu::p_async, fct), rhs(rhs) {
-  _is_library_call = true;
-  library_call_name = "wait";
-  }
+tiramisu::wait::wait(std::string iteration_domain_str, tiramisu::expr rhs, bool schedule_this, tiramisu::function *fct) : communicator(iteration_domain_str, rhs, schedule_this, tiramisu::p_async, fct), rhs(rhs) {
+    _is_library_call = true;
+    library_call_name = "wait";
+}
 
 wait_type tiramisu::wait::get_wait_type() const {
     return this->_wait_type;
@@ -7921,19 +7953,19 @@ send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, s
 
     // TODO update this to not do the codegen stuff and all of that. Use constants.
 
-//    int num_levels_s_after_codegen = tiramisu::function::get_n_levels_from_codegen(s, true) - 1;
-//    int num_levels_s_should_have = isl_set_n_dim(s_iter_domain);
-//    int num_levels_r_after_codegen = tiramisu::function::get_n_levels_from_codegen(r, true) - 1;
-//    int num_levels_r_should_have = isl_set_n_dim(r_iter_domain);
-//
-//    if (num_levels_s_after_codegen != num_levels_s_should_have) {
-//        // Our split level is removed, so we need to remember this for later and take that into account!
-//        s->should_offset_distributed_level = true;
-//    }
-//    if (num_levels_r_after_codegen != num_levels_r_should_have) {
-//        // Our split level is removed, so we need to remember this for later and take that into account!
-//        r->should_offset_distributed_level = true;
-//    }
+    //    int num_levels_s_after_codegen = tiramisu::function::get_n_levels_from_codegen(s, true) - 1;
+    //    int num_levels_s_should_have = isl_set_n_dim(s_iter_domain);
+    //    int num_levels_r_after_codegen = tiramisu::function::get_n_levels_from_codegen(r, true) - 1;
+    //    int num_levels_r_should_have = isl_set_n_dim(r_iter_domain);
+    //
+    //    if (num_levels_s_after_codegen != num_levels_s_should_have) {
+    //        // Our split level is removed, so we need to remember this for later and take that into account!
+    //        s->should_offset_distributed_level = true;
+    //    }
+    //    if (num_levels_r_after_codegen != num_levels_r_should_have) {
+    //        // Our split level is removed, so we need to remember this for later and take that into account!
+    //        r->should_offset_distributed_level = true;
+    //    }
 
     for (auto c : consumers) {
         c->reads_from_recv = true;
@@ -8019,11 +8051,11 @@ bool tiramisu::computation::should_drop_rank_iter() const {
 }
 
 void tiramisu::communicator::set_req_access(std::string req_access_map_str) {
-  this->req_access_map = isl_map_read_from_str(this->get_ctx(), req_access_map_str.c_str());
+    this->req_access_map = isl_map_read_from_str(this->get_ctx(), req_access_map_str.c_str());
 }
 
-  void tiramisu::computation::set_schedule_this_comp(bool should_schedule) {
+void tiramisu::computation::set_schedule_this_comp(bool should_schedule) {
     this->schedule_this_computation = should_schedule;
-  }
+}
 
 }

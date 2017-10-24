@@ -647,6 +647,10 @@ protected:
 
     bool get_distributed_offset(const std::string &comp) const;
 
+    void remove_parallel_dim(const std::string &comp, int lev);
+
+    void remove_distributed_dim(const std::string &comp, int lev);
+
     /**
       * The set of all computations that have no computation scheduled before them.
       * Does not include allocation computations created using
@@ -1971,7 +1975,7 @@ public:
      * any ambiguity for the code generator.
      */
     void rename_computation(std::string new_name);
-private:
+
     /**
       * Set the names of loop levels dimensions.
       * The loop levels are specified using \p loop_levels
@@ -1981,7 +1985,7 @@ private:
       */
     void set_loop_level_names(std::vector<int> loop_levels,
                               std::vector<std::string> names);
-
+private:
     /**
       * Set the iteration domain of the computation
       */
@@ -3734,7 +3738,7 @@ protected:
       *     the whole block.
       */
     static Halide::Internal::Stmt halide_stmt_from_isl_node(
-            const tiramisu::function &fct, isl_ast_node *node,
+            function &fct, isl_ast_node *node,
             int level, std::vector<std::string> &tagged_stmts,
             bool is_a_child_block = false);
 

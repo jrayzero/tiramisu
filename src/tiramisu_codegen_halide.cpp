@@ -1569,7 +1569,7 @@ tiramisu::computation *get_computation_annotated_in_a_node(isl_ast_node *node)
 }
 
 Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
-        const tiramisu::function &fct, isl_ast_node *node,
+        function &fct, isl_ast_node *node,
         int level, std::vector<std::string> &tagged_stmts,
         bool is_a_child_block)
 {
@@ -1817,6 +1817,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                     fortype = Halide::Internal::ForType::Parallel;
                     // Since this statement is treated, remove it from the list of
                     // tagged statements so that it does not get treated again later.
+                    fct.remove_parallel_dim(tagged_stmts[tt], level);
                     tagged_stmts[tt] = "";
                     // As soon as we find one tagged statement that actually useful we exit
                     break;
@@ -1927,6 +1928,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                     // Change this loop into an if statement instead
                     offset = fct.get_distributed_offset(tagged_stmts[tt]);
                     convert_to_conditional = true;
+                    fct.remove_distributed_dim(tagged_stmts[tt], level);
                     tagged_stmts[tt] = "";
                     break;
                 }
@@ -1942,6 +1944,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
             DEBUG(3, tiramisu::str_dump("Converting for loop into a rank conditional."));
             // TODO Jess, this is only going to work if the loop we need to stick on starts from 0. If the loop doesn't start from 0, will the code generator actually remove it?
             if (offset) { // We need to create a for loop for this level and then wrap it in an if statement because our split was removed by the code generator
+                assert(false);
                 halide_body = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
                                                           fortype, dev_api, halide_body);
             }
@@ -1957,8 +1960,10 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
             Halide::Internal::Stmt else_s;
             // We need a reference still to this iterator name, so set it equal to the rank
             halide_body = Halide::Internal::LetStmt::make(iterator_str, rank_var, halide_body);
+            std::cerr << halide_body << std::endl;
             result = Halide::Internal::IfThenElse::make(condition, halide_body, else_s);
         } else {
+            std::cerr << halide_body << std::endl;
             DEBUG(3, tiramisu::str_dump("Creating the for loop."));
             result = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
                                                  fortype, dev_api, halide_body);
