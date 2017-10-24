@@ -3313,7 +3313,7 @@ void function::gen_halide_obj(const std::string &obj_file_name, Halide::Target::
     // Halide::Target::OpenCL, etc.
     std::vector<Halide::Target::Feature> features =
             {
-                    Halide::Target::AVX, Halide::Target::SSE41
+	      Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers
             };
     Halide::Target target(os, arch, bits, features);
 

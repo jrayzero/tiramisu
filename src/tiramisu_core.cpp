@@ -921,7 +921,7 @@ void function::add_iterator_name(const std::string &iteratorName)
 void function::gen_halide_obj(const std::string &obj_file_name) const
 {
     Halide::Target target = Halide::get_host_target();
-    gen_halide_obj(obj_file_name, target.os, target.arch, target.bits);
+    gen_halide_obj(obj_file_name, target.os, target.arch, 64);//target.bits);
 }
 // @}
 

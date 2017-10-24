@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-int dtest_03(halide_buffer_t *_b_input_buffer, halide_buffer_t *_b_blury_buffer);
+  int dtest_03(halide_buffer_t *_b_input_buffer, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *_b_blury_buffer);
 int dtest_03_argv(void **args);
 // Result is never null and points to constant static data
 const struct halide_filter_metadata_t *dtest_03_metadata();
