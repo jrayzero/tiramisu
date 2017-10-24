@@ -131,9 +131,10 @@ int main(int argc, char **argv)
 
     bx.get_update(0).split(y, 100, var("y1"), var("y2"));
     bx.get_update(0).tag_parallel_level(var("y1"));
-    bx.get_update(0).set_loop_level_names({0}, {"c"}); // split changes the name, so need to change it back so I can reference it
     bx.get_update(0).set_loop_level_names({3}, {"x"}); // split changes the name, so need to change it back so I can reference it
+//    bx.get_update(0).set_loop_level_names({3}, {"x"}); // split changes the name, so need to change it back so I can reference it
     bx.get_update(0).vectorize(x, 8);
+    bx.get_update(0).set_loop_level_names({0, 3}, {"c", "x"}); // split changes the name, so need to change it back so I can reference it
 
     by.get_update(0).split(y, 100, var("y1"), var("y2"));
     by.get_update(0).tag_parallel_level(var("y1"));
