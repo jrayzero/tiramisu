@@ -42,11 +42,11 @@ int main(int, char**) {
   // Reference
   for (int i=0; i<10; i++) {
 	std::cerr << "starting iter " << i << std::endl;
-    auto start2 = std::chrono::high_resolution_clock::now();
-    blurxy_ref(image.raw_buffer(), output2.raw_buffer());
-    auto end2 = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double,std::milli> duration2 = end2 - start2;
-    duration_vector_2.push_back(duration2);
+        auto start2 = std::chrono::high_resolution_clock::now();
+        blurxy_ref(image.raw_buffer(), output2.raw_buffer());
+        auto end2 = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double,std::milli> duration2 = end2 - start2;
+        duration_vector_2.push_back(duration2);
 	std::cerr << "iter " << i << " is done with time " << duration2.count() << std::endl;
   }
 

@@ -7638,14 +7638,14 @@ int send::next_msg_tag = 0;
 tiramisu::send::send(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs,
                      tiramisu::channel *chan, bool schedule_this, tiramisu::function *fct, std::vector<expr> dims) :
         communicator(iteration_domain_str, rhs, schedule_this, chan->get_dtype(), fct, chan), producer(producer),
-        msg_tag(next_msg_tag++) {
+        msg_tag(tiramisu::expr(next_msg_tag++)) {
     _is_library_call = true;
     library_call_name = create_send_func_name(chan);
     expr mod_rhs(tiramisu::o_address_of, rhs.get_name(), rhs.get_access(), rhs.get_data_type());
     set_expression(mod_rhs);
 }
 
-int tiramisu::send::get_msg_tag() const {
+tiramisu::expr tiramisu::send::get_msg_tag() const {
     return msg_tag;
 }
 
@@ -7861,7 +7861,7 @@ void tiramisu::function::lift_ops_to_library_calls() {
         if ((*op_iter)->is_send()) {
             send *s = static_cast<send *>(*op_iter);
             recv *r = s->get_matching_recv();
-            tiramisu::expr tag(s->get_msg_tag());
+            //            tiramisu::expr tag(s->get_msg_tag());
             tiramisu::expr num_elements(s->get_num_elements());
             tiramisu::expr send_type(s->get_channel()->get_dtype());
             bool isnonblock = s->get_channel()->contains_attr(NONBLOCK);
@@ -7870,7 +7870,7 @@ void tiramisu::function::lift_ops_to_library_calls() {
             s->library_call_args[0] = s->get_src();
             s->library_call_args[1] = num_elements;
             s->library_call_args[2] = r->get_dest();
-            s->library_call_args[3] = tag;
+            s->library_call_args[3] = s->get_msg_tag();//tag;
             s->library_call_args[5] = send_type;
             if (isnonblock) {
                 // This additional RHS argument is to the request buffer. It is really more of a side effect.
@@ -7879,7 +7879,7 @@ void tiramisu::function::lift_ops_to_library_calls() {
         } else if ((*op_iter)->is_recv()) {
             recv *r = static_cast<recv *>(*op_iter);
             send *s = r->get_matching_send();
-            tiramisu::expr tag(s->get_msg_tag());
+            //            tiramisu::expr tag(s->get_msg_tag());
             tiramisu::expr num_elements(r->get_num_elements());
             tiramisu::expr recv_type(s->get_channel()->get_dtype());
             bool isnonblock = r->get_channel()->contains_attr(NONBLOCK);
@@ -7888,7 +7888,7 @@ void tiramisu::function::lift_ops_to_library_calls() {
             r->library_call_args[0] = r->get_dest();
             r->library_call_args[1] = num_elements;
             r->library_call_args[2] = s->get_src();
-            r->library_call_args[3] = tag;
+            r->library_call_args[3] = s->get_msg_tag();//tag;
             r->library_call_args[5] = recv_type;
             r->lhs_access_type = tiramisu::o_address_of;
             if (isnonblock) {
@@ -8073,6 +8073,10 @@ void tiramisu::communicator::set_req_access(std::string req_access_map_str) {
 
 void tiramisu::computation::set_schedule_this_comp(bool should_schedule) {
     this->schedule_this_computation = should_schedule;
+}
+
+void tiramisu::send::override_msg_tag(tiramisu::expr msg_tag) {
+  this->msg_tag = msg_tag;
 }
 
 }

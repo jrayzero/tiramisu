@@ -138,6 +138,7 @@ isl_map *create_map_from_domain_and_range(isl_set *domain, isl_set *range)
 isl_ast_expr *create_isl_ast_index_expression(isl_ast_build *build,
                                               isl_map *access)
 {
+
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
 
@@ -2427,9 +2428,8 @@ void tiramisu::computation::create_halide_assignment()
             this->library_call_args[0] =
                     replace_original_indices_with_transformed_indices(static_cast<send*>(this)->get_src(),
                                                                       this->get_iterators_map());
-            this->library_call_args[2] =
-                    replace_original_indices_with_transformed_indices(static_cast<send*>(this)->get_matching_recv()->get_dest(),
-                                                                      this->get_iterators_map());
+            this->library_call_args[2] = replace_original_indices_with_transformed_indices(static_cast<send*>(this)->get_matching_recv()->get_dest(), this->get_iterators_map());
+            this->library_call_args[3] = replace_original_indices_with_transformed_indices(static_cast<send*>(this)->get_msg_tag(), this->get_iterators_map());
         } else if (this->is_recv()) {
             this->library_call_args[0] =
                     replace_original_indices_with_transformed_indices(static_cast<recv*>(this)->get_dest(),
@@ -2437,6 +2437,7 @@ void tiramisu::computation::create_halide_assignment()
             this->library_call_args[2] =
                     replace_original_indices_with_transformed_indices(static_cast<recv*>(this)->get_matching_send()->get_src(),
                                                                       this->get_iterators_map());
+            this->library_call_args[3] = replace_original_indices_with_transformed_indices(static_cast<recv*>(this)->get_matching_send()->get_msg_tag(), this->get_iterators_map());
         }
 
         if (!this->is_library_call() || this->lhs_argument_idx != -1) { // This has an LHS to compute.

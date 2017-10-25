@@ -11,7 +11,7 @@
 #include <string.h>
 #include <Halide.h>
 #include "halide_image_io.h"
-//#include "../t_blur_sizes.h"
+#include "../t_blur_sizes.h"
 
 using namespace tiramisu;
 
@@ -27,9 +27,9 @@ int main(int argc, char **argv)
     // -------------------------------------------------------
 
     //    Halide::Buffer<uint8_t> in_image = Halide::Tools::load_image("./images/rgb.png");
-    int SIZE0 = 75000;//ROWS;//in_image.extent(0);
-    int SIZE1 = 75000;//COLS;//in_image.extent(1);
-    int SIZE2 = 3;//CHANNELS;//in_image.extent(2);
+    int SIZE0 = COLS;
+    int SIZE1 = ROWS;
+    int SIZE2 = CHANNELS;
 
     int by_ext_2 = SIZE2;
     int by_ext_1 = SIZE1 - 8;
@@ -85,22 +85,21 @@ int main(int argc, char **argv)
     tiramisu::constant one("one", tiramisu::expr(1), tiramisu::p_int32, true, NULL, 0, &dtest_03);
     send_recv fan_out = computation::create_transfer(
             "[Ny, Nx, Nc, one]->{send_0_1[c,z,y,x]: 0<=c<one and 1<=z<Nc and 0<=y<Ny+6 and 0<=x<Nx+8}",
-            "[Ny, Nx, Nc]->{recv_0_1[z,y,x]: 1<=z<Nc and 0<=y<Ny+6 and 0<=x<Nx+8}", 0, z, &chan,
+            "[Ny, Nx, Nc]->{recv_0_1[z,y,x]: 1<=z<Nc and 0<=y<Ny+6 and 0<=x<Nx+8}", 0, z, &chan2,
             &chan, blur_input(z, y, x), {&bx.get_update(1)}, &dtest_03);
     send_recv fan_in = computation::create_transfer(
 						    "[My, Mx, Mc]->{send_1_0[z,y,x]: 1<=z<Mc and 0<=y<My and 0<=x<Mx}",//My and 0<=x<Mx}",
-            "[My, Mx, Mc, one]->{recv_1_0[c,z,y,x]: 0<=c<one and 1<=z<Mc and 0<=y<My and 0<=x<Mx}", z, 0, &chan, /*make this wait for the recv to be completed so that we can get correct timing*/
+            "[My, Mx, Mc, one]->{recv_1_0[c,z,y,x]: 0<=c<one and 1<=z<Mc and 0<=y<My and 0<=x<Mx}", z, 0, &chan, 
             &chan, by.get_update(1)(0, y, x), {}, &dtest_03);
 
-    tiramisu::wait wait_fan_out_r(fan_out.r->operator()(z, y, x), &dtest_03);
+    //    tiramisu::wait wait_fan_out_r(fan_out.r->operator()(z, y, x), &dtest_03);
     tiramisu::wait wait_fan_out_s(fan_out.s->operator()(c, z, y, x), &dtest_03);
-    tiramisu::wait wait_fan_in_s(fan_in.s->operator()(z,y,x), &dtest_03);
-    tiramisu::wait wait_fan_in_r(fan_in.r->operator()(c,z,y,x), &dtest_03);
-    wait_fan_out_r.set_schedule_this_comp(false);
-    wait_fan_out_s.set_schedule_this_comp(false);
-    wait_fan_in_r.set_schedule_this_comp(false);
-    wait_fan_in_s.set_schedule_this_comp(false);
-
+    //    tiramisu::wait wait_fan_in_s(fan_in.s->operator()(z,y,x), &dtest_03);
+    //    tiramisu::wait wait_fan_in_r(fan_in.r->operator()(c,z,y,x), &dtest_03);
+    //    wait_fan_out_r.set_schedule_this_comp(false);
+    //    wait_fan_in_r.set_schedule_this_comp(false);
+    //    wait_fan_in_s.set_schedule_this_comp(false);
+    
     // TODO need to figure out how to automate this conversion
     generator::replace_expr_name(by.get_update(0).expression, "bx", "bx_0");
     generator::replace_expr_name(by.get_update(1).expression, "bx", "bx_1");
@@ -116,14 +115,16 @@ int main(int argc, char **argv)
      * Collapsing
      */
 
-    /*    fan_out.s->collapse_many({collapser(3, 0, SIZE0)});
+    fan_out.s->collapse_many({collapser(3, 0, SIZE0)});
     wait_fan_out_s.collapse_many({collapser(3, 0, SIZE0)});
-    wait_fan_out_r.collapse_many({collapser(2, 0, SIZE0)});
+    //    wait_fan_out_r.collapse_many({collapser(2, 0, SIZE0)});
     fan_out.r->collapse_many({collapser(2, 0, SIZE0)});
     fan_in.s->collapse_many({collapser(2, 0, by_ext_0)});
     fan_in.r->collapse_many({collapser(3, 0, by_ext_0)});
-    wait_fan_in_s.collapse_many({collapser(2, 0, by_ext_0)});
-    wait_fan_in_r.collapse_many({collapser(3, 0, by_ext_0)});*/
+    //    wait_fan_in_s.collapse_many({collapser(2, 0, by_ext_0)});
+    //    wait_fan_in_r.collapse_many({collapser(3, 0, by_ext_0)});
+    fan_out.r->set_loop_level_names({{2}}, {"y"});
+    fan_out.s->set_loop_level_names({{0, 1, 2}}, {"c", "z", "y"});
 
     /*
      * Other scheduling
@@ -156,9 +157,19 @@ int main(int argc, char **argv)
     
     wait_fan_out_r.get_update(0).split(y, 2500, var("y1"), var("y2"));
     wait_fan_out_r.get_update(0).set_loop_level_names({0}, {"z"}); // split changes the name, so need to change it back so I can reference it
-
-    fan_out.s->tag_parallel_level(z);
     */
+    // Can't do MULTIPLE on LL machines
+    //    fan_out.s->tag_parallel_level(z);
+    //    fan_out.s->split(y, 500, var("y1"), var("y2"));
+    //    fan_out.s->tag_parallel_level(var("y1"));
+    //    fan_out.s->set_loop_level_names({{0}}, {"c"});
+
+    bx.get_update(0).split(y, 2500, var("y1"), var("y2"));
+    bx.get_update(0).tag_parallel_level(var("y1"));
+    bx.get_update(0).set_loop_level_names({0}, {"c"});
+    by.get_update(0).split(y, 2500, var("y1"), var("y2"));
+    by.get_update(0).tag_parallel_level(var("y1"));
+    by.get_update(0).set_loop_level_names({0}, {"c"});
 
     /*
      * Tag distribute level
@@ -170,28 +181,31 @@ int main(int argc, char **argv)
     by.get_update(1).tag_distribute_level(c);
     fan_out.s->tag_distribute_level(c);
     fan_out.r->tag_distribute_level(z);
-    wait_fan_out_r.get_update(0).tag_distribute_level(z);
-    wait_fan_out_s.tag_distribute_level(c);
     fan_in.s->tag_distribute_level(z);
     fan_in.r->tag_distribute_level(c);
-    wait_fan_in_s.tag_distribute_level(z);
-    wait_fan_in_r.tag_distribute_level(c);
+    //    wait_fan_out_r.get_update(0).tag_distribute_level(z);
+    wait_fan_out_s.tag_distribute_level(c);
+    //    wait_fan_in_s.tag_distribute_level(z);
+    //    wait_fan_in_r.tag_distribute_level(c);
 
     /*
      * Ordering
      */
 
-    fan_out.s->before(wait_fan_out_s, computation::root);
-    wait_fan_out_s.before(bx.get_update(0), computation::root);
-    bx.get_update(0).before(*fan_out.r, computation::root);
-    fan_out.r->before(wait_fan_out_r.get_update(0), computation::root);
-    wait_fan_out_r.get_update(0).before(bx.get_update(1), computation::root);
-    bx.get_update(1).before(by.get_update(0), computation::root);
-    by.get_update(0).before(by.get_update(1), computation::root);
-    by.get_update(1).before(*fan_in.s, x);//computation::root);
-    fan_in.r->after(by.get_update(0), computation::root);
-    wait_fan_in_s.after(*fan_in.s, computation::root);
-    wait_fan_in_r.after(*fan_in.r, z);
+    fan_out.s->before(bx.get_update(0), computation::root);
+    bx.get_update(0).before(by.get_update(0), computation::root);
+    by.get_update(0).before(*fan_out.r, computation::root);
+    fan_out.r->before(bx.get_update(1), computation::root);
+    bx.get_update(1).before(by.get_update(1), computation::root);
+    by.get_update(1).before(*fan_in.s, computation::root);
+    fan_in.s->before(wait_fan_out_s, computation::root);
+    wait_fan_out_s.before(*fan_in.r, computation::root);
+
+    /*
+     * Set the message tags
+     */
+    // TODO make recv have it's own msg tag, or overwrite the names so you have the correct var
+    fan_out.s->override_msg_tag(y);
 
     // -------------------------------------------------------
     // Layer III
@@ -200,16 +214,16 @@ int main(int argc, char **argv)
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(SIZE2), tiramisu::expr(SIZE1), tiramisu::expr(SIZE0)},
                                 tiramisu::p_uint8, tiramisu::a_input, &dtest_03);
     tiramisu::buffer buff_bx("buff_bx", {tiramisu::expr(by_ext_1 + 2), tiramisu::expr(by_ext_0)},
-                             tiramisu::p_uint8, tiramisu::a_input, &dtest_03);
+                             tiramisu::p_uint8, tiramisu::a_output, &dtest_03);
     tiramisu::buffer buff_input_temp("buff_input_temp", {tiramisu::expr(SIZE1), tiramisu::expr(SIZE0)},
-                                     tiramisu::p_uint8, tiramisu::a_input, &dtest_03);
+                                     tiramisu::p_uint8, tiramisu::a_output, &dtest_03);
     tiramisu::buffer buff_bx_inter("buff_bx_inter", {tiramisu::expr(by_ext_1 + 2), tiramisu::expr(by_ext_0)},
-                                   tiramisu::p_uint8, tiramisu::a_input, &dtest_03);
+                                   tiramisu::p_uint8, tiramisu::a_output, &dtest_03);
     tiramisu::buffer buff_by("buff_by", {tiramisu::expr(by_ext_2), tiramisu::expr(by_ext_1), tiramisu::expr(by_ext_0)},
                              tiramisu::p_uint8, tiramisu::a_output, &dtest_03);
     tiramisu::buffer buff_by_inter("buff_by_inter", {tiramisu::expr(by_ext_1), tiramisu::expr(by_ext_0)},
-                                   tiramisu::p_uint8, tiramisu::a_input, &dtest_03);
-
+                                   tiramisu::p_uint8, tiramisu::a_output, &dtest_03);
+    
     blur_input.set_access("{blur_input[i2, i1, i0]->buff_input[i2, i1, i0]}");
     fan_out.r->set_access("{recv_0_1[z,y,x]->buff_input_temp[y, x]}");
     bx.get_update(0).set_access("{bx_0[c, y, x]->buff_bx[y, x]}");
@@ -218,21 +232,22 @@ int main(int argc, char **argv)
     by.get_update(1).set_access("{by_1[c, y, x]->buff_by_inter[y, x]}");
     fan_in.r->set_access("{recv_1_0[z,c,y,x]->buff_by[c,y,x]}");
 
-//    buffer fan_out_req_r_buff("fan_out_req_r_buff", {SIZE1}, tiramisu::p_req_ptr,
-//                              a_temporary, &dtest_03);
-//    buffer fan_out_req_s_buff("fan_out_req_s_buff", {2, SIZE1}, tiramisu::p_req_ptr,
-//                              a_temporary, &dtest_03);
-//    fan_out.r->set_req_access("{recv_0_1[z,y,x]->fan_out_req_r_buff[y]}");
-//    fan_out.s->set_req_access("{send_0_1[c,z,y,x]->fan_out_req_s_buff[z-1, y]}");
-//
-//    buffer fan_in_req_r_buff("fan_in_req_r_buff", {2, by_ext_1}, tiramisu::p_req_ptr,
-//                             a_temporary, &dtest_03);
-//    buffer fan_in_req_s_buff("fan_in_req_s_buff", {by_ext_1}, tiramisu::p_req_ptr,
-//                             a_temporary, &dtest_03);
-//    fan_in.r->set_req_access("{recv_1_0[c,z,y,x]->fan_in_req_r_buff[z-1, y]}");
-//    fan_in.s->set_req_access("{send_1_0[z,y,x]->fan_in_req_s_buff[y]}");
+    //    buffer fan_out_req_r_buff("fan_out_req_r_buff", {SIZE1}, tiramisu::p_req_ptr,
+    //                                  a_temporary, &dtest_03);
+            buffer fan_out_req_s_buff("fan_out_req_s_buff", {2, SIZE1}, tiramisu::p_req_ptr,
+                                      a_temporary, &dtest_03);
+    //        fan_out.r->set_req_access("{recv_0_1[z,y,x]->fan_out_req_r_buff[y]}");
+            fan_out.s->set_req_access("{send_0_1[c,z,y,x]->fan_out_req_s_buff[z-1, y]}");
+    //
+    //    buffer fan_in_req_r_buff("fan_in_req_r_buff", {2, by_ext_1, by_ext_0}, tiramisu::p_req_ptr,
+    //                             a_temporary, &dtest_03);
+    //    buffer fan_in_req_s_buff("fan_in_req_s_buff", {by_ext_1, by_ext_0}, tiramisu::p_req_ptr,
+    //                             a_temporary, &dtest_03);
+    //    fan_in.r->set_req_access("{recv_1_0[c,z,y,x]->fan_in_req_r_buff[z-1, y, x]}");
+    //    fan_in.s->set_req_access("{send_1_0[z,y,x]->fan_in_req_s_buff[y, x]}");
     
     dtest_03.set_arguments({&buff_input, &buff_bx, &buff_input_temp, &buff_bx_inter, &buff_by_inter, &buff_by});
+
     // Generate code
     dtest_03.gen_time_space_domain();
     dtest_03.lift_ops_to_library_calls();

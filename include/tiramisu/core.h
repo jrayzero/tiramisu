@@ -3962,7 +3962,7 @@ private:
 
     recv *matching_recv = nullptr;
 
-    int msg_tag;
+  tiramisu::expr msg_tag;
 
     tiramisu::expr src;
 
@@ -3977,13 +3977,15 @@ public:
 
     tiramisu::recv *get_matching_recv() const;
 
-    int get_msg_tag() const;
+  tiramisu::expr get_msg_tag() const;
 
     tiramisu::expr get_src() const;
 
     void set_matching_recv(tiramisu::recv *matching_recv);
 
     void set_src(tiramisu::expr src);
+
+  void override_msg_tag(tiramisu::expr msg_tag);
 
     virtual bool is_send() const override;
 
