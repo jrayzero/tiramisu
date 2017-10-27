@@ -577,8 +577,10 @@ void tiramisu::send::add_definitions(std::string iteration_domain_str,
                                      bool schedule_this_computation, tiramisu::primitive_t t,
                                      tiramisu::function *fct)
 {
-    tiramisu::computation *new_c = new tiramisu::send(iteration_domain_str, this->producer, e, this->chan,
+    tiramisu::send *new_c = new tiramisu::send(iteration_domain_str, this->producer, e, this->chan,
                                                       schedule_this_computation, fct, {});
+    new_c->set_matching_recv(this->get_matching_recv());
+    new_c->set_src(this->get_src());
     new_c->is_first = false;
     new_c->first_definition = this;
     this->updates.push_back(new_c);
@@ -589,8 +591,10 @@ void tiramisu::recv::add_definitions(std::string iteration_domain_str,
                                      bool schedule_this_computation, tiramisu::primitive_t t,
                                      tiramisu::function *fct)
 {
-    tiramisu::computation *new_c = new tiramisu::recv(iteration_domain_str, this->consumer, schedule_this_computation,
+    tiramisu::recv *new_c = new tiramisu::recv(iteration_domain_str, this->consumer, schedule_this_computation,
                                                       this->chan, fct);
+    new_c->set_matching_send(this->get_matching_send());
+    new_c->set_dest(this->get_dest());
     new_c->is_first = false;
     new_c->first_definition = this;
     this->updates.push_back(new_c);
