@@ -651,15 +651,15 @@ void generator::traverse_expr_and_extract_accesses(const tiramisu::function *fct
         {
             isl_map *access_to_buff = isl_map_copy(access_op_comp->get_access_relation());
             // If our current computation is distributed, check if the buffer accessed in the access_op_comp is distributed. If so, need to change which buffer we are pointing to
-	    /*            if (!comp->is_send() && comp->is_distributed) {
-                std::string buff_name = isl_map_get_tuple_name(access_to_buff, isl_dim_out);
-                tiramisu::buffer *dist_buff = fct->get_buffers().find(buff_name)->second;
-                bool is_buffer_distributed = dist_buff->_distribute;
-                if (is_buffer_distributed && comp->reads_from_recv) {
-                    access_to_buff = isl_map_set_tuple_name(access_to_buff, isl_dim_out,
-                                                            dist_buff->distributed_buffer->get_name().c_str());
-                }
-		}*/
+            /*            if (!comp->is_send() && comp->is_distributed) {
+                    std::string buff_name = isl_map_get_tuple_name(access_to_buff, isl_dim_out);
+                    tiramisu::buffer *dist_buff = fct->get_buffers().find(buff_name)->second;
+                    bool is_buffer_distributed = dist_buff->_distribute;
+                    if (is_buffer_distributed && comp->reads_from_recv) {
+                        access_to_buff = isl_map_set_tuple_name(access_to_buff, isl_dim_out,
+                                                                dist_buff->distributed_buffer->get_name().c_str());
+                    }
+            }*/
             DEBUG(3, tiramisu::str_dump("The access of this computation to buffers (before re-adapting its domain into the domain of the current access) : ",
                                         isl_map_to_str(access_to_buff)));
 
@@ -1115,6 +1115,12 @@ tiramisu::expr replace_original_indices_with_transformed_indices(tiramisu::expr 
     else if (exp.get_expr_type() == tiramisu::e_var)
     {
         std::map<std::string, isl_ast_expr *>::iterator it;
+        if (exp.get_name() == "y1") {
+            for (auto x: iterators_map) {
+                auto s = x.first;
+                isl_ast_expr_dump(x.second);
+            }
+        }
         it = iterators_map.find(exp.get_name());
         if (it != iterators_map.end())
             output_expr = tiramisu_expr_from_isl_ast_expr(iterators_map[exp.get_name()]);
@@ -1859,7 +1865,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
 
                     // Since this statement is treated, remove it from the list of
                     // tagged statements so that it does not get treated again later.
-		    fct.remove_vectorized_dim(tagged_stmts[tt], level);
+                    fct.remove_vectorized_dim(tagged_stmts[tt], level);
                     tagged_stmts[tt] = "";
                     break;
                 }
@@ -2425,19 +2431,19 @@ void tiramisu::computation::create_halide_assignment()
     else {
         DEBUG(3, tiramisu::str_dump("This is not a let statement."));
         if (this->is_send()) {
-            this->library_call_args[0] =
-                    replace_original_indices_with_transformed_indices(static_cast<send*>(this)->get_src(),
-                                                                      this->get_iterators_map());
-            this->library_call_args[2] = replace_original_indices_with_transformed_indices(static_cast<send*>(this)->get_matching_recv()->get_dest(), this->get_iterators_map());
-            this->library_call_args[3] = replace_original_indices_with_transformed_indices(static_cast<send*>(this)->get_msg_tag(), this->get_iterators_map());
+            this->library_call_args[0] = replace_original_indices_with_transformed_indices(this->library_call_args[0],
+                                                                                           this->get_iterators_map());
+            this->library_call_args[2] = replace_original_indices_with_transformed_indices(this->library_call_args[2],
+                                                                                           this->get_iterators_map());
+            this->library_call_args[3] = replace_original_indices_with_transformed_indices(this->library_call_args[3],
+                                                                                           this->get_iterators_map());
         } else if (this->is_recv()) {
-            this->library_call_args[0] =
-                    replace_original_indices_with_transformed_indices(static_cast<recv*>(this)->get_dest(),
-                                                                      this->get_iterators_map());
-            this->library_call_args[2] =
-                    replace_original_indices_with_transformed_indices(static_cast<recv*>(this)->get_matching_send()->get_src(),
-                                                                      this->get_iterators_map());
-            this->library_call_args[3] = replace_original_indices_with_transformed_indices(static_cast<recv*>(this)->get_matching_send()->get_msg_tag(), this->get_iterators_map());
+            this->library_call_args[0] = replace_original_indices_with_transformed_indices(this->library_call_args[0],
+                                                                                           this->get_iterators_map());
+            this->library_call_args[2] = replace_original_indices_with_transformed_indices(this->library_call_args[2],
+                                                                                           this->get_iterators_map());
+            this->library_call_args[3] = replace_original_indices_with_transformed_indices(this->library_call_args[3],
+                                                                                           this->get_iterators_map());
         }
 
         if (!this->is_library_call() || this->lhs_argument_idx != -1) { // This has an LHS to compute.
@@ -3039,15 +3045,15 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
                     computations_vector[0]->req_access_map = orig;
                 }
                 isl_map *acc = access_comp->get_access_relation_adapted_to_time_processor_domain();
-		/*                if (comp && !comp->is_send() && comp->is_distributed) {
-                    std::string buff_name = isl_map_get_tuple_name(acc, isl_dim_out);
-                    tiramisu::buffer *dist_buff = fct->get_buffers().find(buff_name)->second;
-                    bool is_buffer_distributed = dist_buff->_distribute;
-                    if (is_buffer_distributed && comp->reads_from_recv) {
-                        acc = isl_map_set_tuple_name(acc, isl_dim_out,
-                                                     dist_buff->distributed_buffer->get_name().c_str());
-                    }
-		    }*/
+                /*                if (comp && !comp->is_send() && comp->is_distributed) {
+                            std::string buff_name = isl_map_get_tuple_name(acc, isl_dim_out);
+                            tiramisu::buffer *dist_buff = fct->get_buffers().find(buff_name)->second;
+                            bool is_buffer_distributed = dist_buff->_distribute;
+                            if (is_buffer_distributed && comp->reads_from_recv) {
+                                acc = isl_map_set_tuple_name(acc, isl_dim_out,
+                                                             dist_buff->distributed_buffer->get_name().c_str());
+                            }
+                    }*/
                 if (comp && comp->is_wait()) {
                     // swap back
                     isl_map *orig = computations_vector[0]->get_access_relation();
@@ -3320,7 +3326,7 @@ void function::gen_halide_obj(const std::string &obj_file_name, Halide::Target::
     // Halide::Target::OpenCL, etc.
     std::vector<Halide::Target::Feature> features =
             {
-	      Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers
+                    Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers
             };
     Halide::Target target(os, arch, bits, features);
 

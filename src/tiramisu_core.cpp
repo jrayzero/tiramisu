@@ -8027,7 +8027,7 @@ void tiramisu::function::lift_ops_to_library_calls() {
             r->library_call_args[0] = r->get_dest();
             r->library_call_args[1] = num_elements;
             r->library_call_args[2] = s->get_src();
-            r->library_call_args[3] = s->get_msg_tag();//tag;
+            r->library_call_args[3] = r->get_msg_tag().is_defined() ? r->get_msg_tag() : s->get_msg_tag();//s->get_msg_tag();//tag;
             r->library_call_args[5] = recv_type;
             r->lhs_access_type = tiramisu::o_address_of;
             if (isnonblock) {
@@ -8196,6 +8196,14 @@ void tiramisu::computation::set_schedule_this_comp(bool should_schedule) {
 
 void tiramisu::send::override_msg_tag(tiramisu::expr msg_tag) {
     this->msg_tag = msg_tag;
+}
+
+void tiramisu::recv::override_msg_tag(tiramisu::expr msg_tag) {
+    this->msg_tag = msg_tag;
+}
+
+tiramisu::expr tiramisu::recv::get_msg_tag() const {
+    return this->msg_tag;
 }
 
 }

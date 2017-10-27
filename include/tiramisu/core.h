@@ -4004,6 +4004,8 @@ private:
 
     tiramisu::expr dest;
 
+    tiramisu::expr msg_tag;
+
 public:
 
     recv(std::string iteration_domain_str, tiramisu::computation *consumer, bool schedule_this, tiramisu::channel chan,
@@ -4020,6 +4022,10 @@ public:
     void set_dest(tiramisu::expr dest);
 
     tiramisu::computation *get_consumer() const;
+
+    void override_msg_tag(tiramisu::expr msg_tag);
+
+    tiramisu::expr get_msg_tag() const;
 
     virtual bool is_recv() const override;
 
