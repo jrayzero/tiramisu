@@ -1243,6 +1243,8 @@ class computation
     friend constant;
     friend computation_tester;
     friend wait;
+    friend send;
+    friend recv;
 
 public:
 
@@ -2598,8 +2600,8 @@ public:
      *
      */
     virtual void add_definitions(std::string iteration_domain_str, tiramisu::expr e,
-                         bool schedule_this_computation, tiramisu::primitive_t t,
-                         tiramisu::function *fct);
+                                 bool schedule_this_computation, tiramisu::primitive_t t,
+                                 tiramisu::function *fct);
 
     /**
      * \brief Add a predicate (condition) on the computation. The computation will be executed
@@ -3567,9 +3569,9 @@ public:
       * e should be just a single access expression into the producer.
       */
     static send_recv create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr src,
-                                         tiramisu::expr dest, tiramisu::channel *send_chan, tiramisu::channel *recv_chan,
-                                         tiramisu::expr e, std::vector<tiramisu::computation *> consumers,
-                                         tiramisu::function *fct);
+                                     tiramisu::expr dest, tiramisu::channel *send_chan, tiramisu::channel *recv_chan,
+                                     tiramisu::expr e, std::vector<tiramisu::computation *> consumers,
+                                     tiramisu::function *fct);
 
     static void distribute(std::vector<std::vector<computation *>> ops, std::vector<int> predicates);
 
@@ -3962,7 +3964,7 @@ private:
 
     recv *matching_recv = nullptr;
 
-  tiramisu::expr msg_tag;
+    tiramisu::expr msg_tag;
 
     tiramisu::expr src;
 
@@ -3977,7 +3979,7 @@ public:
 
     tiramisu::recv *get_matching_recv() const;
 
-  tiramisu::expr get_msg_tag() const;
+    tiramisu::expr get_msg_tag() const;
 
     tiramisu::expr get_src() const;
 
@@ -3985,9 +3987,13 @@ public:
 
     void set_src(tiramisu::expr src);
 
-  void override_msg_tag(tiramisu::expr msg_tag);
+    void override_msg_tag(tiramisu::expr msg_tag);
 
     virtual bool is_send() const override;
+
+    virtual void add_definitions(std::string iteration_domain_str, tiramisu::expr e,
+                                 bool schedule_this_computation, tiramisu::primitive_t t,
+                                 tiramisu::function *fct) override;
 
 };
 
@@ -4019,6 +4025,10 @@ public:
 
     virtual bool is_recv() const override;
 
+    virtual void add_definitions(std::string iteration_domain_str, tiramisu::expr e,
+                                 bool schedule_this_computation, tiramisu::primitive_t t,
+                                 tiramisu::function *fct) override;
+
 };
 
 class wait : public communicator {
@@ -4039,8 +4049,8 @@ public:
     std::vector<tiramisu::computation *> get_op_to_wait_on() const;
 
     virtual void add_definitions(std::string iteration_domain_str, tiramisu::expr e,
-                         bool schedule_this_computation, tiramisu::primitive_t t,
-                         tiramisu::function *fct) override;
+                                 bool schedule_this_computation, tiramisu::primitive_t t,
+                                 tiramisu::function *fct) override;
 
     virtual bool is_wait() const override;
 

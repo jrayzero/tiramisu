@@ -572,6 +572,29 @@ void tiramisu::wait::add_definitions(std::string iteration_domain_str,
     this->updates.push_back(new_c);
 }
 
+void tiramisu::send::add_definitions(std::string iteration_domain_str,
+                                     tiramisu::expr e,
+                                     bool schedule_this_computation, tiramisu::primitive_t t,
+                                     tiramisu::function *fct)
+{
+    tiramisu::computation *new_c = new tiramisu::send(iteration_domain_str, this->producer, e, this->chan,
+                                                      schedule_this_computation, fct, {});
+    new_c->is_first = false;
+    new_c->first_definition = this;
+    this->updates.push_back(new_c);
+}
+
+void tiramisu::recv::add_definitions(std::string iteration_domain_str,
+                                     tiramisu::expr e,
+                                     bool schedule_this_computation, tiramisu::primitive_t t,
+                                     tiramisu::function *fct)
+{
+    tiramisu::computation *new_c = new tiramisu::recv(iteration_domain_str, this->consumer, schedule_this_computation,
+                                                      fct, this->chan);
+    new_c->is_first = false;
+    new_c->first_definition = this;
+    this->updates.push_back(new_c);
+}
 
 void tiramisu::function::dump_dep_graph()
 {
@@ -691,12 +714,12 @@ const std::vector<std::string> &function::get_iterator_names() const
     return iterator_names;
 }
 
-  void tiramisu::function::remove_vectorized_dim(const std::string &comp, int lev) {
+void tiramisu::function::remove_vectorized_dim(const std::string &comp, int lev) {
     bool found = false;
     int i = 0;
     for (const auto &pd : this->vector_dimensions)
     {
-      //        if ((pd.first == comp) && (pd.second == lev))
+        //        if ((pd.first == comp) && (pd.second == lev))
         if ((std::get<0>(pd) == comp) && (std::get<1>(pd) == lev))
         {
             found = true;
@@ -706,7 +729,7 @@ const std::vector<std::string> &function::get_iterator_names() const
     }
     assert(found && "Didn't find vectorized dimension to remove");
     this->vector_dimensions.erase(this->vector_dimensions.begin() + i);
-  }
+}
 
 void tiramisu::function::remove_parallel_dim(const std::string &comp, int lev) {
     bool found = false;
@@ -1669,19 +1692,16 @@ void tiramisu::computation::separate_at(int dim, tiramisu::expr N, expr separate
     DEBUG(3, tiramisu::str_dump("Generating the time-space domain."));
     this->gen_time_space_domain();
 
-    tiramisu::constant middle("m_" + std::to_string(id_counter++), separate_point, tiramisu::p_int32, true, NULL, 0,
-                              this->fct);
-
     //////////////////////////////////////////////////////////////////////////////
 
-    // We create the constraint (i < middle)
+    // We create the constraint (i < separate_point)
     DEBUG(3, tiramisu::str_dump("Constructing the constraint (i<middle)"));
     std::string constraint;
     constraint = "";
     for (int i=0; i<isl_map_dim(this->get_schedule(), isl_dim_param); i++)
     {
         if (i==0)
-            constraint += "[" + middle.get_name() + ",";
+            constraint += "[";
         constraint += isl_map_get_dim_name(this->get_schedule(), isl_dim_param, i);
         if (i!=isl_map_dim(this->get_schedule(), isl_dim_param)-1)
             constraint += ",";
@@ -1701,13 +1721,13 @@ void tiramisu::computation::separate_at(int dim, tiramisu::expr N, expr separate
     constraint += "]: ";
 
     std::string constraint1 = constraint +
-                              this->get_dimension_name_for_loop_level(dim) + " < " + middle.get_name() + "}";
+                              this->get_dimension_name_for_loop_level(dim) + " < " + separate_point.to_str() + "}";
     DEBUG(3, tiramisu::str_dump("The constraint is:" + constraint1));
 
-    // We create the constraint (i >= v*floor(N/v))
+    // We create the constraint (i >= separate_point)
     DEBUG(3, tiramisu::str_dump("Constructing the constraint (i>=middle)"));
     std::string constraint2 = constraint +
-                              this->get_dimension_name_for_loop_level(dim) + " >= " + middle.get_name() + "}";
+                              this->get_dimension_name_for_loop_level(dim) + " >= " + separate_point.to_str() + "}";
     DEBUG(3, tiramisu::str_dump("The constraint is:" + constraint2));
 
     //////////////////////////////////////////////////////////////////////////////
@@ -5410,6 +5430,8 @@ void tiramisu::computation::split_at(int L0, int _sizeX)
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
 
+    assert(false && "Don't use this");
+
     int inDim0 = loop_level_into_dynamic_dimension(L0);
 
     assert(this->get_schedule() != NULL);
@@ -8076,7 +8098,7 @@ void tiramisu::computation::set_schedule_this_comp(bool should_schedule) {
 }
 
 void tiramisu::send::override_msg_tag(tiramisu::expr msg_tag) {
-  this->msg_tag = msg_tag;
+    this->msg_tag = msg_tag;
 }
 
 }
