@@ -1253,6 +1253,8 @@ public:
 
     bool should_drop_rank_iter() const;
 
+    tiramisu::expr offset;
+
 private:
 
     bool should_offset_distributed_level = false;
@@ -3576,6 +3578,12 @@ public:
                                      tiramisu::expr e, std::vector<tiramisu::computation *> consumers,
                                      tiramisu::function *fct);
 
+    static send_recv create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_src,
+                                     tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
+                                     channel send_chan, channel recv_chan, tiramisu::expr e,
+                                     std::vector<tiramisu::computation *> consumers, tiramisu::function *fct);
+
+
     static void distribute(std::vector<std::vector<computation *>> ops, std::vector<int> predicates);
 
 };
@@ -3756,7 +3764,7 @@ protected:
      */
     //@{
     static Halide::Expr linearize_access(int dims, const halide_dimension_t *shape, isl_ast_expr *index_expr,
-                                         bool is_first_level_dist = false);
+                                         bool is_first_level_dist = false, tiramisu::expr offset = expr());
     static Halide::Expr linearize_access(int dims, const halide_dimension_t *shape,
                                          std::vector<tiramisu::expr> index_expr, bool is_first_level_dist = false);
     static Halide::Expr linearize_access(int dims, std::vector<Halide::Expr> &strides,
@@ -3966,6 +3974,8 @@ private:
 
     tiramisu::expr src;
 
+    tiramisu::expr dest;
+
     static int next_msg_tag;
 
 public:
@@ -3981,9 +3991,13 @@ public:
 
     tiramisu::expr get_src() const;
 
+    tiramisu::expr get_dest() const;
+
     void set_matching_recv(tiramisu::recv *matching_recv);
 
     void set_src(tiramisu::expr src);
+
+    void set_dest(tiramisu::expr dest);
 
     void override_msg_tag(tiramisu::expr msg_tag);
 
@@ -4002,6 +4016,8 @@ private:
 
     send *matching_send = nullptr;
 
+    tiramisu::expr src;
+
     tiramisu::expr dest;
 
     tiramisu::expr msg_tag;
@@ -4015,9 +4031,13 @@ public:
 
     tiramisu::send *get_matching_send() const;
 
+    tiramisu::expr get_src() const;
+
     tiramisu::expr get_dest() const;
 
     void set_matching_send(tiramisu::send *matching_send);
+
+    void set_src(tiramisu::expr src);
 
     void set_dest(tiramisu::expr dest);
 

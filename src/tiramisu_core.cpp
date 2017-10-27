@@ -8008,7 +8008,7 @@ void tiramisu::function::lift_ops_to_library_calls() {
             s->library_call_args.resize(isnonblock ? 7 : 6);
             s->library_call_args[0] = s->get_src();
             s->library_call_args[1] = num_elements;
-            s->library_call_args[2] = r->get_dest();
+            s->library_call_args[2] = s->get_dest();
             s->library_call_args[3] = s->get_msg_tag();//tag;
             s->library_call_args[5] = send_type;
             if (isnonblock) {
@@ -8026,7 +8026,7 @@ void tiramisu::function::lift_ops_to_library_calls() {
             r->library_call_args.resize(isnonblock ? 7 : 6);
             r->library_call_args[0] = r->get_dest();
             r->library_call_args[1] = num_elements;
-            r->library_call_args[2] = s->get_src();
+            r->library_call_args[2] = r->get_src();
             r->library_call_args[3] = r->get_msg_tag().is_defined() ? r->get_msg_tag() : s->get_msg_tag();//s->get_msg_tag();//tag;
             r->library_call_args[5] = recv_type;
             r->lhs_access_type = tiramisu::o_address_of;
@@ -8079,6 +8079,49 @@ bool tiramisu::wait::is_wait() const {
     return true;
 }
 
+send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_src,
+                          tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
+                          channel send_chan, channel recv_chan, tiramisu::expr e,
+                          std::vector<tiramisu::computation *> consumers, tiramisu::function *fct) {
+    assert(e.get_op_type() == tiramisu::o_access);
+    tiramisu::computation *producer = fct->get_computation_by_name(e.get_name())[0];
+
+    isl_set *s_iter_domain = isl_set_read_from_str(producer->get_ctx(), send_iter_domain.c_str());
+    isl_set *r_iter_domain = isl_set_read_from_str(producer->get_ctx(), recv_iter_domain.c_str());
+    tiramisu::send *s = new tiramisu::send(isl_set_to_str(s_iter_domain), producer, e, send_chan, true,
+                                           producer->get_function(), {1});
+    tiramisu::recv *r = nullptr;
+    if (!consumers.empty()) {
+        r = new tiramisu::recv(isl_set_to_str(r_iter_domain), consumers[0], true,
+                               recv_chan, fct);
+    } else {
+        r = new tiramisu::recv(isl_set_to_str(r_iter_domain), true, recv_chan, fct);
+    }
+    isl_map *send_sched = s->gen_identity_schedule_for_iteration_domain();
+    isl_map *recv_sched = r->gen_identity_schedule_for_iteration_domain();
+
+    s->set_src(send_src);
+    s->set_dest(send_dest);
+    r->set_src(recv_src);
+    r->set_dest(recv_dest);
+
+    s->set_schedule(send_sched);
+    r->set_schedule(recv_sched);
+    s->set_matching_recv(r);
+    r->set_matching_send(s);
+
+
+    for (auto c : consumers) {
+        c->reads_from_recv = true;
+    }
+
+    tiramisu::send_recv sr;
+    sr.s = s;
+    sr.r = r;
+
+    return sr;
+}
+
 send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, std::string recv_iter_domain,
                                                  tiramisu::expr src,
                                                  tiramisu::expr dest, channel send_chan, channel recv_chan,
@@ -8102,28 +8145,14 @@ send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, s
     isl_map *recv_sched = r->gen_identity_schedule_for_iteration_domain();
 
     s->set_src(src);
+    s->set_dest(dest);
+    r->set_src(src);
     r->set_dest(dest);
 
     s->set_schedule(send_sched);
     r->set_schedule(recv_sched);
     s->set_matching_recv(r);
     r->set_matching_send(s);
-
-    // TODO update this to not do the codegen stuff and all of that. Use constants.
-
-    //    int num_levels_s_after_codegen = tiramisu::function::get_n_levels_from_codegen(s, true) - 1;
-    //    int num_levels_s_should_have = isl_set_n_dim(s_iter_domain);
-    //    int num_levels_r_after_codegen = tiramisu::function::get_n_levels_from_codegen(r, true) - 1;
-    //    int num_levels_r_should_have = isl_set_n_dim(r_iter_domain);
-    //
-    //    if (num_levels_s_after_codegen != num_levels_s_should_have) {
-    //        // Our split level is removed, so we need to remember this for later and take that into account!
-    //        s->should_offset_distributed_level = true;
-    //    }
-    //    if (num_levels_r_after_codegen != num_levels_r_should_have) {
-    //        // Our split level is removed, so we need to remember this for later and take that into account!
-    //        r->should_offset_distributed_level = true;
-    //    }
 
     for (auto c : consumers) {
         c->reads_from_recv = true;
@@ -8166,12 +8195,28 @@ tiramisu::expr tiramisu::send::get_src() const {
     return src;
 }
 
+tiramisu::expr tiramisu::send::get_dest() const {
+    return dest;
+}
+
 void tiramisu::send::set_src(tiramisu::expr src) {
     this->src = src;
 }
 
+void tiramisu::send::set_dest(tiramisu::expr dest) {
+    this->dest = dest;
+}
+
+tiramisu::expr tiramisu::recv::get_src() const {
+    return src;
+}
+
 tiramisu::expr tiramisu::recv::get_dest() const {
     return dest;
+}
+
+void tiramisu::recv::set_src(tiramisu::expr src) {
+    this->src = src;
 }
 
 void tiramisu::recv::set_dest(tiramisu::expr dest) {

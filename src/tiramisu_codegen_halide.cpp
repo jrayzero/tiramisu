@@ -2264,7 +2264,7 @@ isl_ast_node *for_code_generator_after_for(isl_ast_node *node, isl_ast_build *bu
   */
 // TODO super hacky here
 Halide::Expr generator::linearize_access(int dims, const halide_dimension_t *shape, isl_ast_expr *index_expr,
-                                         bool is_first_level_dist)
+                                         bool is_first_level_dist, tiramisu::expr offset)
 {
     assert(isl_ast_expr_get_op_n_arg(index_expr) > 1);
 
@@ -2278,15 +2278,6 @@ Halide::Expr generator::linearize_access(int dims, const halide_dimension_t *sha
         isl_ast_expr *operand = nullptr;
         if (!is_first_level_dist || (is_first_level_dist && i != 1)) {
             operand = isl_ast_expr_get_op_arg(index_expr, i);
-            //        }
-            //        else { // this is going to be an addition of the outermost loop and the next loop. We drop the outermost
-            //            // loop because it is a rank loop
-            //            operand = isl_ast_expr_get_op_arg(index_expr, i);
-            //            if (isl_ast_expr_get_type(operand) == isl_ast_expr_op && isl_ast_expr_get_op_n_arg(operand) == 2) {
-            //                operand = isl_ast_expr_get_op_arg(operand, 1);
-            //            }
-            //
-            //        }
             Halide::Expr operand_h = halide_expr_from_isl_ast_expr(operand);
             index += operand_h * shape[dims - i].stride;
             isl_ast_expr_free(operand);
@@ -2301,6 +2292,13 @@ Halide::Expr generator::linearize_access(int dims, const halide_dimension_t *sha
             isl_ast_expr_free(operand);
         }
 
+    }
+
+    if (offset.is_defined()) {
+        std::vector<isl_ast_expr *> ie = {};
+        Halide::Expr h_offset = generator::halide_expr_from_tiramisu_expr(NULL, ie, offset, nullptr);
+        std::cerr << h_offset << std::endl;
+        index += h_offset;
     }
 
     DEBUG_INDENT(-4);
@@ -2511,14 +2509,12 @@ void tiramisu::computation::create_halide_assignment()
             DEBUG(3, tiramisu::str_dump("Linearizing lhs_access of the LHS index expression."));
             Halide::Expr lhs_index;
             bool is_dist = this->fct->should_distribute(this->get_name(), 0);
-            isl_ast_expr_dump(this->index_expr[0]);
             if (lhs_tiramisu_buffer->has_constant_extents())
                 // TODO this should really check for something that says whether or not we want to use the rank index in the computation of the linearized index. Cause some times I want it, othertimes I don't. Or maybe have a separate parameter (i.e.
                 // should_distribute just means we should convert to conditional. drop_index means don't include the index)
-                lhs_index = tiramisu::generator::linearize_access(lhs_buf_dims, lhs_shape, this->index_expr[0], this->should_drop_rank_iter());//is_dist && !this->is_library_call());
+                lhs_index = tiramisu::generator::linearize_access(lhs_buf_dims, lhs_shape, this->index_expr[0], this->should_drop_rank_iter(), this->offset);//is_dist && !this->is_library_call());
             else
                 lhs_index = tiramisu::generator::linearize_access(lhs_buf_dims, strides_vector, this->index_expr[0], this->should_drop_rank_iter());//is_dist && !this->is_library_call());
-            std::cerr << lhs_index << std::endl;
             DEBUG(3, tiramisu::str_dump("After linearization: ");
                     std::cout << lhs_index << std::endl);
 
@@ -3151,7 +3147,7 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
                     {
                         DEBUG(10, tiramisu::str_dump("index_expr is NOT empty. Retrieving access indices from index_expr (i.e., retrieving indices adapted to the schedule)."));
                         if (tiramisu_buffer->has_constant_extents())
-                            index = tiramisu::generator::linearize_access(tiramisu_buffer->get_dim_sizes().size(), shape, index_expr[0], comp && comp->should_drop_rank_iter());//remove_rank_iter);
+                            index = tiramisu::generator::linearize_access(tiramisu_buffer->get_dim_sizes().size(), shape, index_expr[0], comp && comp->should_drop_rank_iter(), comp ? comp->offset : expr());//remove_rank_iter);
                         else
                             index = tiramisu::generator::linearize_access(tiramisu_buffer->get_dim_sizes().size(), strides_vector, index_expr[0], comp && comp->should_drop_rank_iter());//remove_rank_iter);
 
