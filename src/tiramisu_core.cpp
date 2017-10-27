@@ -590,7 +590,7 @@ void tiramisu::recv::add_definitions(std::string iteration_domain_str,
                                      tiramisu::function *fct)
 {
     tiramisu::computation *new_c = new tiramisu::recv(iteration_domain_str, this->consumer, schedule_this_computation,
-                                                      fct, this->chan);
+                                                      this->chan, fct);
     new_c->is_first = false;
     new_c->first_definition = this;
     this->updates.push_back(new_c);
@@ -7533,6 +7533,8 @@ tiramisu::channel::channel(std::string name, tiramisu::primitive_t dtype,
     this->attrs.insert(this->attrs.begin(), attrs);
 }
 
+channel::channel() { }
+
 void tiramisu::channel::add_attr(tiramisu::channel_attr attr) {
     attrs.push_back(attr);
 }
@@ -7578,9 +7580,9 @@ std::string tiramisu::channel::attr_to_string(tiramisu::channel_attr attr) {
  * Communicator
  */
 
-tiramisu::communicator::communicator(std::string iteration_domain_str, tiramisu::expr e, bool schedule_this_computation,
-                                     tiramisu::primitive_t data_type, tiramisu::function *fct,
-                                     tiramisu::channel *chan) :
+tiramisu::communicator::communicator(std::string iteration_domain_str, tiramisu::expr e,
+                                     bool schedule_this_computation, tiramisu::primitive_t data_type,
+                                     tiramisu::channel chan, tiramisu::function *fct) :
         computation(iteration_domain_str, e, schedule_this_computation, data_type, fct), chan(chan) {}
 
 tiramisu::communicator::communicator(std::string iteration_domain_str, tiramisu::expr e, bool schedule_this_computation,
@@ -7608,7 +7610,7 @@ tiramisu::expr tiramisu::communicator::get_num_elements() const {
     return num;
 }
 
-tiramisu::channel *tiramisu::communicator::get_channel() const {
+channel tiramisu::communicator::get_channel() const {
     return chan;
 }
 
@@ -7635,21 +7637,21 @@ std::vector<communicator *> tiramisu::communicator::collapse(int level, tiramisu
  * Send
  */
 
-std::string create_send_func_name(const channel * const chan) {
+std::string create_send_func_name(const channel chan) {
     std::string name = "send";
-    if (chan->contains_attr(MPI)) {
+    if (chan.contains_attr(MPI)) {
         name += "_MPI";
     }
-    if (chan->contains_attr(SYNC)) {
+    if (chan.contains_attr(SYNC)) {
         name += "_sync";
     }
-    if (chan->contains_attr(ASYNC)) {
+    if (chan.contains_attr(ASYNC)) {
         name += "_async";
     }
-    if (chan->contains_attr(BLOCK)) {
+    if (chan.contains_attr(BLOCK)) {
         name += "_block";
     }
-    if (chan->contains_attr(NONBLOCK)) {
+    if (chan.contains_attr(NONBLOCK)) {
         name += "_nonblock";
     }
     return name;
@@ -7658,8 +7660,9 @@ std::string create_send_func_name(const channel * const chan) {
 int send::next_msg_tag = 0;
 
 tiramisu::send::send(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs,
-                     tiramisu::channel *chan, bool schedule_this, tiramisu::function *fct, std::vector<expr> dims) :
-        communicator(iteration_domain_str, rhs, schedule_this, chan->get_dtype(), fct, chan), producer(producer),
+                     channel chan, bool schedule_this, tiramisu::function *fct, std::vector<expr> dims) :
+        communicator(iteration_domain_str, rhs, schedule_this, chan.get_dtype(),
+                     chan, fct), producer(producer),
         msg_tag(tiramisu::expr(next_msg_tag++)) {
     _is_library_call = true;
     library_call_name = create_send_func_name(chan);
@@ -7687,15 +7690,15 @@ void tiramisu::send::set_matching_recv(tiramisu::recv *matching_recv) {
  * Recv
  */
 
-std::string create_recv_func_name(const tiramisu::channel * const chan) {
+std::string create_recv_func_name(const channel chan) {
     std::string name = "recv";
-    if (chan->contains_attr(MPI)) {
+    if (chan.contains_attr(MPI)) {
         name += "_MPI";
     }
-    if (chan->contains_attr(BLOCK)) {
+    if (chan.contains_attr(BLOCK)) {
         name += "_block";
     }
-    if (chan->contains_attr(NONBLOCK)) {
+    if (chan.contains_attr(NONBLOCK)) {
         name += "_nonblock";
     }
     // synchronous and asynchronous receives don't make sense because they aren't waiting for a response from anything
@@ -7703,14 +7706,16 @@ std::string create_recv_func_name(const tiramisu::channel * const chan) {
 }
 
 
-tiramisu::recv::recv(std::string iteration_domain_str, tiramisu::computation *consumer, bool schedule_this,
-                     tiramisu::function *fct, channel *chan)
-        : communicator(iteration_domain_str, tiramisu::expr(), schedule_this, chan->get_dtype(), fct, chan), consumer(consumer) {
+tiramisu::recv::recv(std::string iteration_domain_str, tiramisu::computation *consumer, bool schedule_this, tiramisu::channel chan,
+                     tiramisu::function *fct)
+        : communicator(iteration_domain_str, tiramisu::expr(), schedule_this, chan.get_dtype(),
+                       chan, fct), consumer(consumer) {
     _is_library_call = true;
 }
 
-tiramisu::recv::recv(std::string iteration_domain_str, bool schedule_this, tiramisu::function *fct, channel *chan)
-        : communicator(iteration_domain_str, tiramisu::expr(), schedule_this, chan->get_dtype(), fct, chan) {
+tiramisu::recv::recv(std::string iteration_domain_str, bool schedule_this, tiramisu::channel chan, tiramisu::function *fct)
+        : communicator(iteration_domain_str, tiramisu::expr(), schedule_this, chan.get_dtype(),
+                       chan, fct) {
     _is_library_call = true;
 }
 
@@ -7885,8 +7890,8 @@ void tiramisu::function::lift_ops_to_library_calls() {
             recv *r = s->get_matching_recv();
             //            tiramisu::expr tag(s->get_msg_tag());
             tiramisu::expr num_elements(s->get_num_elements());
-            tiramisu::expr send_type(s->get_channel()->get_dtype());
-            bool isnonblock = s->get_channel()->contains_attr(NONBLOCK);
+            tiramisu::expr send_type(s->get_channel().get_dtype());
+            bool isnonblock = s->get_channel().contains_attr(NONBLOCK);
             s->rhs_argument_idx = 4;
             s->library_call_args.resize(isnonblock ? 7 : 6);
             s->library_call_args[0] = s->get_src();
@@ -7903,8 +7908,8 @@ void tiramisu::function::lift_ops_to_library_calls() {
             send *s = r->get_matching_send();
             //            tiramisu::expr tag(s->get_msg_tag());
             tiramisu::expr num_elements(r->get_num_elements());
-            tiramisu::expr recv_type(s->get_channel()->get_dtype());
-            bool isnonblock = r->get_channel()->contains_attr(NONBLOCK);
+            tiramisu::expr recv_type(s->get_channel().get_dtype());
+            bool isnonblock = r->get_channel().contains_attr(NONBLOCK);
             r->lhs_argument_idx = 4;
             r->library_call_args.resize(isnonblock ? 7 : 6);
             r->library_call_args[0] = r->get_dest();
@@ -7962,8 +7967,9 @@ bool tiramisu::wait::is_wait() const {
     return true;
 }
 
-send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr src,
-                                                 tiramisu::expr dest, tiramisu::channel *send_chan, tiramisu::channel *recv_chan,
+send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, std::string recv_iter_domain,
+                                                 tiramisu::expr src,
+                                                 tiramisu::expr dest, channel send_chan, channel recv_chan,
                                                  tiramisu::expr e, std::vector<tiramisu::computation *> consumers,
                                                  tiramisu::function *fct) {
     assert(e.get_op_type() == tiramisu::o_access);
@@ -7975,9 +7981,10 @@ send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, s
                                            producer->get_function(), {1});
     tiramisu::recv *r = nullptr;
     if (!consumers.empty()) {
-        r = new tiramisu::recv(isl_set_to_str(r_iter_domain), consumers[0], true, fct, recv_chan);
+        r = new tiramisu::recv(isl_set_to_str(r_iter_domain), consumers[0], true,
+                               recv_chan, fct);
     } else {
-        r = new tiramisu::recv(isl_set_to_str(r_iter_domain), true, fct, recv_chan);
+        r = new tiramisu::recv(isl_set_to_str(r_iter_domain), true, recv_chan, fct);
     }
     isl_map *send_sched = s->gen_identity_schedule_for_iteration_domain();
     isl_map *recv_sched = r->gen_identity_schedule_for_iteration_domain();
@@ -8015,28 +8022,6 @@ send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, s
     sr.r = r;
 
     return sr;
-}
-
-tiramisu::send *tiramisu::computation::create_send(std::string iteration_domain_str, tiramisu::expr start,
-                                                   tiramisu::channel *chan, bool schedule_this,
-                                                   std::initializer_list<expr> dims) {
-    send *s = new send(iteration_domain_str, this, start, chan, schedule_this, this->get_function(), dims);
-    return s;
-}
-
-tiramisu::recv *tiramisu::computation::create_recv(std::string iteration_domain_str, tiramisu::computation *consumer,
-                                                   bool schedule_this) {
-    recv *r = new recv(iteration_domain_str, consumer, schedule_this, this->get_function(), nullptr);
-    // Update the consumer to use the same RHS access, but to the recv instead of whatever it accessed before
-    tiramisu::expr e = consumer->get_expr();
-    e = e.replace_op_in_expr(this->get_name(), r->get_name());
-    consumer->set_expression(e);
-    return r;
-}
-
-tiramisu::recv *tiramisu::computation::create_recv(std::string iteration_domain_str, bool schedule_this) {
-    recv *r = new recv(iteration_domain_str, schedule_this, this->get_function(), nullptr);
-    return r;
 }
 
 void tiramisu::computation::set_parent_computation(tiramisu::computation *parent_computation) {
