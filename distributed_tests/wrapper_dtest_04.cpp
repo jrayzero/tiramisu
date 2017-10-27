@@ -80,17 +80,17 @@ int main(int, char **)
         if (rank == 0) {
             std::cerr << "rank " << rank << " is starting iter " << std::endl;
             auto start1 = std::chrono::high_resolution_clock::now();
-            dtest_03(image->raw_buffer(), buff_bx.raw_buffer(), buff_input_temp.raw_buffer(), buff_bx_inter.raw_buffer(), buff_by_inter.raw_buffer(), output_buf.raw_buffer());
+            dtest_04(image->raw_buffer(), buff_bx.raw_buffer(), buff_input_temp.raw_buffer(), buff_bx_inter.raw_buffer(), buff_by_inter.raw_buffer(), output_buf.raw_buffer());
             auto end1 = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double,std::milli> duration1 = end1 - start1;
             duration_vector_1.push_back(duration1);
             std::cerr << "iter " << iter << " is done with time " << duration1.count() << std::endl;
 #ifdef CHECK_RESULTS
-            compare_buffers("dtest_03", output_buf, ref);
+            compare_buffers("dtest_04", output_buf, ref);
 #endif
         } else {
             std::cerr << "rank " << rank << " is starting iter " << std::endl;
-            dtest_03(image_dummy.raw_buffer(), buff_bx.raw_buffer(), buff_input_temp.raw_buffer(), buff_bx_inter.raw_buffer(), buff_by_inter.raw_buffer(), output_dummy.raw_buffer());
+            dtest_04(image_dummy.raw_buffer(), buff_bx.raw_buffer(), buff_input_temp.raw_buffer(), buff_bx_inter.raw_buffer(), buff_by_inter.raw_buffer(), output_dummy.raw_buffer());
             std::cerr << "rank " << rank << " is done with iter " << std::endl;
         }
 
