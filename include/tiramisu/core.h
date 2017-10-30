@@ -3800,7 +3800,7 @@ public:
      * Traverse a tiramisu expression (\p current_exp) until an expression with the specified name is found.
      * Replace that name with a new name. Replaces all occurrences.
      */
-    static void replace_expr_name(tiramisu::expr &current_exp, std::string name_to_replace, std::string replace_with);
+    static void replace_expr_name(tiramisu::expr &current_exp, std::string name_to_replace, std::string replace_with, bool insert_access = false);
 
 };
 
