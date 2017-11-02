@@ -2274,7 +2274,7 @@ Halide::Expr generator::linearize_access(int dims, const halide_dimension_t *sha
     Halide::Expr index = 0;
     for (int i = dims; i >= 1; --i)
     {
-        isl_ast_expr *operand = operand = isl_ast_expr_get_op_arg(index_expr, i);
+        isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i);
         Halide::Expr operand_h = halide_expr_from_isl_ast_expr(operand);
         index += operand_h * shape[dims - i].stride;
         isl_ast_expr_free(operand);
