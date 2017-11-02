@@ -3763,14 +3763,13 @@ protected:
      * are the indices for each dimension of the buffer.
      */
     //@{
-    static Halide::Expr linearize_access(int dims, const halide_dimension_t *shape, isl_ast_expr *index_expr,
-                                         bool is_first_level_dist = false, tiramisu::expr offset = expr());
-    static Halide::Expr linearize_access(int dims, const halide_dimension_t *shape,
-                                         std::vector<tiramisu::expr> index_expr, bool is_first_level_dist = false);
-    static Halide::Expr linearize_access(int dims, std::vector<Halide::Expr> &strides,
-                                         std::vector<tiramisu::expr> index_expr, bool is_first_level_dist = false);
-    static Halide::Expr linearize_access(int dims, std::vector<Halide::Expr> &strides, isl_ast_expr *index_expr,
-                                         bool is_first_level_dist = false);
+    static Halide::Expr
+    linearize_access(int dims, const halide_dimension_t *shape, isl_ast_expr *index_expr, tiramisu::expr offset);
+    static Halide::Expr
+    linearize_access(int dims, const halide_dimension_t *shape, std::vector<tiramisu::expr> index_expr);
+    static Halide::Expr
+    linearize_access(int dims, std::vector<Halide::Expr> &strides, std::vector<tiramisu::expr> index_expr);
+    static Halide::Expr linearize_access(int dims, std::vector<Halide::Expr> &strides, isl_ast_expr *index_expr);
     //@}
 
     /**
