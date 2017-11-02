@@ -123,8 +123,6 @@ int main() {
 
     tiramisu::wait wait_fan_in_s(fan_in_s->operator()(q, y, x), &dblurxy);
     tiramisu::wait wait_fan_out_s(fan_out_s->operator()(q, d, y, x), &dblurxy);
-    wait_fan_in_s.set_schedule_this_comp(false);
-    wait_fan_out_s.set_schedule_this_comp(false);
 
     /*
      * Collapsing
@@ -208,7 +206,7 @@ int main() {
     dblurxy.lift_ops_to_library_calls();
     dblurxy.gen_isl_ast();
     dblurxy.gen_halide_stmt();
-    dblurxy.gen_halide_obj("./build/generated_fct_dtest_05.o");
+    dblurxy.gen_halide_obj("./build/generated_dblurxy.o");
 
     // Some debugging
     dblurxy.dump_halide_stmt();
