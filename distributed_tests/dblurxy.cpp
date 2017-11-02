@@ -31,6 +31,7 @@ int main() {
 
     int ROWS = _ROWS;
     int COLS = _COLS;
+    int NODES = _NODES;
 
     int by_rows = ROWS - 8;
     int by_cols = COLS - 8;
@@ -76,7 +77,7 @@ int main() {
     
     constant one("one", expr(1), p_int32, true, NULL, 0, &dblurxy);
     constant ten("ten", expr(10), p_int32, true, NULL, 0, &dblurxy);
-    constant twenty("twenty", expr(20), p_int32, true, NULL, 0, &dblurxy);
+    constant nodes("nodes", expr(NODES), p_int32, true, NULL, 0, &dblurxy);
 
     /*
      * Prep for distribution by splitting the outer dimension
@@ -105,13 +106,13 @@ int main() {
     channel async_nonblock("async_nonblock", p_uint64, {FIFO, ASYNC, NONBLOCK, MPI});
     channel async_block("async_block", p_uint64, {FIFO, ASYNC, BLOCK, MPI});
     send_recv fan_out = computation::create_transfer(
-            "[Ny, Nx, one, twenty]->{fan_out_s[q,d,y,x]: 0<=q<one and one<=d<twenty and d*4000<=y<(d+1)*4000 and 0<=x<Nx+8}",
-            "[Ny, Nx, one, twenty]->{fan_out_r[q,y,x]: one<=q<twenty and 0<=y<4000 and 0<=x<Nx+8}", 0, d, 0, q, async_nonblock,
+            "[Ny, Nx, one, nodes]->{fan_out_s[q,d,y,x]: 0<=q<one and one<=d<nodes and d*4000<=y<(d+1)*4000 and 0<=x<Nx+8}",
+            "[Ny, Nx, one, nodes]->{fan_out_r[q,y,x]: one<=q<nodes and 0<=y<4000 and 0<=x<Nx+8}", 0, d, 0, q, async_nonblock,
             sync_block, blur_input(y, x), {&bx.get_update(1)}, &dblurxy);
     send_recv fan_in = computation::create_transfer(
-            "[My, Mx, one, twenty]->{fan_in_s[q,y,x]: one<=q<twenty and 0<=y<My+8 and 0<=x<Mx}",
-            "[My, Mx, one, twenty]->{fan_in_r[q,d,y,x]: 0<=q<one and one<=d<twenty and 0<=y<4000 and 0<=x<Mx}",
-            q, 0, d, 0, sync_block,
+            "[My, Mx, one, nodes]->{fan_in_s[q,y,x]: one<=q<nodes and 0<=y<4000 and 0<=x<Mx}",
+            "[My, Mx, one, nodes]->{fan_in_r[q,d,y,x]: 0<=q<one and one<=d<nodes and (d-1)*4000<=y<d*4000 and 0<=x<Mx}",
+            q, 0, d, 0, async_block,
             sync_block, by.get_update(1)(y, x), {}, &dblurxy);
 
     generator::replace_expr_name(bx.get_update(1).expression, "blur_input", "fan_out_r", true);
@@ -189,16 +190,20 @@ int main() {
 
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
     fan_out_r->get_update(0).set_access("{fan_out_r[q, y, x]->buff_input_temp[y, x]}");
-    fan_in_r->set_access("{fan_in_r[q,d,y,x]->buff_by[d*4000+y, x]}");
+    fan_in_r->set_access("{fan_in_r[q,d,y,x]->buff_by[y, x]}");
     bx.get_update(0).set_access("{bx_0[y, x]->buff_bx[y, x]}");
     bx.get_update(1).set_access("{bx_1[y, x]->buff_bx_inter[y, x]}");
     by.get_update(0).set_access("{by_0[y, x]->buff_by[y, x]}");
     by.get_update(1).set_access("{by_1[y, x]->buff_by_inter[y, x]}");
 
-    buffer fan_out_req_s_buff("fan_out_req_s_buff", {19,4000}, tiramisu::p_req_ptr, a_temporary, &dblurxy);
-    fan_out_s->set_req_access("{fan_out_s[q,d,y,x]->fan_out_req_s_buff[d,y]}");
+    buffer fan_out_req_s_buff("fan_out_req_s_buff", {19*4000}, tiramisu::p_req_ptr, a_temporary, &dblurxy);
+    fan_out_s->set_req_access("{fan_out_s[q,d,y,x]->fan_out_req_s_buff[y-4000]}");
     buffer fan_in_req_s_buff("fan_in_req_s_buff", {4000}, tiramisu::p_req_ptr, a_temporary, &dblurxy);
     fan_in_s->set_req_access("{fan_in_s[q,y,x]->fan_in_req_s_buff[y]}");
+
+    //    fan_in_r->set_schedule_this_comp(false);
+    //    wait_fan_out_s.set_schedule_this_comp(false);
+    wait_fan_in_s.set_schedule_this_comp(false);
 
     dblurxy.set_arguments({&buff_input, &buff_bx, &buff_input_temp, &buff_bx_inter, &buff_by_inter, &buff_by});
     // Generate code

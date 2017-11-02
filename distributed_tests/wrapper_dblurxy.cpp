@@ -48,6 +48,9 @@ int main() {
     Halide::Buffer<uint64_t> output(rank == 0 ? image.extent(0) - 8 : 0, rank == 0 ? image.extent(1) - 8 : 0);
 
     for (int i=0; i<10; i++) {
+      if (rank == 0) {
+	std::cerr << "Starting iter: " << i << std::endl;
+      }
         MPI_Barrier(MPI_COMM_WORLD);
         auto start = std::chrono::high_resolution_clock::now();
         dblurxy(image.raw_buffer(), buff_bx.raw_buffer(), buff_input_temp.raw_buffer(), buff_bx_inter.raw_buffer(),
