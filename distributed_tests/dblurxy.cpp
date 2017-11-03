@@ -2,6 +2,9 @@
 // Created by Jessica Ray on 11/2/17.
 //
 
+// This distribution assumes that the data resides on a single node and we want to send that outwards and then
+// collect the results
+
 #include <isl/set.h>
 #include <isl/union_map.h>
 #include <isl/union_set.h>
@@ -88,10 +91,10 @@ int main() {
     bx.split(y, 4000, y1, y2);
     by.split(y, 4000, y1, y2);
 
-    bx.separate_at(0, one, -3);
+    bx.separate_at(0, {one}, ten, -3);
     bx.get_update(0).rename_computation("bx_0");
     bx.get_update(1).rename_computation("bx_1");
-    by.separate_at(0, one, -3);
+    by.separate_at(0, {one}, ten, -3);
     by.get_update(0).rename_computation("by_0");
     by.get_update(1).rename_computation("by_1");
 
@@ -107,13 +110,15 @@ int main() {
     channel async_block("async_block", p_uint64, {FIFO, ASYNC, BLOCK, MPI});
     send_recv fan_out = computation::create_transfer(
             "[Ny, Nx, one, nodes]->{fan_out_s[q,d,y,x]: 0<=q<one and one<=d<nodes and d*4000<=y<(d+1)*4000 and 0<=x<Nx+8}",
-            "[Ny, Nx, one, nodes]->{fan_out_r[q,y,x]: one<=q<nodes and 0<=y<4000 and 0<=x<Nx+8}", 0, d, 0, q, async_nonblock,
-            sync_block, blur_input(y, x), {&bx.get_update(1)}, &dblurxy);
+            "[Ny, Nx, one, nodes]->{fan_out_r[q,y,x]: one<=q<nodes and 0<=y<4000 and 0<=x<Nx+8}", 0, d, 0, q,
+            async_nonblock,
+            sync_block, blur_input(y, x), &dblurxy);
     send_recv fan_in = computation::create_transfer(
             "[My, Mx, one, nodes]->{fan_in_s[q,y,x]: one<=q<nodes and 0<=y<4000 and 0<=x<Mx}",
             "[My, Mx, one, nodes]->{fan_in_r[q,d,y,x]: 0<=q<one and one<=d<nodes and (d-1)*4000<=y<d*4000 and 0<=x<Mx}",
-            q, 0, d, 0, async_block,
-            sync_block, by.get_update(1)(y, x), {}, &dblurxy);
+            q, 0, d, 0,
+            async_block,
+            sync_block, by.get_update(1)(y, x), &dblurxy);
 
     generator::replace_expr_name(bx.get_update(1).expression, "blur_input", "fan_out_r", true);
 

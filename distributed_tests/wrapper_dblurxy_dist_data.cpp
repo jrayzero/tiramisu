@@ -1,0 +1,62 @@
+//
+// Created by Jessica Ray on 11/2/17.
+//
+
+#include "tiramisu/utils.h"
+#include <cstdlib>
+#include <iostream>
+#include <mpi.h>
+#include "wrapper_dblurxy_dist_data.h"
+#include "Halide.h"
+#include "halide_image_io.h"
+#include "sizes.h"
+
+#define REQ MPI_THREAD_FUNNELED
+
+int main() {
+
+    int provided = -1;
+    MPI_Init_thread(NULL, NULL, REQ, &provided);
+    assert(provided == REQ && "Did not get the appropriate MPI thread requirement.");
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    std::vector<std::chrono::duration<double,std::milli>> duration_vector;
+    uint64_t *buf = (uint64_t*)malloc(sizeof(uint64_t) * _ROWS / _NODES * _COLS);
+    unsigned int next = 0;
+    for (int y = 0; y < _ROWS / _NODES; ++y) {
+        for (int x = 0; x < _COLS; ++x) {
+            buf[next++] = random();
+        }
+    }
+
+    Halide::Buffer<uint64_t> buff_input = Halide::Buffer<uint64_t>(buf, {_COLS, _ROWS / _NODES});
+    Halide::Buffer<uint64_t> buff_output(buff_input.extent(0) - 8, buff_input.extent(1) - 8);
+    Halide::Buffer<uint64_t> buff_output_last_node(rank == _NODES - 1 ? _COLS - 8 : 0,
+                                                   rank == _NODES - 1 ? (_ROWS / _NODES) - 8 : 0);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    for (int i=0; i<10; i++) {
+        if (rank == 0) {
+            std::cerr << "Starting iter: " << i << std::endl;
+        }
+        auto start = std::chrono::high_resolution_clock::now();
+        dblurxy_dist_data(buff_input.raw_buffer(), buff_output.raw_buffer(), buff_output_last_node.raw_buffer());
+        MPI_Barrier(MPI_COMM_WORLD);
+        auto end = std::chrono::high_resolution_clock::now();
+        if (rank == 0) {
+            std::chrono::duration<double,std::milli> duration = end - start;
+            duration_vector.push_back(duration);
+            std::cerr << "Iteration " << i << " done in " << duration.count() << "ms." << std::endl;
+        }
+    }
+
+    if (rank == 0) {
+        free(buf);
+        print_time("performance_CPU.csv", "blurxy_dist", {"Tiramisu_dist"}, {median(duration_vector)});
+    }
+
+    MPI_Finalize();
+
+    return 0;
+}
