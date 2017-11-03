@@ -27,7 +27,7 @@ int main() {
     unsigned int next = 0;
     for (int y = 0; y < _ROWS / _NODES; y++) {
       for (int x = 0; x < _COLS; x++) {
-	buf[next] = next;
+	buf[next] = next % 1000;
 	next++;
       }
     }
@@ -42,7 +42,7 @@ int main() {
     std::cerr << "Rank: " << rank << std::endl;
 
     MPI_Barrier(MPI_COMM_WORLD);
-    for (int i=0; i<10; i++) {
+    for (int i=0; i<50; i++) {
         if (rank == 0) {
             std::cerr << "Starting iter: " << i << std::endl;
         }
@@ -55,6 +55,22 @@ int main() {
             duration_vector.push_back(duration);
             std::cerr << "Iteration " << i << " done in " << duration.count() << "ms." << std::endl;
         }
+	if (i == 0) {
+	  std::string output_fn = "/data/scratch/jray/tiramisu/build/dblurxy_dist_data_rank_" + std::to_string(rank) + ".txt";
+	  std::ofstream myfile;
+	  myfile.open (output_fn);
+	  for (int i = 0; i < _ROWS / _NODES; i++) {
+	    for (int j = 0; j < _COLS - 2; j++) {
+	      if (rank == _NODES - 1) {
+		myfile << buff_by_last_node(j, i) << std::endl;
+	      } else {
+		myfile << buff_by(j, i) << std::endl;
+	      }
+	    }
+	  }
+	  myfile.close();
+	}
+	MPI_Barrier(MPI_COMM_WORLD);
     }
 
     if (rank == 0) {
@@ -63,19 +79,6 @@ int main() {
     }
 
     // print out the results to file
-    std::string output_fn = "/data/scratch/jray/tiramisu/build/dblurxy_dist_data_rank_" + std::to_string(rank) + ".txt";
-    std::ofstream myfile;
-    myfile.open (output_fn);
-    for (int i = 0; i < (_ROWS / _NODES) - (rank == _NODES - 1 ? 2 : 0); i++) {
-      for (int j = 0; j < _COLS - 2; j++) {
-	if (rank == _NODES - 1) {
-	  myfile << buff_by_last_node(j, i) << std::endl;
-	} else {
-	  myfile << buff_by(j, i) << std::endl;
-	}
-      }
-    }
-    myfile.close();
 
     MPI_Finalize();
 

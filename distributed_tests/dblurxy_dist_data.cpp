@@ -33,18 +33,11 @@ int main() {
     int _nodes = _NODES;
 
     int _rows_per_node = _rows / _nodes;
-    //    int by_rows_per_node = _rows_per_node - 8;
+    std::cerr << "rows per node: " << _rows_per_node << std::endl;
 
     // -------------------------------------------------------
     // Layer I
     // -------------------------------------------------------
-
-    //    int by_rows = _rows - 8;
-    //    int by_cols = _cols - 8;
-
-    //    constant _Ny("_Ny", (expr(_rows)), p_int32, true, NULL,
-    //                 0, &dblurxy_dist_data);
-    //    constant _Nx("_Nx", expr(by_cols), p_int32, true, NULL, 0, &dblurxy_dist_data);
 
     var y("y"), x("x");
     constant rows("rows", expr(_rows), p_int32, true, NULL, 0, &dblurxy_dist_data);
@@ -65,13 +58,6 @@ int main() {
                       bx((y + expr((int32_t)1)), x)) +
                      bx((y + expr((int32_t)2)), x)) / expr((uint64_t)3)),
                    true, p_uint64, &dblurxy_dist_data);
-
-    /*
-     * Additional constraints
-     */
-
-    //    dblurxy_dist_data.add_context_constraints("[Nc, Ny, Nx, Mc, My, Mx, _Nc, _Ny, _Nx]->{: Nc=_Nc and Mc=_Nc and Ny=_Ny and My=_Ny and Nx=_Nx and Mx=_Nx}");
-    //    dblurxy_dist_data.add_context_constraints("[rows,cols]->{: rows=}");
 
     // -------------------------------------------------------
     // Layer II
@@ -126,18 +112,12 @@ int main() {
 							 "[nodes_minus_one, cols]->{bx_exchange_r[q,y,x]: 0<=q<nodes_minus_one and 0<=y<2 and 0<=x<cols-2}",
                                                              q, q-1, q+1, q, async_block, sync_block,
                                                              blur_input(y,x), &dblurxy_dist_data);
-    // transfer the bottom row to the node below you. That becomes the lower node's top row
-    //    send_recv lower_exchanges = computation::create_transfer("[one, nodes_minus_one, cols, rows_per_node]->{lower_s[q,y,x]: 0<=q<nodes_minus_one and (rows_per_node-1)<=y<rows_per_node and 0<=x<cols}",    //                                                             "[one, nodes, cols]->{lower_r[q,y,x]: one<=q<nodes and 0<=y<1 and 0<=x<cols}",
-    //                                                             q, q+1, q-1, q, async_block, sync_block,
-    //                                                             blur_input(y,x), &dblurxy_dist_data);
 
     /*
      * Ordering
      */
 
     upper_exchanges.s->before(*upper_exchanges.r, computation::root);
-    //    upper_exchanges.r->before(*lower_exchanges.s, computation::root);
-    //    lower_exchanges.s->before(*lower_exchanges.r, computation::root);
     upper_exchanges.r->before(bx.get_update(0), computation::root);
     bx.get_update(0).before(*bx_exchange.s, computation::root);    
     bx_exchange.s->before(by.get_update(0), computation::root);
@@ -171,6 +151,35 @@ int main() {
     bx_exchange.s->tag_distribute_level(q);
     bx_exchange.r->tag_distribute_level(q);
 
+    // Do some other scheduling to match the Halide stuff
+    var y3("y3"), y4("y4");
+    bx.get_update(0).split(y2, 8, y3, y4);
+    bx.get_update(1).split(y2, 8, y3, y4);
+    bx.get_update(2).split(y2, 8, y3, y4);
+    bx.get_update(0).tag_parallel_level(y3);
+    bx.get_update(1).tag_parallel_level(y3);
+    bx.get_update(2).tag_parallel_level(y3);
+    bx.get_update(0).set_loop_level_names({3}, {"x"});
+    bx.get_update(1).set_loop_level_names({3}, {"x"});
+    bx.get_update(2).set_loop_level_names({3}, {"x"});
+    bx.get_update(0).tag_vector_level(x, 8);
+    bx.get_update(1).tag_vector_level(x, 8);
+    bx.get_update(2).tag_vector_level(x, 8);
+
+    by.get_update(0).split(y2, 8, y3, y4);
+    by.get_update(1).split(y2, 8, y3, y4);
+    by.get_update(2).split(y2, 8, y3, y4);
+    by.get_update(0).tag_parallel_level(y3);
+    by.get_update(1).tag_parallel_level(y3);
+    by.get_update(2).tag_parallel_level(y3);
+    by.get_update(0).set_loop_level_names({3}, {"x"});
+    by.get_update(1).set_loop_level_names({3}, {"x"});
+    by.get_update(2).set_loop_level_names({3}, {"x"});
+    by.get_update(0).tag_vector_level(x, 8);
+    by.get_update(1).tag_vector_level(x, 8);
+    by.get_update(2).tag_vector_level(x, 8);
+
+    
     // -------------------------------------------------------
     // Layer III
     // -------------------------------------------------------
@@ -183,9 +192,6 @@ int main() {
     upper_exchanges.r->collapse_many({collapser(2, 0, _cols)});
     bx_exchange.s->collapse_many({collapser(2, 0, _cols)});
     bx_exchange.r->collapse_many({collapser(2, 0, _cols)});
-
-    //    lower_exchanges.s->set_schedule_this_comp(false);
-    //    lower_exchanges.r->set_schedule_this_comp(false);
 
     /*
      * Buffers
