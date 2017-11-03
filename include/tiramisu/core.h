@@ -2982,9 +2982,9 @@ public:
          */
     void separate(int dim, tiramisu::expr N, int v, int dim_sched_after = -2);
 
-    void separate_at(int dim, expr separate_point, int dim_sched_after);
+//    void separate_at(int dim, expr separate_point, int dim_sched_after);
 
-    void separate_at(int dim, constant separate_point, int dim_sched_after);
+    void separate_at(int dim, std::vector<constant> separate_points, constant max, int dim_sched_after);
 
     /**
       * Generate the time-space domain of the computation.
@@ -3579,9 +3579,8 @@ public:
                                      tiramisu::function *fct);
 
     static send_recv create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_src,
-                                     tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
-                                     channel send_chan, channel recv_chan, tiramisu::expr e,
-                                     std::vector<tiramisu::computation *> consumers, tiramisu::function *fct);
+                                        tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
+                                        channel send_chan, channel recv_chan, tiramisu::expr e, tiramisu::function *fct);
 
 
     static void distribute(std::vector<std::vector<computation *>> ops, std::vector<int> predicates);
