@@ -33,39 +33,34 @@ int main() {
     int _nodes = _NODES;
 
     int _rows_per_node = _rows / _nodes;
-    int by_rows_per_node = _rows_per_node - 8;
+    //    int by_rows_per_node = _rows_per_node - 8;
 
     // -------------------------------------------------------
     // Layer I
     // -------------------------------------------------------
 
-    int by_rows = _rows - 8;
-    int by_cols = _cols - 8;
+    //    int by_rows = _rows - 8;
+    //    int by_cols = _cols - 8;
 
-    constant _Ny("_Ny", (expr(by_rows) + expr((int32_t)2)), p_int32, true, NULL,
-                 0, &dblurxy_dist_data);
-    constant _Nx("_Nx", expr(by_cols), p_int32, true, NULL, 0, &dblurxy_dist_data);
+    //    constant _Ny("_Ny", (expr(_rows)), p_int32, true, NULL,
+    //                 0, &dblurxy_dist_data);
+    //    constant _Nx("_Nx", expr(by_cols), p_int32, true, NULL, 0, &dblurxy_dist_data);
 
     var y("y"), x("x");
+    constant rows("rows", expr(_rows), p_int32, true, NULL, 0, &dblurxy_dist_data);
+    constant cols("cols", expr(_cols), p_int32, true, NULL, 0, &dblurxy_dist_data);
 
     computation
-            blur_input("[rows, cols]->{blur_input[i1, i0]: 0<=i1<rows and 0<=i0<cols}", expr(), false,
+            blur_input("[rows, cols]->{blur_input[i1, i0]: 0<=i1<rows+2 and 0<=i0<cols}", expr(), false,
                        p_uint64, &dblurxy_dist_data);
 
-
-    constant Ny("Ny", (expr(by_rows) + expr((int32_t)2)), p_int32, true, NULL,
-                0, &dblurxy_dist_data);
-    constant Nx("Nx", expr(by_cols), p_int32, true, NULL, 0, &dblurxy_dist_data);
-    constant My("My", expr(by_rows), p_int32, true, NULL, 0, &dblurxy_dist_data);
-    constant Mx("Mx", expr(by_cols), p_int32, true, NULL, 0, &dblurxy_dist_data);
-
-    computation bx("[Ny, Nx]->{bx[y, x]: 0<=y<Ny and 0<=x<Nx}",
+    computation bx("[rows, cols]->{bx[y, x]: 0<=y<rows and 0<=x<cols-2}",
                    (((blur_input(y, x) +
                       blur_input(y, (x + expr((int32_t)1)))) +
                      blur_input(y, (x + expr((int32_t)2)))) / expr((uint64_t)3)),
                    true, p_uint64, &dblurxy_dist_data);
 
-    computation by("[My, Mx]->{by[y, x]: 0<=y<My and 0<=x<Mx}",
+    computation by("[rows, cols]->{by[y, x]: 0<=y<rows-2 and 0<=x<cols-2}",
                    (((bx(y, x) +
                       bx((y + expr((int32_t)1)), x)) +
                      bx((y + expr((int32_t)2)), x)) / expr((uint64_t)3)),
@@ -75,14 +70,13 @@ int main() {
      * Additional constraints
      */
 
-    dblurxy_dist_data.add_context_constraints("[Nc, Ny, Nx, Mc, My, Mx, _Nc, _Ny, _Nx]->{: Nc=_Nc and Mc=_Nc and Ny=_Ny+2 and My=_Ny and Nx=_Nx and Mx=_Nx}");
+    //    dblurxy_dist_data.add_context_constraints("[Nc, Ny, Nx, Mc, My, Mx, _Nc, _Ny, _Nx]->{: Nc=_Nc and Mc=_Nc and Ny=_Ny and My=_Ny and Nx=_Nx and Mx=_Nx}");
+    //    dblurxy_dist_data.add_context_constraints("[rows,cols]->{: rows=}");
 
     // -------------------------------------------------------
     // Layer II
     // -------------------------------------------------------
 
-    constant rows("rows", expr(_rows), p_int32, true, NULL, 0, &dblurxy_dist_data);
-    constant cols("cols", expr(_cols), p_int32, true, NULL, 0, &dblurxy_dist_data);
     constant one("one", expr(1), p_int32, true, NULL, 0, &dblurxy_dist_data);
     constant two("two", expr(2), p_int32, true, NULL, 0, &dblurxy_dist_data);
     constant nodes("nodes", expr(_nodes), p_int32, true, NULL, 0, &dblurxy_dist_data);
@@ -124,26 +118,31 @@ int main() {
     channel async_block("async_block", p_uint64, {FIFO, ASYNC, BLOCK, MPI});
 
     // transfer the top row to the node above you. That becomes the upper node's bottom row
-    send_recv upper_exchanges = computation::create_transfer("[one, nodes, cols]->{upper_s[q,y,x]: one<=q<nodes and 0<=y<1 and 0<=x<cols}",
-                                                             "[nodes_minus_one, cols]->{upper_r[q,y,x]: 0<=q<nodes_minus_one and 0<=y<1 and 0<=x<cols}",
+    send_recv upper_exchanges = computation::create_transfer("[one, nodes, cols]->{upper_s[q,y,x]: one<=q<nodes and 0<=y<2 and 0<=x<cols}",
+                                                             "[nodes_minus_one, cols]->{upper_r[q,y,x]: 0<=q<nodes_minus_one and 0<=y<2 and 0<=x<cols}",
+                                                             q, q-1, q+1, q, async_block, sync_block,
+                                                             blur_input(y,x), &dblurxy_dist_data);
+    send_recv bx_exchange = computation::create_transfer("[one, nodes, cols]->{bx_exchange_s[q,y,x]: one<=q<nodes and 0<=y<2 and 0<=x<cols-2}",
+							 "[nodes_minus_one, cols]->{bx_exchange_r[q,y,x]: 0<=q<nodes_minus_one and 0<=y<2 and 0<=x<cols-2}",
                                                              q, q-1, q+1, q, async_block, sync_block,
                                                              blur_input(y,x), &dblurxy_dist_data);
     // transfer the bottom row to the node below you. That becomes the lower node's top row
-    send_recv lower_exchanges = computation::create_transfer("[one, nodes_minus_one, cols, rows_per_node]->{lower_s[q,y,x]: 0<=q<nodes_minus_one and (rows_per_node-1)<=y<rows_per_node and 0<=x<cols}",
-                                                             "[one, nodes, cols]->{lower_r[q,y,x]: one<=q<nodes and 0<=y<1 and 0<=x<cols}",
-                                                             q, q+1, q-1, q, async_block, sync_block,
-                                                             blur_input(y,x), &dblurxy_dist_data);
+    //    send_recv lower_exchanges = computation::create_transfer("[one, nodes_minus_one, cols, rows_per_node]->{lower_s[q,y,x]: 0<=q<nodes_minus_one and (rows_per_node-1)<=y<rows_per_node and 0<=x<cols}",    //                                                             "[one, nodes, cols]->{lower_r[q,y,x]: one<=q<nodes and 0<=y<1 and 0<=x<cols}",
+    //                                                             q, q+1, q-1, q, async_block, sync_block,
+    //                                                             blur_input(y,x), &dblurxy_dist_data);
 
     /*
      * Ordering
      */
 
     upper_exchanges.s->before(*upper_exchanges.r, computation::root);
-    upper_exchanges.r->before(*lower_exchanges.s, computation::root);
-    lower_exchanges.s->before(*lower_exchanges.r, computation::root);
-    lower_exchanges.r->before(bx.get_update(0), computation::root);
-    bx.get_update(0).before(by.get_update(0), computation::root);
-    by.get_update(0).before(bx.get_update(1), computation::root);
+    //    upper_exchanges.r->before(*lower_exchanges.s, computation::root);
+    //    lower_exchanges.s->before(*lower_exchanges.r, computation::root);
+    upper_exchanges.r->before(bx.get_update(0), computation::root);
+    bx.get_update(0).before(*bx_exchange.s, computation::root);    
+    bx_exchange.s->before(by.get_update(0), computation::root);
+    by.get_update(0).before(*bx_exchange.r, computation::root);
+    bx_exchange.r->before(bx.get_update(1), computation::root);
     bx.get_update(1).before(by.get_update(1), computation::root);
     by.get_update(1).before(bx.get_update(2), computation::root);
     bx.get_update(2).before(by.get_update(2), computation::root);
@@ -169,8 +168,8 @@ int main() {
     upper_exchanges.s->tag_distribute_level(q);
     upper_exchanges.r->tag_distribute_level(q);
 
-    lower_exchanges.s->tag_distribute_level(q);
-    lower_exchanges.r->tag_distribute_level(q);
+    bx_exchange.s->tag_distribute_level(q);
+    bx_exchange.r->tag_distribute_level(q);
 
     // -------------------------------------------------------
     // Layer III
@@ -182,28 +181,29 @@ int main() {
 
     upper_exchanges.s->collapse_many({collapser(2, 0, _cols)});
     upper_exchanges.r->collapse_many({collapser(2, 0, _cols)});
-    lower_exchanges.s->collapse_many({collapser(2, 0, _cols)});
-    lower_exchanges.r->collapse_many({collapser(2, 0, _cols)});
+    bx_exchange.s->collapse_many({collapser(2, 0, _cols)});
+    bx_exchange.r->collapse_many({collapser(2, 0, _cols)});
+
+    //    lower_exchanges.s->set_schedule_this_comp(false);
+    //    lower_exchanges.r->set_schedule_this_comp(false);
 
     /*
      * Buffers
      */
 
-    tiramisu::buffer buff_input("buff_input", {tiramisu::expr(_rows_per_node)+2, tiramisu::expr(_cols)}, p_uint64,
+    tiramisu::buffer buff_input("buff_input", {tiramisu::expr(_rows_per_node) + 2, tiramisu::expr(_cols)}, p_uint64,
                                 tiramisu::a_input, &dblurxy_dist_data);
 
-    tiramisu::buffer buff_bx("buff_bx", {tiramisu::expr(_rows_per_node), tiramisu::expr(by_cols)},
-                             p_uint64, tiramisu::a_temporary, &dblurxy_dist_data);
-
-    tiramisu::buffer buff_by("buff_by", {tiramisu::expr(_rows_per_node), tiramisu::expr(by_cols)},
+    tiramisu::buffer buff_bx("buff_bx", {tiramisu::expr(_rows_per_node) + 2, tiramisu::expr(_cols - 2)},
                              p_uint64, tiramisu::a_output, &dblurxy_dist_data);
 
-    // These two buffers are for the last node because it doesn't process all the rows
-    tiramisu::buffer buff_bx_last("buff_bx_last", {tiramisu::expr(by_rows_per_node + 2), tiramisu::expr(by_cols)},
-                                  p_uint64, tiramisu::a_temporary, &dblurxy_dist_data);
+    tiramisu::buffer buff_by("buff_by", {tiramisu::expr(_rows_per_node), tiramisu::expr(_cols - 2)},
+                             p_uint64, tiramisu::a_output, &dblurxy_dist_data);
 
-    // Output only for the last node
-    tiramisu::buffer buff_by_last("buff_by_last", {tiramisu::expr(by_rows_per_node), tiramisu::expr(by_cols)},
+    tiramisu::buffer buff_bx_last("buff_bx_last", {tiramisu::expr(_rows_per_node), tiramisu::expr(_cols - 2)},
+                                  p_uint64, tiramisu::a_output, &dblurxy_dist_data);
+
+    tiramisu::buffer buff_by_last("buff_by_last", {tiramisu::expr(_rows_per_node - 2), tiramisu::expr(_cols - 2)},
                                   p_uint64, tiramisu::a_output, &dblurxy_dist_data);
 
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
@@ -214,10 +214,10 @@ int main() {
     by.get_update(1).set_access("{by_1[y, x]->buff_by[y, x]}");
     by.get_update(2).set_access("{by_2[y, x]->buff_by_last[y, x]}");
 
-    upper_exchanges.r->set_access("{upper_r[q,y,x]->buff_input[" + std::to_string(_rows_per_node-1) + ", x]}"); // stick as the bottom row
-    lower_exchanges.r->set_access("{lower_r[q,y,x]->buff_input[0, x]}"); // stick as the first row
+    upper_exchanges.r->set_access("{upper_r[q,y,x]->buff_input[" + std::to_string(_rows_per_node) + " + y, x]}"); // stick as the bottom rows
+    bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_bx[" + std::to_string(_rows_per_node) + " + y, x]}");
 
-    dblurxy_dist_data.set_arguments({&buff_input, &buff_by, &buff_by_last});
+    dblurxy_dist_data.set_arguments({&buff_input, &buff_bx, &buff_bx_last, &buff_by, &buff_by_last});
     // Generate code
     dblurxy_dist_data.gen_time_space_domain();
     dblurxy_dist_data.lift_ops_to_library_calls();

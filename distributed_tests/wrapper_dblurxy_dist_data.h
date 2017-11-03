@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-int dblurxy_dist_data(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
+int dblurxy_dist_data(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
 int dblurxy_dist_data_argv(void **args);
 // Result is never null and points to constant static data
 const struct halide_filter_metadata_t *dblurxy_dist_data_metadata();
