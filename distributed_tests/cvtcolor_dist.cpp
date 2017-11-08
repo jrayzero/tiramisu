@@ -15,15 +15,14 @@
 
 using namespace tiramisu;
 
-int main(int argc, char **argv)
-{
+int main() {
     // Set default tiramisu options.
     global::set_default_tiramisu_options();
 
     //    Halide::Buffer<uint8_t> in_image = Halide::Tools::load_image("./images/rgb.png");
     int SIZE0 = _COLS;
     int SIZE1 = _ROWS;
-    int rows_per_node = SIZE1 / _NODES;
+    int rows_per_node = SIZE1 / NODES;
     tiramisu::function cvtcolor_tiramisu("cvtcolor_dist");
 
     // Output buffers.

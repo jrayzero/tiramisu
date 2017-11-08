@@ -16,24 +16,17 @@
 #define CHANNELS 3
 
 int main() {
-
     int provided = -1;
     MPI_Init_thread(NULL, NULL, REQ, &provided);
     assert(provided == REQ && "Did not get the appropriate MPI thread requirement.");
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    if (rank == 0) {
-    std::cerr << "rows: " << _ROWS << std::endl;
-    std::cerr << "cols: " << _COLS << std::endl;
-    std::cerr << "nodes: " << _NODES << std::endl;
-    }
-
-    Halide::Buffer<uint64_t> buff_input = Halide::Buffer<uint64_t>(_COLS, _ROWS / _NODES, 3);
+    Halide::Buffer<uint64_t> buff_input = Halide::Buffer<uint64_t>(_COLS, _ROWS / NODES, 3);
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
-    uint64_t *buf = (uint64_t*)malloc(sizeof(uint64_t) * ((_ROWS / _NODES)) * _COLS * CHANNELS);
+    uint64_t *buf = (uint64_t*)malloc(sizeof(uint64_t) * ((_ROWS / NODES)) * _COLS * CHANNELS);
     unsigned int next = 0;
-    for (int y = 0; y < _ROWS / _NODES; y++) {
+    for (int y = 0; y < _ROWS / NODES; y++) {
       for (int x = 0; x < _COLS; x++) {
 	for (int c = 0; c < CHANNELS; c++) {
 	  //	  buf[next] = next * rank + c;
@@ -44,7 +37,7 @@ int main() {
     }
 
 
-    Halide::Buffer<uint64_t> buff_output = Halide::Buffer<uint64_t>(_COLS, _ROWS / _NODES);
+    Halide::Buffer<uint64_t> buff_output = Halide::Buffer<uint64_t>(_COLS, _ROWS / NODES);
     std::cerr << "Rank: " << rank << std::endl;
     
     // Run once to get rid of overhead/any extra compilation stuff that needs to happen
@@ -69,7 +62,7 @@ int main() {
 	  std::string output_fn = "/data/scratch/jray/tiramisu/build/cvtcolor_dist_rank_" + std::to_string(rank) + ".txt";
 	  std::ofstream myfile;
 	  myfile.open (output_fn);
-	  for (int i = 0; i < _ROWS / _NODES; i++) {
+	  for (int i = 0; i < _ROWS / NODES; i++) {
 	    for (int j = 0; j < _COLS ; j++) {
 	      myfile << buff_output(j, i) << std::endl;
 	    }

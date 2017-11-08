@@ -2,10 +2,10 @@ include configure_paths.sh
 
 #############################################################@
 
-CXX = g++
-CXXFLAGS = -g -std=c++11 -O3 -Wall -Wno-sign-compare -fno-rtti -fvisibility=hidden
-INCLUDES = -Iinclude/ -I${ISL_INCLUDE_DIRECTORY} -I${HALIDE_SOURCE_DIRECTORY}/include -I${HALIDE_SOURCE_DIRECTORY}/tools -Ibuild/
-LIBRARIES = -L${ISL_LIB_DIRECTORY} -lisl -lgmp -L${HALIDE_LIB_DIRECTORY} -lHalide -lmpi -ldl -lpthread -lz `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
+CXX = mpicxx
+CXXFLAGS = -g -std=c++11 -O3 -Wall -Wno-sign-compare -fno-rtti -fvisibility=hidden -march=corei7-avx -mtune=corei7-avx -fopenmp -DNODES=${MPI_NODES}
+INCLUDES = -Iinclude/ -I${ISL_INCLUDE_DIRECTORY} -I${HALIDE_SOURCE_DIRECTORY}/include -I${HALIDE_SOURCE_DIRECTORY}/tools -Ibuild/ -I3rdParty/isl/include -I/data/scratch/jray/anaconda2/include/
+LIBRARIES = -Lbuild/ -L${ISL_LIB_DIRECTORY} -L3rdParty/isl/.libs -lisl -lgmp -L${HALIDE_LIB_DIRECTORY} -lHalide -lmpi_cxx -ldl -lpthread -lz `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
 HEADER_FILES = \
 	include/tiramisu/core.h \
 	include/tiramisu/debug.h \
@@ -51,7 +51,6 @@ TUTO_RUN = \
 	run_tutorial_08 \
 	run_tutorial_09 \
 	run_tutorial_10
-
 
 #####################################################
 
@@ -322,36 +321,39 @@ TEST_RUN = \
 
 
 BENCH_REF_GEN = \
+	build/bench_halide_gaussian_generator \
 	build/bench_halide_recfilter_generator \
 	build/bench_halide_divergence2d_generator \
 	build/bench_halide_heat2d_generator \
 	build/bench_halide_cvtcolor_generator \
 	build/bench_halide_filter2D_generator \
-	build/bench_halide_blurxy_generator \
-	build/bench_halide_gaussian_generator \
 	build/bench_halide_fusion_generator
+	build/bench_halide_heat2d_generator
+	build/bench_halide_blurxy_generator
 # Not supported yet: build/bench_halide_rgbyuv420_generator
 
 BENCH_TIRAMISU_GEN = \
+	build/bench_tiramisu_gaussian_generator \
 	build/bench_tiramisu_recfilter_generator \
 	build/bench_tiramisu_divergence2d_generator \
 	build/bench_tiramisu_heat2d_generator \
 	build/bench_tiramisu_cvtcolor_generator \
 	build/bench_tiramisu_filter2D_generator \
-	build/bench_tiramisu_blurxy_generator \
-	build/bench_tiramisu_gaussian_generator \
 	build/bench_tiramisu_fusion_generator
+	build/bench_tiramisu_heat2d_generator
+	build/bench_tiramisu_blurxy_generator
 # Not supported yet: build/bench_tiramisu_rgbyuv420_generator
 
 BENCH_BIN = \
+	build/bench_gaussian \
 	build/bench_recfilter \
 	build/bench_divergence2d \
 	build/bench_heat2d \
 	build/bench_cvtcolor \
 	build/bench_filter2D \
+	build/bench_fusion \
+	build/bench_heat2d \
 	build/bench_blurxy \
-	build/bench_gaussian \
-	build/bench_fusion
 # Not supported yet: build/bench_rgbyuv420
 
 
@@ -388,6 +390,43 @@ build/tutorial_%: tutorials/wrapper_tutorial_%.cpp build/tutorial_%_fct_generato
 	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
 run_tutorial_%: build/tutorial_%
 	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $< 
+
+## distributed tests
+# dblurxy
+dblurxy: $(OBJ) build/dblurxy_fct_generator build/dblurxy
+build/dblurxy_fct_generator: distributed_tests/dblurxy.cpp
+	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $@
+build/generated_dblurxy.o: build/dblurxy_fct_generator
+build/dblurxy: distributed_tests/wrapper_dblurxy.cpp build/dblurxy_fct_generator build/generated_dblurxy.o distributed_tests/wrapper_dblurxy.h ${OBJ} ${HEADER_FILES} distributed_tests/sizes.h
+	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
+# dblurxy_dist_data
+dblurxy_dist_data: $(OBJ) build/dblurxy_dist_data_fct_generator build/dblurxy_dist_data
+build/dblurxy_dist_data_fct_generator: distributed_tests/dblurxy_dist_data.cpp
+	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $@
+build/generated_dblurxy_dist_data.o: build/dblurxy_dist_data_fct_generator
+build/dblurxy_dist_data: distributed_tests/wrapper_dblurxy_dist_data.cpp build/dblurxy_dist_data_fct_generator build/generated_dblurxy_dist_data.o distributed_tests/wrapper_dblurxy_dist_data.h ${OBJ} ${HEADER_FILES} distributed_tests/sizes.h
+	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
+# cvtcolor_dist
+cvtcolor_dist: $(OBJ) build/cvtcolor_dist_fct_generator build/cvtcolor_dist
+build/cvtcolor_dist_fct_generator: distributed_tests/cvtcolor_dist.cpp
+	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $@
+build/generated_cvtcolor_dist.o: build/cvtcolor_dist_fct_generator
+build/cvtcolor_dist: distributed_tests/wrapper_cvtcolor_dist.cpp build/cvtcolor_dist_fct_generator build/generated_cvtcolor_dist.o distributed_tests/wrapper_cvtcolor_dist.h ${OBJ} ${HEADER_FILES}
+	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
+# warp_affine_dist
+warp_affine_dist: $(OBJ) build/warp_affine_dist_fct_generator build/warp_affine_dist
+build/warp_affine_dist_fct_generator: distributed_tests/warp_affine_dist.cpp
+	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $@
+build/generated_warp_affine_dist.o: build/warp_affine_dist_fct_generator
+build/warp_affine_dist: distributed_tests/wrapper_warp_affine_dist.cpp build/warp_affine_dist_fct_generator build/generated_warp_affine_dist.o distributed_tests/wrapper_warp_affine_dist.h ${OBJ} ${HEADER_FILES}
+	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
 
 
 ###################################################################

@@ -23,29 +23,34 @@ int main() {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
-    uint64_t *buf = (uint64_t*)malloc(sizeof(uint64_t) * ((_ROWS / _NODES) + 2) * _COLS);
+    uint64_t *buf = (uint64_t*)malloc(sizeof(uint64_t) * ((_ROWS / _NODES)) * _COLS);
     unsigned int next = 0;
     for (int y = 0; y < _ROWS / _NODES; y++) {
       for (int x = 0; x < _COLS; x++) {
-	buf[next] = next % 1000;
+	buf[next] = next * rank;
 	next++;
       }
     }
 
-    Halide::Buffer<uint64_t> buff_input = Halide::Buffer<uint64_t>(buf, {_COLS, _ROWS / _NODES + 2});
-    Halide::Buffer<uint64_t> buff_bx(_COLS - 2, (_ROWS / _NODES) + 2);
+
+    Halide::Buffer<uint64_t> buff_input = Halide::Buffer<uint64_t>(buf, {_COLS, _ROWS / _NODES});
+    Halide::Buffer<uint64_t> buff_bx(rank == _NODES - 1 ? 0 : _COLS - 2, rank == _NODES - 1 ? 0 : (_ROWS / _NODES) + 2);
     Halide::Buffer<uint64_t> buff_bx_last_node(rank == _NODES - 1 ? _COLS - 2 : 0,
                                                    rank == _NODES - 1 ? (_ROWS / _NODES) : 0);
-    Halide::Buffer<uint64_t> buff_by(_COLS - 2, _ROWS / _NODES);
+    Halide::Buffer<uint64_t> buff_by(rank == _NODES - 1 ? 0 : _COLS - 2, rank == _NODES - 1 ? 0 : _ROWS / _NODES);
     Halide::Buffer<uint64_t> buff_by_last_node(rank == _NODES - 1 ? _COLS - 2 : 0,
                                                    rank == _NODES - 1 ? (_ROWS / _NODES) - 2 : 0);
     std::cerr << "Rank: " << rank << std::endl;
+    
+    // Run once to get rid of overhead/any extra compilation stuff that needs to happen
+    //    dblurxy_dist_data(buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_bx_last_node.raw_buffer(), buff_by.raw_buffer(), buff_by_last_node.raw_buffer());
 
     MPI_Barrier(MPI_COMM_WORLD);
-    for (int i=0; i<50; i++) {
+    for (int i=0; i<1; i++) {
         if (rank == 0) {
             std::cerr << "Starting iter: " << i << std::endl;
         }
+        MPI_Barrier(MPI_COMM_WORLD);
         auto start = std::chrono::high_resolution_clock::now();
         dblurxy_dist_data(buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_bx_last_node.raw_buffer(), buff_by.raw_buffer(), buff_by_last_node.raw_buffer());
         MPI_Barrier(MPI_COMM_WORLD);
@@ -59,7 +64,7 @@ int main() {
 	  std::string output_fn = "/data/scratch/jray/tiramisu/build/dblurxy_dist_data_rank_" + std::to_string(rank) + ".txt";
 	  std::ofstream myfile;
 	  myfile.open (output_fn);
-	  for (int i = 0; i < _ROWS / _NODES; i++) {
+	  for (int i = _ROWS / _NODES - 1; i < _ROWS / _NODES; i++) {
 	    for (int j = 0; j < _COLS - 2; j++) {
 	      if (rank == _NODES - 1) {
 		myfile << buff_by_last_node(j, i) << std::endl;
@@ -69,16 +74,16 @@ int main() {
 	    }
 	  }
 	  myfile.close();
-	}
+	  }
 	MPI_Barrier(MPI_COMM_WORLD);
     }
 
     if (rank == 0) {
-        free(buf);
         print_time("performance_CPU.csv", "blurxy_dist", {"Tiramisu_dist"}, {median(duration_vector)});
+        free(buf);
     }
 
-    // print out the results to file
+    MPI_Barrier(MPI_COMM_WORLD);
 
     MPI_Finalize();
 
