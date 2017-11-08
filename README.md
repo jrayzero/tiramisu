@@ -22,8 +22,11 @@ Compiling Tiramisu
         sudo apt-get install autoconf
         sudo apt-get install libtool
 
-- LLVM-3.7 or greater (required by the [Halide] (https://github.com/halide/Halide) framework,
+- LLVM-3.9 or greater (required by the [Halide] (https://github.com/halide/Halide) framework,
   check the section "Acquiring LLVM" in the Halide [README] (https://github.com/halide/Halide/blob/master/README.md) for details on how to get LLVM and install it).
+
+- CMake 3.5 or greater. Instructions on installing CMake can be found on
+  the project's [website] (https://cmake.org/install/).
 
 #### Building
 - Get Tiramisu
@@ -35,17 +38,21 @@ Compiling Tiramisu
 
         llvm-config
 
-An example is provided in the file.
+  An example is provided in the file.
+
 
 - Compile the dependencies then compile Tiramisu
 
         ./get_and_install_isl.sh
         ./get_and_install_halide.sh
-        make -j
+	mkdir build/
+	cd build/
+        cmake ../
+        make -j tiramisu
 
 #### Run Tutorials
 
-To run all the tutorials
+To run all the tutorials, assuming you are in the build/ directory
 
     make tutorials
     
@@ -54,18 +61,50 @@ To run only one tutorial (tutorial_01 for example)
     make run_tutorial_01
     
 This will compile and run the code generator and then the wrapper.
-    
+
 #### Run Tests
 
-To run all the tests
+To run all the tests, assuming you are in the build/ directory
 
-    make tests
+    make test
+
+or
+
+    ctest
     
 To run only one test (test_01 for example)
 
-    make run_test_01
-    
+    ctest -R 01
+
 This will compile and run the code generator and then the wrapper.
+
+To view the output of a test pass the `--verbose` option to `ctest`.
+
+To add a new test, add two files in tests/. test_XX.cpp should contain
+the actual Tiramisu generator code while wrapper_test_XX.cpp should contain
+wrapper code that initializes the input data, calls the generated function,
+and compares its output with a reference output.  You should then add the
+number of the test XX in the file test_list.
+
+#### Run Benchmarks
+
+To run all the benchmarks, assuming you are in the build/ directory
+
+    make benchmarks
+
+To run only one benchmark (cvtcolor for example)
+
+    make run_benchmark_cvtcolor
+
+If you want to force the rebuild of a given benchmark, add -B option.
+
+    make -B run_benchmark_cvtcolor
+
+This will rebuild tiramisu, rebuild all the stage of code generation and run
+the benchmark.
+
+To add a given benchmark to the build system, add its name in the file
+benchmark_list.
 
 #### Build Documentation
 
@@ -125,7 +164,8 @@ You may get an access rights error from git when running trying to retrieve Hali
 
 To build Tiramisu
 
-    make -j
+    cmake CMakeLists.txt
+    make -j tiramisu
 
 You need to add the Halide library path to your system library path (DYLD_LIBRARY_PATH on Mac OS).
 
@@ -166,6 +206,6 @@ More examples can be found in the [tests](tests/) folder. Please check [list_of_
 Adding new tests
 -------------------
 
-- To create a new test, run `./new_test.sh [test_name]`. This will show you the new test number,
+- To create a new test, run `./new_test.sh <test_name>`. This will show you the new test number,
 and create mock files for you to fill. If the test number is N, it will create tests/test_N.cpp,
 tests/wrapper_test_N.cpp, and tests/wrapper_test_N.h, unless they already exist.

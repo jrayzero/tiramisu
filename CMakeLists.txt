@@ -27,12 +27,23 @@ add_library(tiramisu STATIC ${TIRAMISU_SRC} ${TIRAMISU_INCLUDE})
 add_executable(generated_dblurxy distributed_tests/dblurxy.cpp)
 add_executable(dblurxy distributed_tests/wrapper_dblurxy.cpp ${CMAKE_SOURCE_DIR}/build/generated_dblurxy.o)
 add_dependencies(dblurxy generated_dblurxy)
-
 target_link_libraries(generated_dblurxy tiramisu ${LIBS})
 target_link_libraries(dblurxy tiramisu ${LIBS})
+
+add_executable(generated_dblurxy_dist_data distributed_tests/dblurxy_dist_data.cpp)
+add_executable(dblurxy_dist_data distributed_tests/wrapper_dblurxy_dist_data.cpp ${CMAKE_SOURCE_DIR}/build/generated_dblurxy_dist_data.o)
+add_dependencies(dblurxy_dist_data generated_dblurxy_dist_data)
+target_link_libraries(generated_dblurxy_dist_data tiramisu ${LIBS})
+target_link_libraries(dblurxy_dist_data tiramisu ${LIBS})
 
 add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/build/generated_dblurxy.o
         COMMAND generated_dblurxy
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMENT "Running generated_dblurxy"
         SOURCES distributed_tests/dblurxy.cpp)
+
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/build/generated_dblurxy_dist_data.o
+        COMMAND generated_dblurxy_dist_data
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Running generated_dblurxy_dist_data"
+        SOURCES distributed_tests/dblurxy_dist_data.cpp)

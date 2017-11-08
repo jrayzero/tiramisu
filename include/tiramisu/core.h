@@ -965,9 +965,7 @@ private:
 
     /**
       * The sizes of the dimensions of the buffer.  Assuming the following
-      * buffer: buf[N0][N1][N2].  The first vector element represents the
-      * size of rightmost dimension of the buffer (i.e. N2), the second
-      * vector element is N1, and the last vector element is N0.
+      * buffer buf[N0][N1][N2], dim_sizes should be {N0, N1, N2}.
       */
     std::vector<tiramisu::expr> dim_sizes;
 
@@ -1031,13 +1029,9 @@ public:
       * \p name is the name of the buffer.
       *
       * \p dim_sizes is a vector of tiramisu expressions that represent the
-      * size of each dimension in the buffer.  The first vector element
-      * represents the rightmost array dimension, while the last vector
-      * element represents the leftmost array dimension.
-      * For example, in the buffer buf[N0][N1][N2], the first element
-      * in the vector \p dim_sizes represents the size of rightmost
-      * dimension of the buffer (i.e. N2), the second vector element
-      * is N1, and the last vector element is N0.
+      * size of each dimension in the buffer.
+      * Assuming we want to declare the buffer buf[N0][N1][N2],
+      * then the vector of sizes should be {N0, N1, N2}.
       * Buffer dimensions in Tiramisu have the same semantics as in
       * C/C++.
       *
@@ -1123,7 +1117,10 @@ public:
      * \endcode
      *
      */
+    //@{
+    tiramisu::computation *allocate_at(tiramisu::computation &C, tiramisu::var level);
     tiramisu::computation *allocate_at(tiramisu::computation &C, int level);
+    //@}
 
     /**
       * \brief Dump the function on standard output.
@@ -1165,10 +1162,6 @@ public:
 
     /**
       * Return the sizes of the dimensions of the buffer.
-      * Assuming the following buffer: buf[N0][N1][N2].  The first
-      * vector element represents the size of rightmost dimension
-      * of the buffer (i.e. N2), the second vector element is N1,
-      * and the last vector element is N0.
       */
     const std::vector<tiramisu::expr> &get_dim_sizes() const;
 
@@ -1298,6 +1291,20 @@ private:
       * Data type: the type of the value returned by the computation.
       */
     tiramisu::primitive_t data_type;
+
+    /**
+      * Number of definitions added to this computation. Each time the function
+      * add_definitions is called, definitions_number is incremented.
+      */
+    int definitions_number;
+
+    /**
+      * The ID of this definition. Each new computation when created has a
+      * definition_ID equal to 0.  When a new definition is added, its ID
+      * is 1, when a new definition is added, its definition ID is set to 2,
+      * ...
+      */
+    int definition_ID;
 
     /**
      * An integer indicating the number of duplicates of this computation.
@@ -1565,37 +1572,6 @@ private:
     void add_schedule_constraint(std::string domain_constraints, std::string range_constraints);
 
     /**
-      * This function is equivalent to
-      *     void after(computation &comp, tiramisu::var iterator);
-      * except that it uses loop level numbers (0, 1, 2, ...) instead of using loop variables
-      * (tiramisu::var).  Tiramisu internally represent loop levels using numbers instead
-      * of variable names, and this is the actual function used internally.
-      *
-      * The outermost loop level is 0.  The root level is computation::root_dimension.
-      *
-      * For example assuming we have the two computations
-      *
-      *     {S0[i,j]: 0<=i<N and 0<=j<N} and {S1[i,j]: 0<=i<N and 0<=j<N}
-      *
-      * In order to make S1 run after S0 in the i loop, one should use
-      *
-      *     S1.after(S0,0)
-      *
-      * which means: S1 is after S0 at the loop level 0 (which is i).
-      *
-      * The corresponding code is
-      *
-      *     for (i=0; i<N; i++)
-      *     {
-      *         for (j=0; j<N; j++)
-      *             S0;
-      *         for (j=0; j<N; j++)
-      *             S1;
-      *     }
-      */
-    void after(computation &comp, int level);
-
-    /**
       * Check that the names used in \p dimensions are not already
       * in use.
       */
@@ -1836,7 +1812,35 @@ private:
       * Get the number of dimensions of the iteration
       * domain of the computation.
       */
-    int get_n_dimensions();
+    int get_iteration_domain_dimensions_number();
+
+    /**
+      * Return the names of loop levels.
+      * (i.e., the names of dynamic dimensions in time-space).
+      */
+    std::vector<std::string> get_loop_level_names();
+
+    /**
+      * Get the number of loop levels.
+      */
+    int get_loop_levels_number();
+
+    /**
+      * Return the root of the tree of definitions of this computation.
+      * The tree of definitions is the tree that emerges after adding multiple
+      * definitions to the same computation. Let's take the following example.
+      * Assuming we have the computation c0.  We can add a definition c1 to c0.
+      * The tree in this case would have two nodes, c0 and c1. c0 is the root.
+      * We can add another defintion c2 to c0. Then we can add another defintion c3
+      * to c1. In this case the tree would have four nodes where c0 is the root.
+      */
+    tiramisu::computation *get_root_of_definition_tree();
+
+    /**
+      * Get the number of dimensions of the time-space
+      * domain of the computation.
+      */
+    int get_time_space_dimensions_number();
 
     /**
       * Trim the union of schedules of the computation and
@@ -1942,7 +1946,12 @@ protected:
     /**
       * Assign a name to iteration domain dimensions that do not have a name.
       */
-    void name_unnamed_dimensions();
+    void name_unnamed_iteration_domain_dimensions();
+
+    /**
+      * Assign a name to iteration domain dimensions that do not have a name.
+      */
+    void name_unnamed_time_space_dimensions();
 
     /**
       * Set an identity schedule for the computation.
@@ -1984,15 +1993,88 @@ public:
     void rename_computation(std::string new_name);
 
     /**
+      * Separate the iteration domain into two iteration domains using
+      * the constant \p C.
+      * Let us assume that the dimension \p dim of the iteration domain
+      * is called i.  The iteration domain is separated into two domains
+      * using the hyperplane (i = v*floor(N/v)). That means, two copies of the
+      * iteration domain are created, the constraint (i<=v*floor(N/v)) is added to
+      * the schedule of the first while the constrain (i>v*floor(N/v)) is added to
+      * the schedule of the second.
+      *
+      * Let us assume that we have the following iteration domain
+      *
+      *   {S0[i,j]: 0<=i<N and 0<=j<M}
+      *
+      * To separate this iteration domain by the hyperplane j=4*floor(M/4), one should
+      * call
+      *
+      *   S0.separate(1, tiramisu::expr("M"), 4)
+      *
+      * This will result in the creation of two computations that have the same
+      * iteration domains but have different schedules. The schedules are as
+      * follows:
+      *
+      * The schedule of the original (full) computation would be
+      * {S0[i,j]->S0[0, 0, i, 0, j, 0]: j<4*floor(M/4)}
+      *
+      * The schedule of the separated (partial) computation would be
+      * {S0[i]->S0[0, 0, i, 10, j, 0]: 4*floor(M/4)<=j}
+      *
+      * The second computation created using separate can be accessed with
+      * get_update().
+      */
+    void separate(int dim, tiramisu::expr N, int v);
+
+    /**
+      * Separate then split the loop \p L0
+      * (see tiramisu::computation::separate and tiramisu::computation::split)
+      *
+      * This function returns true if the split actually happened (in some
+      * cases, if the loop cannot be split because it is too small for example,
+      * then no split happens even after calling the split function, in such
+      * cases the function returns false).
+      */
+    //@{
+    bool separateAndSplit(tiramisu::var L0, int sizeX);
+    bool separateAndSplit(tiramisu::var L0, int sizeX,
+	    tiramisu::var L0_outer, tiramisu::var L0_inner);
+    //@}
+
+    /**
+      * Split the loop level \p L0 of the iteration space into two
+      * new loop levels.
+      *
+      * \p sizeX is the extent (size) of the inner loop created after
+      * splitting.
+      */
+    //@{
+    //@}
+
+    /**
       * Set the names of loop levels dimensions.
       * The loop levels are specified using \p loop_levels
       * and their names are specified using \p names.
       * Users can only set the names of loop levels (dynamic dimensions),
       * the static dimension names are set to default names.
       */
-    void set_loop_level_names(std::vector<int> loop_levels,
-                              std::vector<std::string> names);
-private:
+    void set_loop_level_names(std::vector<int> loop_levels, std::vector<std::string> names);
+
+    /**
+      * Set the names of loop level dimensions.
+      * The loop level names are specified using \p names.
+      * Users can only set the names of loop levels (dynamic dimensions),
+      * the static dimension names are set to default names.
+      */
+    void set_loop_level_names(std::vector<std::string> names);
+
+    /**
+      * Set the names of the dimensions of the schedule domain.
+      * The dimension names are specified using \p names, their positions
+      * are indicated using \p loop_levels.
+      */
+    void set_schedule_domain_dim_names(std::vector<int> loop_levels, std::vector<std::string> names);
+
     /**
       * Set the iteration domain of the computation
       */
@@ -2051,7 +2133,7 @@ private:
     void tag_gpu_level(int L0, int L1, int L2, int L3);
     void tag_gpu_level(int L0, int L1, int L2, int L3, int L4, int L5);
     // @}
-
+    
     /**
       * Tag the loop level \p L0 and \p L1 to be mapped to GPU block
       * dimensions.
@@ -2117,6 +2199,33 @@ private:
       * always this very computation.
       */
     std::vector<tiramisu::computation *> updates;
+
+    /**
+      * Update loop level names. This function should be called after each scheduling operation
+      * because scheduling usually changes the original loop level names.
+      * This function erases \p nb_loop_levels_to_erase loop level names starting from the
+      * loop level \p start_erasing. It then inserts the loop level names \p new_names in
+      * \p start_erasing. In other words, it replaces the names of loop levels from
+      * \p start_erasing to \p start_erasing + \p nb_loop_levels_to_erase with the loop levels
+      * indicated by \p new_names.  This function sets the non erased loop levels to be equal to the
+      * original loop level names.
+      *
+      * \p original_loop_level_names : a vector containing the original loop level names (loop level
+      * names before scheduling).
+      *
+      * \p new_names : the new loop level names.
+      *
+      * \p start_erasing : start erasing loop levels from this loop level.
+      *
+      * \p nb_loop_levels_to_erase : number of loop levels to erase.
+      *
+      * Example. Assuming the original loop levels are {i0, i1, i2, i3}
+      *
+      * Calling this->update_names({i0, i1, i2, i3}, {x0, x1}, 1, 2) updates the loop levels to become
+      * {i0, x0, x1, i3}.
+      */
+    void update_names(std::vector<std::string> original_loop_level_names, std::vector<std::string> new_names,
+		      int start_erasing, int nb_loop_levels_to_erase);
 
     /**
       * A vector describing the access variables in the original definition of  a computation.
@@ -2191,6 +2300,14 @@ protected:
       * results of this computation.
       */
     std::vector<tiramisu::expr>* compute_buffer_size();
+
+    /**
+      * Generates the time-space domain and construct an AST that scans that
+      * time-space domain, then compute the depth of this AST.
+      * This is useful for example to know if all the dimensions of the time-space
+      * domain will correspond to a loop level in the final generated AST.
+      */
+    int compute_maximal_AST_depth();
 
     /**
       * Return the context of the computations.
@@ -2361,10 +2478,11 @@ protected:
       * cannot mix the use of the two in the same program because they are not compatible.
       */
     // @{
-public:
     void set_schedule(isl_map *map);
     void set_schedule(std::string map_str);
     // @}
+
+public:
 
     void set_schedule_this_comp(bool should_schedule);
 
@@ -2686,6 +2804,37 @@ public:
       */
     void after(computation &comp, tiramisu::var iterator);
 
+    /**
+      * This function is equivalent to
+      *     void after(computation &comp, tiramisu::var iterator);
+      * except that it uses loop level numbers (0, 1, 2, ...) instead of using loop variables
+      * (tiramisu::var).  Tiramisu internally represent loop levels using numbers instead
+      * of variable names, and this is the actual function used internally.
+      *
+      * The outermost loop level is 0.  The root level is computation::root_dimension.
+      *
+      * For example assuming we have the two computations
+      *
+      *     {S0[i,j]: 0<=i<N and 0<=j<N} and {S1[i,j]: 0<=i<N and 0<=j<N}
+      *
+      * In order to make S1 run after S0 in the i loop, one should use
+      *
+      *     S1.after(S0,0)
+      *
+      * which means: S1 is after S0 at the loop level 0 (which is i).
+      *
+      * The corresponding code is
+      *
+      *     for (i=0; i<N; i++)
+      *     {
+      *         for (j=0; j<N; j++)
+      *             S0;
+      *         for (j=0; j<N; j++)
+      *             S1;
+      *     }
+      */
+    void after(computation &comp, int level);
+
     /*
      * \brief Allocate a buffer for the computation automatically.  The size of the buffer
      * is deduced automatically and a name is assigned to it automatically.
@@ -2796,7 +2945,7 @@ public:
       *
       * This computation is scheduled so that the values consumed by the
       * \p consumer are computed at the level \p L and in the same loop
-      * nest of the consumer.
+      * nest of the consumer. \p L is a loop level in the consumer.
       *
       * If the consumer needs this computation to be computed redundantly,
       * the function creates the necessary redundant computations and schedules
@@ -2948,42 +3097,6 @@ public:
         return output;
     }
 
-    /**
-         * Separate the iteration domain into two iteration domains using
-         * the constant \p C.
-         * Let us assume that the dimension \p dim of the iteration domain
-         * is called i.  The iteration domain is separated into two domains
-         * using the hyperplane (i = v*floor(N/v)). That means, two copies of the
-         * iteration domain are created, the constraint (i<=v*floor(N/v)) is added to
-         * the schedule of the first while the constrain (i>v*floor(N/v)) is added to
-         * the schedule of the second.
-         *
-         * Let us assume that we have the following iteration domain
-         *
-         *   {S0[i,j]: 0<=i<N and 0<=j<M}
-         *
-         * To separate this iteration domain by the hyperplane j=4*floor(M/4), one should
-         * call
-         *
-         *   S0.separate(1, tiramisu::expr("M"), 4)
-         *
-         * This will result in the creation of two computations that have the same
-         * iteration domains but have different schedules. The schedules are as
-         * follows:
-         *
-         * The schedule of the original (full) computation would be
-         * {S0[i,j]->S0[0, 0, i, 0, j, 0]: j<4*floor(M/4)}
-         *
-         * The schedule of the separated (partial) computation would be
-         * {S0[i]->S0[0, 0, i, 10, j, 0]: 4*floor(M/4)<=j}
-         *
-         * The second computation created using separate can be accessed with
-         * get_update().
-         */
-    void separate(int dim, tiramisu::expr N, int v, int dim_sched_after = -2);
-
-//    void separate_at(int dim, expr separate_point, int dim_sched_after);
-
     void separate_at(int dim, std::vector<constant> separate_points, constant max, int dim_sched_after);
 
     /**
@@ -3007,6 +3120,18 @@ public:
       * Get the last update of a computation.
       */
     tiramisu::computation& get_last_update();
+
+    /**
+      * Search the time-space domain (the range of the schedule) and
+      * return the loop level number that correspond to the dimension
+      * named \p dim.
+      * In other words, translate the vector of dimension name (\p dim_name)
+      * into a loop level number.
+      */
+    int get_loop_level_number_from_dimension_name(std::string dim_name)
+    {
+	    return this->get_loop_level_numbers_from_dimension_names({dim_name})[0];
+    }
 
     /**
       * Returns a pointer to the computation scheduled immediately before this computation,
@@ -3596,6 +3721,21 @@ public:
   */
 class constant: public computation
 {
+private:
+    /**
+      * If this constant is not function wide, i.e., if it is computed
+      * with a computation, then \p compute_with_computation is a pointer on the
+      * computation with whom this constant should be computed.
+      * We need to know this because we need to translate the accesses
+      * used within the RHS of this contant expression to the new scheduled
+      * accesses. Since a computation does not have a buffer access (it is
+      * translated into a let statement), it also does not have an iterator
+      * map, thus it cannot translate its accesses to scheduled accesses.
+      * Thus we use the iterator map of the computation with whome we
+      * compute this constant and take its iterator map.
+      */
+    tiramisu::computation *compute_with_computation;
+
 public:
 
     /**
@@ -3635,6 +3775,18 @@ public:
              int at_loop_level,
              tiramisu::function *func);
 
+    constant(std::string param_name, const tiramisu::expr &param_expr,
+             tiramisu::primitive_t t,
+             tiramisu::function *func);
+
+    /**
+      * Get the computation with whom this constant is computed.
+      */
+    tiramisu::computation *get_computation_with_whom_this_is_computed()
+    {
+	    return compute_with_computation;
+    }
+
     /**
       * Dump the invariant on standard output (dump most of the fields of
       * the invariant class).
@@ -3645,6 +3797,7 @@ public:
       */
     void dump(bool exhaustive) const;
 
+    operator expr();
 };
 
 /**
@@ -3808,14 +3961,18 @@ public:
 class utility
 {
 public:
-
     /**
-     * Traverse recursively the ISL AST tree.
+     * Traverse recursively the ISL AST tree
+     *
+     * \p node represents the root of the tree to be traversed.
+     *
      * \p dim is the dimension of the loop from which the bounds have to be
-     * extracted. \p upper is a boolean that should be set to true to extract
+     * extracted.
+     *
+     * \p upper is a boolean that should be set to true to extract
      * the upper bound and false to extract the lower bound.
      */
-    static isl_ast_expr *extract_bound_expression(isl_ast_node *ast, int dim, bool upper);
+     static expr extract_bound_expression(isl_ast_node *ast, int dim, bool upper);
 
     /**
      * Return a tiramisu::expr representing the bound of

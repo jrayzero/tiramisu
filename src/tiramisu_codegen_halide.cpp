@@ -1324,6 +1324,7 @@ isl_ast_node *generator::stmt_code_generator(isl_ast_node *node, isl_ast_build *
             generator::get_rhs_accesses(func, comp, accesses, true);
         }
 
+
         isl_map *req_access = nullptr;
         if (comp->req_access_map) {
             // This has a special LHS access into the request buffer
@@ -1339,6 +1340,23 @@ isl_ast_node *generator::stmt_code_generator(isl_ast_node *node, isl_ast_build *
             comp->req_index_expr = create_isl_ast_index_expression(build, req_access, comp->should_drop_rank_iter() ? 0 : -1);
             isl_map_free(req_access);
         }
+
+       /*
+        * Compute the iterators map.
+        * The iterators map is map between the original names of the iterators of a computation
+        * and their transformed form after schedule (also after renaming).
+        *
+        * If in the original computation, we had
+        *
+        * {C[i0, i1]: ...}
+        *
+        * And if in the generated code, the iterators are called c0, c1, c2 and c3 and
+        * the loops are tiled, then the map will be
+        *
+        * {<i0, c0*10+c2>, <i1, c1*10+c3>}.
+        **/
+        std::map<std::string, isl_ast_expr *> iterators_map = generator::compute_iterators_map(comp, build);
+        comp->set_iterators_map(iterators_map);
 
         if (!accesses.empty())
         {
@@ -1386,24 +1404,7 @@ isl_ast_node *generator::stmt_code_generator(isl_ast_node *node, isl_ast_build *
                     }
                 }
             }
-
-            /*
-             * Compute the iterators map.
-             * The iterators map is map between the original names of the iterators of a computation
-             * and their transformed form after schedule (also after renaming).
-             *
-             * If in the original computation, we had
-             *
-             * {C[i0, i1]: ...}
-             *
-             * And if in the generated code, the iterators are called c0, c1, c2 and c3 and
-             * the loops are tiled, then the map will be
-             *
-             * {<i0, c0*10+c2>, <i1, c1*10+c3>}.
-             **/
-            std::map<std::string, isl_ast_expr *> iterators_map = generator::compute_iterators_map(comp, build);
-            comp->set_iterators_map(iterators_map);
-
+ 
             // We want to insert the elements of index_expressions vector one by one in the beginning of comp->get_index_expr()
             for (int i = index_expressions.size() - 1; i >= 0; i--)
             {
@@ -1714,7 +1715,8 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                     // that represents a computation access.
                     const auto sz = buf->get_dim_sizes()[i];
                     std::vector<isl_ast_expr *> ie = {};
-                    halide_dim_sizes.push_back(generator::halide_expr_from_tiramisu_expr(NULL, ie, sz, nullptr));
+		    tiramisu::expr dim_sz = replace_original_indices_with_transformed_indices(sz, comp->get_iterators_map());
+                    halide_dim_sizes.push_back(generator::halide_expr_from_tiramisu_expr(NULL, ie, dim_sz, comp));
                 }
 
                 if (comp->get_expr().get_op_type() == tiramisu::o_allocate)
@@ -2377,8 +2379,35 @@ void tiramisu::computation::create_halide_assignment()
                 this->expression.dump(false));
         DEBUG_NEWLINE(10);
 
-        Halide::Expr result = generator::halide_expr_from_tiramisu_expr(this->get_function(), this->get_index_expr(),
-                                                                        this->expression, this);
+	// Assuming this computation is not the original computation, but a
+	// definition that was added to the original computation. We need to
+	// retrieve the original computation.
+	tiramisu::constant *root = (tiramisu::constant *)
+	    this->get_root_of_definition_tree();
+
+	Halide::Expr result;
+	if (root->get_computation_with_whom_this_is_computed() != NULL)
+	{
+ 	  DEBUG(10, tiramisu::str_dump("1."));
+
+	  result = generator::halide_expr_from_tiramisu_expr(this->get_function(),
+			this->get_index_expr(),
+			replace_original_indices_with_transformed_indices(this->expression,
+		    						          root->get_computation_with_whom_this_is_computed()->get_iterators_map()), nullptr);
+ 	  DEBUG(10, tiramisu::str_dump("2."));
+	}
+	else
+	{
+ 	  DEBUG(10, tiramisu::str_dump("3."));
+
+	  result = generator::halide_expr_from_tiramisu_expr(this->get_function(),
+			this->get_index_expr(),
+							     this->expression, nullptr);
+
+	  DEBUG(10, tiramisu::str_dump("4."));
+	}
+
+	DEBUG(10, tiramisu::str_dump("The expression translated to a Halide expression: "); std::cout << result << std::endl);
 
         Halide::Type l_type = halide_type_from_tiramisu_type(this->get_data_type());
 
