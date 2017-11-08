@@ -23,7 +23,6 @@
 using namespace tiramisu;
 
 int main() {
-
     global::set_default_tiramisu_options();
 
     function dblurxy_dist_data("dblurxy_dist_data");
