@@ -2015,7 +2015,7 @@ void tiramisu::computation::vectorize(tiramisu::var L0_var, int v)
     DEBUG_INDENT(-4);
 }
 
-void computation::update_names(std::vector<std::string> original_loop_level_names, std::vector<std::string> new_names,
+  /*void computation::update_names(std::vector<std::string> original_loop_level_names, std::vector<std::string> new_names,
 			       int erase_from, int nb_loop_levels_to_erase)
 {
     DEBUG_FCT_NAME(3);
@@ -2066,7 +2066,61 @@ void computation::update_names(std::vector<std::string> original_loop_level_name
     }
 
     DEBUG_INDENT(-4);
-}
+    }*/
+
+  void computation::update_names(std::vector<std::string> original_loop_level_names, std::vector<std::string> new_names,
+				 int erase_from, int nb_loop_levels_to_erase)
+  {
+    DEBUG_FCT_NAME(3);
+    DEBUG_INDENT(4);
+
+    DEBUG_NO_NEWLINE(3, tiramisu::str_dump("Original loop level names: "));
+    for (auto n: original_loop_level_names)
+      {
+	DEBUG_NO_NEWLINE_NO_INDENT(3, tiramisu::str_dump(n + " "));
+      }
+    DEBUG_NEWLINE(3);
+
+    DEBUG_NO_NEWLINE(3, tiramisu::str_dump("New names: "));
+    for (auto n: new_names)
+      {
+	DEBUG_NO_NEWLINE_NO_INDENT(3, tiramisu::str_dump(n + " "));
+      }
+    DEBUG_NEWLINE(3);
+
+    DEBUG(3, tiramisu::str_dump("Start erasing from: " + std::to_string(erase_from)));
+    DEBUG(3, tiramisu::str_dump("Number of loop levels to erase: " + std::to_string(nb_loop_levels_to_erase)));
+
+    original_loop_level_names.erase(original_loop_level_names.begin() + erase_from, original_loop_level_names.begin() + erase_from + nb_loop_levels_to_erase);
+
+    DEBUG_NO_NEWLINE(3, tiramisu::str_dump("Original loop level names after erasing loop levels: "));
+    for (auto n: original_loop_level_names)
+      {
+	DEBUG_NO_NEWLINE_NO_INDENT(3, tiramisu::str_dump(n + " "));
+      }
+    DEBUG_NEWLINE(3);
+
+    original_loop_level_names.insert(original_loop_level_names.begin() + erase_from, new_names.begin(), new_names.end());
+
+    DEBUG_NO_NEWLINE(3, tiramisu::str_dump("Original loop level names after inserting the new loop levels: "));
+    for (auto n: original_loop_level_names)
+      {
+	DEBUG_NO_NEWLINE_NO_INDENT(3, tiramisu::str_dump(n + " "));
+      }
+    DEBUG_NEWLINE(3);
+
+    this->set_loop_level_names(original_loop_level_names);
+    this->name_unnamed_time_space_dimensions();
+
+    DEBUG(3, tiramisu::str_dump("Names updated. New names are: "));
+    for (auto n: this->get_loop_level_names())
+      {
+	DEBUG_NO_NEWLINE_NO_INDENT(3, tiramisu::str_dump(n + " "));
+      }
+
+    DEBUG_INDENT(-4);
+  }
+
 
 void tiramisu::computation::vectorize(tiramisu::var L0_var, int v, tiramisu::var L0_outer, tiramisu::var L0_inner)
 {
