@@ -43,9 +43,12 @@ int main() {
     Halide::Buffer<uint64_t> buff_output(rank == NODES - 1 ? 0 : _COLS - 4, rank == NODES - 1 ? 0 : _ROWS / NODES, _CHANNELS);
     Halide::Buffer<uint64_t> buff_output_last_node(rank == NODES - 1 ? _COLS - 4 : 0, rank == NODES - 1 ? (_ROWS / NODES) - 4 : 0, _CHANNELS);
     std::cerr << "Rank: " << rank << std::endl;
+
+    Halide::Buffer<uint64_t> buff_gaussian_x(rank == NODES - 1 ? 0 : _COLS - 4, rank == NODES - 1 ? 0 : _ROWS / NODES + 4, rank == NODES - 1 ? 0 : _CHANNELS);
+    Halide::Buffer<uint64_t> buff_gaussian_x_last_node(rank == NODES - 1 ? _COLS - 4 : 0, rank == NODES - 1 ? _ROWS / NODES : 0, rank == NODES - 1 ? _CHANNELS : 0);
     
     // Run once to get rid of overhead/any extra compilation stuff that needs to happen
-    gaussian_dist(buff_input.raw_buffer(), kernelX.raw_buffer(), kernelY.raw_buffer(), buff_output.raw_buffer(), buff_output_last_node.raw_buffer());
+    gaussian_dist(buff_input.raw_buffer(), kernelX.raw_buffer(), kernelY.raw_buffer(), buff_gaussian_x.raw_buffer(), buff_gaussian_x_last_node.raw_buffer(), buff_output.raw_buffer(), buff_output_last_node.raw_buffer());
 
     MPI_Barrier(MPI_COMM_WORLD);
     for (int i=0; i<20; i++) {
@@ -54,7 +57,7 @@ int main() {
         }
         MPI_Barrier(MPI_COMM_WORLD);
         auto start = std::chrono::high_resolution_clock::now();
-        gaussian_dist(buff_input.raw_buffer(), kernelX.raw_buffer(), kernelY.raw_buffer(), buff_output.raw_buffer(), buff_output_last_node.raw_buffer());
+        gaussian_dist(buff_input.raw_buffer(), kernelX.raw_buffer(), kernelY.raw_buffer(), buff_gaussian_x.raw_buffer(), buff_gaussian_x_last_node.raw_buffer(), buff_output.raw_buffer(), buff_output_last_node.raw_buffer());
         MPI_Barrier(MPI_COMM_WORLD);
         auto end = std::chrono::high_resolution_clock::now();
         if (rank == 0) {
@@ -62,25 +65,29 @@ int main() {
             duration_vector.push_back(duration);
             std::cerr << "Iteration " << i << " done in " << duration.count() << "ms." << std::endl;
         }
-	if (i == 0) {
+	/*	if (i == 0) {
 	  std::string output_fn = "/data/scratch/jray/tiramisu/build/gaussian_dist_rank_" + std::to_string(rank) + ".txt";
 	  std::ofstream myfile;
 	  myfile.open (output_fn);
 	  if (rank < NODES - 1) {
 	    for (int i = 0; i < _ROWS / NODES; i++) {
 	      for (int j = 0; j < _COLS - 4; j++) {
-		myfile << buff_output(j, i) << std::endl;
+		for (int c = 0; c < _CHANNELS; c++) {
+		  myfile << buff_output(j, i, c) << std::endl;
+		}
 	      }
 	    }
 	  } else {
 	    for (int i = 0; i < _ROWS / NODES - 4; i++) {
 	      for (int j = 0; j < _COLS - 4; j++) {
-		myfile << buff_output_last_node(j, i) << std::endl;
+		for (int c = 0; c < _CHANNELS; c++) {
+		  myfile << buff_output_last_node(j, i, c) << std::endl;
+		}
 	      }
 	    }
 	  }
 	  myfile.close();
-	}
+	  }*/
 	MPI_Barrier(MPI_COMM_WORLD);
     }
 

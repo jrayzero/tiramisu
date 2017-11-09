@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-  int gaussian_dist(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
+  int gaussian_dist(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
 int gaussian_dist_argv(void **args);
 // Result is never null and points to constant static data
 const struct halide_filter_metadata_t *gaussian_data_metadata();
