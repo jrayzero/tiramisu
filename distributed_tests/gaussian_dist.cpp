@@ -142,10 +142,10 @@ int main(int argc, char **argv)
     gaussian_s0.get_update(0).before(gaussian_s0.get_update(1), computation::root);
     gaussian_s0.get_update(1).before(gaussian_s0.get_update(2), computation::root);
 
-    gaussian_x_exchange.s->collapse_many({collapser(3, 0, COLS), collapser(2, 0, 4)});//, collapser(1, 0, CHANNELS)});
-    gaussian_x_exchange.r->collapse_many({collapser(3, 0, COLS), collapser(2, 0, 4)});//, collapser(1, 0, CHANNELS)});
-    gaussian_x_exchange_last_node.s->collapse_many({collapser(3, 0, COLS), collapser(2, 0, 4)});//, collapser(1, 0, CHANNELS)});
-    gaussian_x_exchange_last_node.r->collapse_many({collapser(3, 0, COLS), collapser(2, 0, 4)});//, collapser(1, 0, CHANNELS)});
+    gaussian_x_exchange.s->collapse_many({collapser(3, 0, COLS-4), collapser(2, 0, 4)});//, collapser(1, 0, CHANNELS)});
+    gaussian_x_exchange.r->collapse_many({collapser(3, 0, COLS-4), collapser(2, 0, 4)});//, collapser(1, 0, CHANNELS)});
+    gaussian_x_exchange_last_node.s->collapse_many({collapser(3, 0, COLS-4), collapser(2, 0, 4)});//, collapser(1, 0, CHANNELS)});
+    gaussian_x_exchange_last_node.r->collapse_many({collapser(3, 0, COLS-4), collapser(2, 0, 4)});//, collapser(1, 0, CHANNELS)});
 
     //    gaussian_s0.get_update(0).set_schedule_this_comp(false);
     //    gaussian_s0.get_update(1).set_schedule_this_comp(false);
