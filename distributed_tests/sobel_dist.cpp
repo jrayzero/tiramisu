@@ -30,15 +30,7 @@ int main(int argc, char **argv)
 
     int COLS = _COLS;
     int ROWS = _ROWS;
-    int _rows_per_node = _ROWS / NODES;
-    constant rows("rows", expr(ROWS), p_int32, true, NULL, 0, &sobel_dist);
-    constant cols("cols", expr(COLS), p_int32, true, NULL, 0, &sobel_dist);
-    constant one("one", expr(1), p_int32, true, NULL, 0, &sobel_dist);
-    constant two("two", expr(2), p_int32, true, NULL, 0, &sobel_dist);
-    constant nodes("nodes", expr(NODES), p_int32, true, NULL, 0, &sobel_dist);
-    constant nodes_minus_one("nodes_minus_one", expr(NODES-1), p_int32, true, NULL, 0, &sobel_dist);
-    constant nodes_minus_two("nodes_minus_two", expr(NODES-2), p_int32, true, NULL, 0, &sobel_dist);
-    constant rows_per_node("rows_per_node", expr(_rows_per_node), p_int32, true, NULL, 0, &sobel_dist);
+    int ROWS_PER_NODE = _ROWS / NODES;
 
     var i("i"), j("j");
     computation input("[rows, cols]->{input[i,j]: 0<=i<rows and 0<=j<cols}", expr(), false, tiramisu::p_float32, &sobel_dist);
@@ -51,19 +43,27 @@ int main(int argc, char **argv)
     computation sobel("[rows, cols]->{sobel[i,j]: 0<=i<rows-2 and 0<=j<cols-2}",
                       expr(tiramisu::o_sqrt, sobel_x(i,j) * sobel_x(i,j) + sobel_y(i, j) * sobel_y(i,j)), true, tiramisu::p_float32, &sobel_dist);
 
+    constant rows("rows", expr(ROWS), p_int32, true, NULL, 0, &sobel_dist);
+    constant cols("cols", expr(COLS), p_int32, true, NULL, 0, &sobel_dist);
+    constant one("one", expr(1), p_int32, true, NULL, 0, &sobel_dist);
+    constant two("two", expr(2), p_int32, true, NULL, 0, &sobel_dist);
+    constant nodes("nodes", expr(NODES), p_int32, true, NULL, 0, &sobel_dist);
+    constant nodes_minus_one("nodes_minus_one", expr(NODES-1), p_int32, true, NULL, 0, &sobel_dist);
+    constant nodes_minus_two("nodes_minus_two", expr(NODES-2), p_int32, true, NULL, 0, &sobel_dist);
+    constant rows_per_node("rows_per_node", expr(ROWS_PER_NODE), p_int32, true, NULL, 0, &sobel_dist);
 
     var i1("i1"), i2("i2"), d("d"), q("q");
-    sobel_x.split(i, _rows_per_node, i1, i2);
+    sobel_x.split(i, ROWS_PER_NODE, i1, i2);
     sobel_x.separate_at(0, {one, nodes_minus_one}, nodes, -3);
     sobel_x.get_update(0).rename_computation("sobel_x_0");
     sobel_x.get_update(1).rename_computation("sobel_x_1");
     sobel_x.get_update(2).rename_computation("sobel_x_2");
-    sobel_y.split(i, _rows_per_node, i1, i2);
+    sobel_y.split(i, ROWS_PER_NODE, i1, i2);
     sobel_y.separate_at(0, {one, nodes_minus_one}, nodes, -3);
     sobel_y.get_update(0).rename_computation("sobel_y_0");
     sobel_y.get_update(1).rename_computation("sobel_y_1");
     sobel_y.get_update(2).rename_computation("sobel_y_2");
-    sobel.split(i, _rows_per_node, i1, i2);
+    sobel.split(i, ROWS_PER_NODE, i1, i2);
     sobel.separate_at(0, {one, nodes_minus_one}, nodes, -3);
     sobel.get_update(0).rename_computation("sobel_0");
     sobel.get_update(1).rename_computation("sobel_1");
@@ -77,19 +77,31 @@ int main(int argc, char **argv)
     generator::replace_expr_name(sobel.get_update(2).expression, "sobel_y", "sobel_y_2");
 
     channel sync_block("sync_block", p_float32, {FIFO, SYNC, BLOCK, MPI});
-    channel async_nonblock("async_nonblock", p_float32, {FIFO, ASYNC, NONBLOCK, MPI});
     channel async_block("async_block", p_float32, {FIFO, ASYNC, BLOCK, MPI});
 
     // transfer the computed rows from gaussian_x
     send_recv exchange = computation::create_transfer("[one, nodes_minus_one, cols]->{exchange_s[q,i,j]: one<=q<nodes_minus_one and 0<=i<2 and 0<=j<cols}",
-                                                                 "[nodes_minus_two, cols]->{exchange_r[q,i,j]: 0<=q<nodes_minus_two and 0<=i<2 and 0<=j<cols}",
-                                                                 q, q-1, q+1, q, async_block, sync_block,
-                                                                 input(i,j), &sobel_dist);
+                                                      "[nodes_minus_two, cols]->{exchange_r[q,i,j]: 0<=q<nodes_minus_two and 0<=i<2 and 0<=j<cols}",
+                                                      q, q-1, q+1, q, async_block, sync_block,
+                                                      input(i,j), &sobel_dist);
 
     send_recv exchange_last_node = computation::create_transfer("[one, nodes_minus_one, nodes, cols]->{exchange_last_node_s[q,i,j]: nodes_minus_one<=q<nodes and 0<=i<2 and 0<=j<cols}",
-                                                                           "[nodes_minus_one, nodes_minus_two, cols]->{exchange_last_node_r[q,i,j]: nodes_minus_two<=q<nodes_minus_one and 0<=i<2 and 0<=j<cols}",
-                                                                           q, q-1, q+1, q, async_block, sync_block,
-                                                                           input(i,j), &sobel_dist);
+                                                                "[nodes_minus_one, nodes_minus_two, cols]->{exchange_last_node_r[q,i,j]: nodes_minus_two<=q<nodes_minus_one and 0<=i<2 and 0<=j<cols}",
+                                                                q, q-1, q+1, q, async_block, sync_block,
+                                                                input(i,j), &sobel_dist);
+
+    exchange.s->set_schedule_this_comp(false);
+    exchange.r->set_schedule_this_comp(false);
+    exchange_last_node.s->set_schedule_this_comp(false);
+    exchange_last_node.r->set_schedule_this_comp(false);
+    sobel.get_update(0).set_schedule_this_comp(false);
+    sobel.get_update(1).set_schedule_this_comp(false);
+    sobel.get_update(2).set_schedule_this_comp(false);
+    sobel_y.get_update(0).set_schedule_this_comp(false);
+    sobel_y.get_update(1).set_schedule_this_comp(false);
+    sobel_y.get_update(2).set_schedule_this_comp(false);
+    sobel_x.get_update(1).set_schedule_this_comp(false);
+    sobel_x.get_update(2).set_schedule_this_comp(false);
 
     sobel_x.get_update(0).tag_distribute_level(i1);
     sobel_x.get_update(1).tag_distribute_level(i1);
@@ -117,13 +129,26 @@ int main(int argc, char **argv)
     exchange_last_node.s->tag_distribute_level(q);
     exchange_last_node.r->tag_distribute_level(q);
 
-    tiramisu::buffer buff_input("buff_input", {_rows_per_node, cols}, p_float32, a_input, &sobel_dist);
-    tiramisu::buffer buff_sobel_x("buff_sobel_x", {_rows_per_node + 2, cols - 2}, p_float32, a_output, &sobel_dist);
-    tiramisu::buffer buff_sobel_x_last_node("buff_sobel_x_last_node", {_rows_per_node, cols - 2}, p_float32, a_output, &sobel_dist);
-    tiramisu::buffer buff_sobel_y("buff_sobel_y", {_rows_per_node, cols - 2}, p_float32, a_output, &sobel_dist);
-    tiramisu::buffer buff_sobel_y_last_node("buff_sobel_y_last_node", {_rows_per_node - 2, cols - 2}, p_float32, a_output, &sobel_dist);
-    tiramisu::buffer buff_sobel("buff_sobel", {_rows_per_node, cols - 2}, p_float32, a_output, &sobel_dist);
-    tiramisu::buffer buff_sobel_last_node("buff_sobel_last_node", {_rows_per_node - 2, cols - 2}, p_float32, a_output, &sobel_dist);
+    exchange.s->before(*exchange.r, computation::root);
+    exchange.r->before(*exchange_last_node.s, computation::root);
+    exchange_last_node.s->before(*exchange_last_node.r, computation::root);
+    exchange_last_node.r->before(sobel_x.get_update(0), computation::root);
+    sobel_x.get_update(0).before(sobel_y.get_update(0), computation::root);
+    sobel_y.get_update(0).before(sobel.get_update(0), computation::root);
+    sobel.get_update(0).before(sobel_x.get_update(1), computation::root);
+    sobel_x.get_update(1).before(sobel_y.get_update(1), computation::root);
+    sobel_y.get_update(1).before(sobel.get_update(1), computation::root);
+    sobel.get_update(1).before(sobel_x.get_update(2), computation::root);
+    sobel_x.get_update(2).before(sobel_y.get_update(2), computation::root);
+    sobel_y.get_update(2).before(sobel.get_update(2), computation::root);
+
+    tiramisu::buffer buff_input("buff_input", {ROWS_PER_NODE, COLS}, p_float32, a_input, &sobel_dist);
+    tiramisu::buffer buff_sobel_x("buff_sobel_x", {ROWS_PER_NODE + 2, COLS - 2}, p_float32, a_output, &sobel_dist);
+    tiramisu::buffer buff_sobel_x_last_node("buff_sobel_x_last_node", {ROWS_PER_NODE, COLS - 2}, p_float32, a_output, &sobel_dist);
+    tiramisu::buffer buff_sobel_y("buff_sobel_y", {ROWS_PER_NODE, COLS - 2}, p_float32, a_output, &sobel_dist);
+    tiramisu::buffer buff_sobel_y_last_node("buff_sobel_y_last_node", {ROWS_PER_NODE - 2, COLS - 2}, p_float32, a_output, &sobel_dist);
+    tiramisu::buffer buff_sobel("buff_sobel", {ROWS_PER_NODE, COLS - 2}, p_float32, a_output, &sobel_dist);
+    tiramisu::buffer buff_sobel_last_node("buff_sobel_last_node", {ROWS_PER_NODE - 2, COLS - 2}, p_float32, a_output, &sobel_dist);
 
     input.set_access("{input[i,j]->buff_input[i,j]}");
     sobel_x.get_update(0).set_access("{sobel_x_0[i,j]->buff_sobel_x[i,j]}");
@@ -136,14 +161,14 @@ int main(int argc, char **argv)
     sobel.get_update(1).set_access("{sobel_1[i,j]->buff_sobel[i,j]}");
     sobel.get_update(2).set_access("{sobel_2[i,j]->buff_sobel_last_node[i,j]}");
 
-    exchange.r->set_access("{exchange_r[q,i,j]->buff_input[" + std::to_string(_rows_per_node) + "+ i,j]}");
-    exchange_last_node.r->set_access("{exchange_last_node_r[q,i,j]->buff_input[" + std::to_string(_rows_per_node) + "+ i,j]}");
-    exchange_last_node.r->set_access("{}");
+    exchange.r->set_access("{exchange_r[q,i,j]->buff_input[" + std::to_string(ROWS_PER_NODE) + "+ i,j]}");
+    exchange_last_node.r->set_access("{exchange_last_node_r[q,i,j]->buff_input[" + std::to_string(ROWS_PER_NODE) + "+ i,j]}");
 
 
     // Add schedules.
 
-    sobel_dist.set_arguments({});
+    sobel_dist.set_arguments({&buff_input, &buff_sobel_x, &buff_sobel_x_last_node, &buff_sobel_y,
+                              &buff_sobel_y_last_node, &buff_sobel, &buff_sobel_last_node});
     sobel_dist.gen_time_space_domain();
     sobel_dist.lift_ops_to_library_calls();
     sobel_dist.gen_isl_ast();
