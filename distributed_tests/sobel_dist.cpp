@@ -17,8 +17,6 @@
 #include "halide_image_io.h"
 #include "sizes.h"
 
-#define NODES 5
-
 using namespace tiramisu;
 
 int main(int argc, char **argv)
@@ -90,18 +88,6 @@ int main(int argc, char **argv)
                                                                 q, q-1, q+1, q, async_block, sync_block,
                                                                 input(i,j), &sobel_dist);
 
-    exchange.s->set_schedule_this_comp(false);
-    exchange.r->set_schedule_this_comp(false);
-    exchange_last_node.s->set_schedule_this_comp(false);
-    exchange_last_node.r->set_schedule_this_comp(false);
-    sobel.get_update(0).set_schedule_this_comp(false);
-    sobel.get_update(1).set_schedule_this_comp(false);
-    sobel.get_update(2).set_schedule_this_comp(false);
-    sobel_y.get_update(0).set_schedule_this_comp(false);
-    sobel_y.get_update(1).set_schedule_this_comp(false);
-    sobel_y.get_update(2).set_schedule_this_comp(false);
-    sobel_x.get_update(1).set_schedule_this_comp(false);
-    sobel_x.get_update(2).set_schedule_this_comp(false);
 
     sobel_x.get_update(0).tag_distribute_level(i1);
     sobel_x.get_update(1).tag_distribute_level(i1);
