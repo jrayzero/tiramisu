@@ -26,12 +26,12 @@ int main() {
     uint64_t *buf = (uint64_t*)malloc(sizeof(uint64_t) * (_ROWS / NODES + 2) * _COLS * _CHANNELS);
     unsigned int next = 0;
     for (int y = 0; y < _ROWS / NODES; y++) {
-      for (int x = 0; x < _COLS; x++) {
-	for (int c = 0; c < _CHANNELS; c++) {
-	  buff_input(x, y, c) = next * (rank+1) + c;
-	  next++;
-	}
-      }
+        for (int x = 0; x < _COLS; x++) {
+            for (int c = 0; c < _CHANNELS; c++) {
+                buff_input(x, y, c) = next * (rank+1) + c;
+                next++;
+            }
+        }
     }
 
     // Generate these on each node as well
@@ -44,7 +44,7 @@ int main() {
     //    Halide::Buffer<uint64_t> buff_output2(_COLS - 2, rank == NODES - 1 ? _ROWS / NODES - 2 : _ROWS / NODES, _CHANNELS);
     std::cerr << "Rank: " << rank << std::endl;
 
-    
+
     // Run once to get rid of overhead/any extra compilation stuff that needs to happen
     filter2D_dist(buff_input.raw_buffer(), kernel.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());
 
@@ -55,7 +55,7 @@ int main() {
         }
         MPI_Barrier(MPI_COMM_WORLD);
         auto start = std::chrono::high_resolution_clock::now();
-	filter2D_dist(buff_input.raw_buffer(), kernel.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());
+        filter2D_dist(buff_input.raw_buffer(), kernel.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());
         MPI_Barrier(MPI_COMM_WORLD);
         auto end = std::chrono::high_resolution_clock::now();
         if (rank == 0) {
@@ -63,30 +63,30 @@ int main() {
             duration_vector.push_back(duration);
             std::cerr << "Iteration " << i << " done in " << duration.count() << "ms." << std::endl;
         }
-	/*	if (i == 0) {
-	  std::string output_fn = "/data/scratch/jray/tiramisu/build/filter2D_dist_rank_" + std::to_string(rank) + ".txt";
-	  std::ofstream myfile;
-	  myfile.open (output_fn);
-	  if (rank < NODES - 1) {
-	    for (int i = 0; i < _ROWS / NODES; i++) {
-	      for (int j = 0; j < _COLS - 2; j++) {
-		for (int c = 0; c < _CHANNELS; c++) {
-		  myfile << buff_output(j, i, c) << std::endl;
-		}
-	      }
-	    }
-	  } else {
-	    for (int i = 0; i < _ROWS / NODES - 2; i++) {
-	      for (int j = 0; j < _COLS - 2; j++) {
-		for (int c = 0; c < _CHANNELS; c++) {
-		  myfile << buff_output(j, i, c) << std::endl;
-		}
-	      }
-	    }
-	  }
-	  myfile.close();
-	  }*/
-	MPI_Barrier(MPI_COMM_WORLD);
+        if (i == 0) {
+            std::string output_fn = "/data/scratch/jray/tiramisu/build/filter2D_dist_rank_" + std::to_string(rank) + ".txt";
+            std::ofstream myfile;
+            myfile.open (output_fn);
+            if (rank < NODES - 1) {
+                for (int i = 0; i < _ROWS / NODES; i++) {
+                    for (int j = 0; j < _COLS - 2; j++) {
+                        for (int c = 0; c < _CHANNELS; c++) {
+                            myfile << buff_output(j, i, c) << std::endl;
+                        }
+                    }
+                }
+            } else {
+                for (int i = 0; i < _ROWS / NODES - 2; i++) {
+                    for (int j = 0; j < _COLS - 2; j++) {
+                        for (int c = 0; c < _CHANNELS; c++) {
+                            myfile << buff_output(j, i, c) << std::endl;
+                        }
+                    }
+                }
+            }
+            myfile.close();
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
     }
 
     if (rank == 0) {
