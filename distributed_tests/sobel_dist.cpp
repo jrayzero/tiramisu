@@ -133,10 +133,10 @@ int main(int argc, char **argv)
     sobel_y.get_update(2).before(sobel.get_update(2), computation::root);
 
     tiramisu::buffer buff_input("buff_input", {ROWS_PER_NODE + 2, COLS}, p_float32, a_input, &sobel_dist);
-    tiramisu::buffer buff_sobel_x("buff_sobel_x", {ROWS_PER_NODE, COLS - 2}, p_float32, a_output, &sobel_dist);
-    tiramisu::buffer buff_sobel_x_last_node("buff_sobel_x_last_node", {ROWS_PER_NODE - 2, COLS - 2}, p_float32, a_output, &sobel_dist);
-    tiramisu::buffer buff_sobel_y("buff_sobel_y", {ROWS_PER_NODE, COLS - 2}, p_float32, a_output, &sobel_dist);
-    tiramisu::buffer buff_sobel_y_last_node("buff_sobel_y_last_node", {ROWS_PER_NODE - 2, COLS - 2}, p_float32, a_output, &sobel_dist);
+    tiramisu::buffer buff_sobel_x("buff_sobel_x", {ROWS_PER_NODE, COLS - 2}, p_float32, a_temporary, &sobel_dist);
+    tiramisu::buffer buff_sobel_x_last_node("buff_sobel_x_last_node", {ROWS_PER_NODE - 2, COLS - 2}, p_float32, a_temporary, &sobel_dist);
+    tiramisu::buffer buff_sobel_y("buff_sobel_y", {ROWS_PER_NODE, COLS - 2}, p_float32, a_temporary, &sobel_dist);
+    tiramisu::buffer buff_sobel_y_last_node("buff_sobel_y_last_node", {ROWS_PER_NODE - 2, COLS - 2}, p_float32, a_temporary, &sobel_dist);
     tiramisu::buffer buff_sobel("buff_sobel", {ROWS_PER_NODE, COLS - 2}, p_float32, a_output, &sobel_dist);
     tiramisu::buffer buff_sobel_last_node("buff_sobel_last_node", {ROWS_PER_NODE - 2, COLS - 2}, p_float32, a_output, &sobel_dist);
 
@@ -156,8 +156,8 @@ int main(int argc, char **argv)
 
     // Add schedules.
 
-    sobel_dist.set_arguments({&buff_input, &buff_sobel_x, &buff_sobel_x_last_node, &buff_sobel_y,
-                              &buff_sobel_y_last_node, &buff_sobel, &buff_sobel_last_node});
+    sobel_dist.set_arguments({&buff_input, /*&buff_sobel_x, &buff_sobel_x_last_node, &buff_sobel_y,
+					     &buff_sobel_y_last_node,*/ &buff_sobel, &buff_sobel_last_node});
     sobel_dist.gen_time_space_domain();
     sobel_dist.lift_ops_to_library_calls();
     sobel_dist.gen_isl_ast();

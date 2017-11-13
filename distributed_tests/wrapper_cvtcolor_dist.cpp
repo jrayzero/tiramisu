@@ -58,7 +58,7 @@ int main() {
             duration_vector.push_back(duration);
             std::cerr << "Iteration " << i << " done in " << duration.count() << "ms." << std::endl;
         }
-	if (i == 0) {
+	/*	if (i == 0) {
 	  std::string output_fn = "/data/scratch/jray/tiramisu/build/cvtcolor_dist_rank_" + std::to_string(rank) + ".txt";
 	  std::ofstream myfile;
 	  myfile.open (output_fn);
@@ -68,7 +68,7 @@ int main() {
 	    }
 	  }
 	  myfile.close();
-	}
+	  }*/
 	MPI_Barrier(MPI_COMM_WORLD);
     }
 

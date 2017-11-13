@@ -44,11 +44,11 @@ int main() {
     Halide::Buffer<uint64_t> buff_output_last_node(rank == NODES - 1 ? _COLS - 4 : 0, rank == NODES - 1 ? (_ROWS / NODES) - 4 : 0, _CHANNELS);
     std::cerr << "Rank: " << rank << std::endl;
 
-    Halide::Buffer<uint64_t> buff_gaussian_x(rank == NODES - 1 ? 0 : _COLS - 4, rank == NODES - 1 ? 0 : _ROWS / NODES + 4, rank == NODES - 1 ? 0 : _CHANNELS);
-    Halide::Buffer<uint64_t> buff_gaussian_x_last_node(rank == NODES - 1 ? _COLS - 4 : 0, rank == NODES - 1 ? _ROWS / NODES : 0, rank == NODES - 1 ? _CHANNELS : 0);
+    //    Halide::Buffer<uint64_t> buff_gaussian_x(rank == NODES - 1 ? 0 : _COLS - 4, rank == NODES - 1 ? 0 : _ROWS / NODES + 4, rank == NODES - 1 ? 0 : _CHANNELS);
+    //    Halide::Buffer<uint64_t> buff_gaussian_x_last_node(rank == NODES - 1 ? _COLS - 4 : 0, rank == NODES - 1 ? _ROWS / NODES : 0, rank == NODES - 1 ? _CHANNELS : 0);
     
     // Run once to get rid of overhead/any extra compilation stuff that needs to happen
-    gaussian_dist(buff_input.raw_buffer(), kernelX.raw_buffer(), kernelY.raw_buffer(), buff_gaussian_x.raw_buffer(), buff_gaussian_x_last_node.raw_buffer(), buff_output.raw_buffer(), buff_output_last_node.raw_buffer());
+    gaussian_dist(buff_input.raw_buffer(), kernelX.raw_buffer(), kernelY.raw_buffer(), /*buff_gaussian_x.raw_buffer(), buff_gaussian_x_last_node.raw_buffer(),*/ buff_output.raw_buffer(), buff_output_last_node.raw_buffer());
 
     MPI_Barrier(MPI_COMM_WORLD);
     for (int i=0; i<20; i++) {
@@ -57,7 +57,7 @@ int main() {
         }
         MPI_Barrier(MPI_COMM_WORLD);
         auto start = std::chrono::high_resolution_clock::now();
-        gaussian_dist(buff_input.raw_buffer(), kernelX.raw_buffer(), kernelY.raw_buffer(), buff_gaussian_x.raw_buffer(), buff_gaussian_x_last_node.raw_buffer(), buff_output.raw_buffer(), buff_output_last_node.raw_buffer());
+        gaussian_dist(buff_input.raw_buffer(), kernelX.raw_buffer(), kernelY.raw_buffer(), /*buff_gaussian_x.raw_buffer(), buff_gaussian_x_last_node.raw_buffer(),*/ buff_output.raw_buffer(), buff_output_last_node.raw_buffer());
         MPI_Barrier(MPI_COMM_WORLD);
         auto end = std::chrono::high_resolution_clock::now();
         if (rank == 0) {

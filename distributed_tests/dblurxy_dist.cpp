@@ -25,11 +25,11 @@ using namespace tiramisu;
 int main() {
     global::set_default_tiramisu_options();
 
-    function dblurxy_dist_data("dblurxy_dist_data");
+    function dblurxy_dist("dblurxy_dist");
 
     int _rows = _ROWS;
     int _cols = _COLS;
-    int _nodes = _NODES;
+    int _nodes = NODES;
 
     int _rows_per_node = _rows / _nodes;
     std::cerr << "rows per node: " << _rows_per_node << std::endl;
@@ -39,35 +39,35 @@ int main() {
     // -------------------------------------------------------
 
     var y("y"), x("x");
-    constant rows("rows", expr(_rows), p_int32, true, NULL, 0, &dblurxy_dist_data);
-    constant cols("cols", expr(_cols), p_int32, true, NULL, 0, &dblurxy_dist_data);
+    constant rows("rows", expr(_rows), p_int32, true, NULL, 0, &dblurxy_dist);
+    constant cols("cols", expr(_cols), p_int32, true, NULL, 0, &dblurxy_dist);
 
     computation
             blur_input("[rows, cols]->{blur_input[i1, i0]: 0<=i1<rows and 0<=i0<cols}", expr(), false,
-                       p_uint64, &dblurxy_dist_data);
+                       p_uint64, &dblurxy_dist);
 
     computation bx("[rows, cols]->{bx[y, x]: 0<=y<rows and 0<=x<cols-2}",
                    (((blur_input(y, x) +
                       blur_input(y, (x + expr((int32_t)1)))) +
                      blur_input(y, (x + expr((int32_t)2)))) / expr((uint64_t)3)),
-                   true, p_uint64, &dblurxy_dist_data);
+                   true, p_uint64, &dblurxy_dist);
 
     computation by("[rows, cols]->{by[y, x]: 0<=y<rows-2 and 0<=x<cols-2}",
                    (((bx(y, x) +
                       bx((y + expr((int32_t)1)), x)) +
                      bx((y + expr((int32_t)2)), x)) / expr((uint64_t)3)),
-                   true, p_uint64, &dblurxy_dist_data);
+                   true, p_uint64, &dblurxy_dist);
 
     // -------------------------------------------------------
     // Layer II
     // -------------------------------------------------------
 
-    constant one("one", expr(1), p_int32, true, NULL, 0, &dblurxy_dist_data);
-    constant two("two", expr(2), p_int32, true, NULL, 0, &dblurxy_dist_data);
-    constant nodes("nodes", expr(_nodes), p_int32, true, NULL, 0, &dblurxy_dist_data);
-    constant nodes_minus_one("nodes_minus_one", expr(_nodes-1), p_int32, true, NULL, 0, &dblurxy_dist_data);
-    constant nodes_minus_two("nodes_minus_two", expr(_nodes-2), p_int32, true, NULL, 0, &dblurxy_dist_data);
-    constant rows_per_node("rows_per_node", expr(_rows_per_node), p_int32, true, NULL, 0, &dblurxy_dist_data);
+    constant one("one", expr(1), p_int32, true, NULL, 0, &dblurxy_dist);
+    constant two("two", expr(2), p_int32, true, NULL, 0, &dblurxy_dist);
+    constant nodes("nodes", expr(_nodes), p_int32, true, NULL, 0, &dblurxy_dist);
+    constant nodes_minus_one("nodes_minus_one", expr(_nodes-1), p_int32, true, NULL, 0, &dblurxy_dist);
+    constant nodes_minus_two("nodes_minus_two", expr(_nodes-2), p_int32, true, NULL, 0, &dblurxy_dist);
+    constant rows_per_node("rows_per_node", expr(_rows_per_node), p_int32, true, NULL, 0, &dblurxy_dist);
 
     /*
      * Prep for distribution by splitting the outer dimension
@@ -107,22 +107,22 @@ int main() {
     /*    send_recv upper_exchanges = computation::create_transfer("[one, nodes, cols]->{upper_s[q,y,x]: one<=q<nodes and 0<=y<2 and 0<=x<cols}",
                                                              "[nodes_minus_one, cols]->{upper_r[q,y,x]: 0<=q<nodes_minus_one and 0<=y<2 and 0<=x<cols}",
                                                              q, q-1, q+1, q, async_nonblock, sync_block,
-                                                             blur_input(y,x), &dblurxy_dist_data);
+                                                             blur_input(y,x), &dblurxy_dist);
     */
     // transfer the computed rows from bx
     send_recv bx_exchange = computation::create_transfer("[one, nodes_minus_one, cols]->{bx_exchange_s[q,y,x]: one<=q<nodes_minus_one and 0<=y<2 and 0<=x<cols-2}",
 							 "[nodes_minus_two, cols]->{bx_exchange_r[q,y,x]: 0<=q<nodes_minus_two and 0<=y<2 and 0<=x<cols-2}",
 							 q, q-1, q+1, q, async_block, sync_block,
-							 bx.get_update(1)(y,x), &dblurxy_dist_data);
+							 bx.get_update(1)(y,x), &dblurxy_dist);
 
     send_recv bx_exchange_last_node = computation::create_transfer("[one, nodes_minus_one, nodes_minus_two, nodes, cols]->{bx_exchange_last_node_s[q,y,x]: nodes_minus_one<=q<nodes and 0<=y<2 and 0<=x<cols-2}",
 							 "[nodes_minus_one, nodes_minus_two, cols]->{bx_exchange_last_node_r[q,y,x]: nodes_minus_two<=q<nodes_minus_one and 0<=y<2 and 0<=x<cols-2}",
 							 q, q-1, q+1, q, async_block, sync_block,
-							 bx.get_update(2)(y,x), &dblurxy_dist_data);
+							 bx.get_update(2)(y,x), &dblurxy_dist);
 
 
-    tiramisu::wait bx_exchange_wait(bx_exchange.s->operator()(q, y, x), &dblurxy_dist_data);
-    tiramisu::wait bx_exchange_last_node_wait(bx_exchange_last_node.s->operator()(q, y, x), &dblurxy_dist_data);
+    tiramisu::wait bx_exchange_wait(bx_exchange.s->operator()(q, y, x), &dblurxy_dist);
+    tiramisu::wait bx_exchange_last_node_wait(bx_exchange_last_node.s->operator()(q, y, x), &dblurxy_dist);
     bx_exchange_wait.set_schedule_this_comp(false);
     bx_exchange_last_node_wait.set_schedule_this_comp(false);
 
@@ -228,19 +228,19 @@ int main() {
      */
 
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(_rows_per_node), tiramisu::expr(_cols)}, p_uint64,
-                                tiramisu::a_input, &dblurxy_dist_data);
+                                tiramisu::a_input, &dblurxy_dist);
 
     tiramisu::buffer buff_bx("buff_bx", {tiramisu::expr(_rows_per_node+2), tiramisu::expr(_cols - 2)},
-                             p_uint64, tiramisu::a_output, &dblurxy_dist_data);
-
-    tiramisu::buffer buff_by("buff_by", {tiramisu::expr(_rows_per_node), tiramisu::expr(_cols - 2)},
-                             p_uint64, tiramisu::a_output, &dblurxy_dist_data);
+                             p_uint64, tiramisu::a_temporary, &dblurxy_dist);
 
     tiramisu::buffer buff_bx_last("buff_bx_last", {tiramisu::expr(_rows_per_node), tiramisu::expr(_cols - 2)},
-                                  p_uint64, tiramisu::a_output, &dblurxy_dist_data);
+                                  p_uint64, tiramisu::a_temporary, &dblurxy_dist);
+
+    tiramisu::buffer buff_by("buff_by", {tiramisu::expr(_rows_per_node), tiramisu::expr(_cols - 2)},
+                             p_uint64, tiramisu::a_output, &dblurxy_dist);
 
     tiramisu::buffer buff_by_last("buff_by_last", {tiramisu::expr(_rows_per_node - 2), tiramisu::expr(_cols - 2)},
-                                  p_uint64, tiramisu::a_output, &dblurxy_dist_data);
+                                  p_uint64, tiramisu::a_output, &dblurxy_dist);
 
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
     bx.get_update(0).set_access("{bx_0[y, x]->buff_bx[y, x]}");
@@ -253,20 +253,21 @@ int main() {
     bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_bx[" + std::to_string(_rows_per_node) + " + y, x]}");
     bx_exchange_last_node.r->set_access("{bx_exchange_last_node_r[q,y,x]->buff_bx[" + std::to_string(_rows_per_node) + " + y, x]}");
 
-    buffer bx_exchange_wait_buff("bx_exchange_wait_buff", {1}, tiramisu::p_req_ptr, a_temporary, &dblurxy_dist_data);
+    buffer bx_exchange_wait_buff("bx_exchange_wait_buff", {1}, tiramisu::p_req_ptr, a_temporary, &dblurxy_dist);
     bx_exchange.s->set_req_access("{bx_exchange_s[q,y,x]->bx_exchange_wait_buff[0]}");
     bx_exchange_last_node.s->set_req_access("{bx_exchange_last_node_s[q,y,x]->bx_exchange_wait_buff[0]}");
 
-    dblurxy_dist_data.set_arguments({&buff_input, &buff_bx, &buff_bx_last, &buff_by, &buff_by_last});
+    dblurxy_dist.set_arguments({&buff_input, &buff_by, &buff_by_last});
+
     // Generate code
-    dblurxy_dist_data.gen_time_space_domain();
-    dblurxy_dist_data.lift_ops_to_library_calls();
-    dblurxy_dist_data.gen_isl_ast();
-    dblurxy_dist_data.gen_halide_stmt();
-    dblurxy_dist_data.gen_halide_obj("./build/generated_dblurxy_dist_data.o");
+    dblurxy_dist.gen_time_space_domain();
+    dblurxy_dist.lift_ops_to_library_calls();
+    dblurxy_dist.gen_isl_ast();
+    dblurxy_dist.gen_halide_stmt();
+    dblurxy_dist.gen_halide_obj("./build/generated_dblurxy_dist.o");
 
     // Some debugging
-    dblurxy_dist_data.dump_halide_stmt();
+    dblurxy_dist.dump_halide_stmt();
 
     return 0;
 

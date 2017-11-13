@@ -96,9 +96,9 @@ int main(int argc, char **argv)
     h_s0.before(k_s0, computation::root);
 
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(input_extent_2), tiramisu::expr(rows_per_node), tiramisu::expr(input_extent_0)}, tiramisu::p_uint64, tiramisu::a_input, &fusion_dist);
-    tiramisu::buffer buff_f("buff_f", {tiramisu::expr(f_extent_2), tiramisu::expr(rows_per_node), tiramisu::expr(f_extent_0)}, tiramisu::p_uint64, tiramisu::a_output, &fusion_dist);
-    tiramisu::buffer buff_g("buff_g", {tiramisu::expr(f_extent_2), tiramisu::expr(rows_per_node), tiramisu::expr(f_extent_0)}, tiramisu::p_uint64, tiramisu::a_output, &fusion_dist);
-    tiramisu::buffer buff_h("buff_h", {tiramisu::expr(f_extent_2), tiramisu::expr(rows_per_node), tiramisu::expr(f_extent_0)}, tiramisu::p_uint64, tiramisu::a_output, &fusion_dist);
+    tiramisu::buffer buff_f("buff_f", {tiramisu::expr(f_extent_2), tiramisu::expr(rows_per_node), tiramisu::expr(f_extent_0)}, tiramisu::p_uint64, tiramisu::a_temporary, &fusion_dist);
+    tiramisu::buffer buff_g("buff_g", {tiramisu::expr(f_extent_2), tiramisu::expr(rows_per_node), tiramisu::expr(f_extent_0)}, tiramisu::p_uint64, tiramisu::a_temporary, &fusion_dist);
+    tiramisu::buffer buff_h("buff_h", {tiramisu::expr(f_extent_2), tiramisu::expr(rows_per_node), tiramisu::expr(f_extent_0)}, tiramisu::p_uint64, tiramisu::a_temporary, &fusion_dist);
     tiramisu::buffer buff_k("buff_k", {tiramisu::expr(f_extent_2), tiramisu::expr(rows_per_node), tiramisu::expr(f_extent_0)}, tiramisu::p_uint64, tiramisu::a_output, &fusion_dist);
     input.set_access("{input[i2, i1, i0]->buff_input[i2, i1, i0]}");
     f_s0.set_access("{f_s0[f_s0_c, f_s0_y, f_s0_x]->buff_f[f_s0_c, f_s0_y, f_s0_x]}");
@@ -106,7 +106,7 @@ int main(int argc, char **argv)
     h_s0.set_access("{h_s0[h_s0_c, h_s0_y, h_s0_x]->buff_h[h_s0_c, h_s0_y, h_s0_x]}");
     k_s0.set_access("{k_s0[k_s0_c, k_s0_y, k_s0_x]->buff_k[k_s0_c, k_s0_y, k_s0_x]}");
 
-    fusion_dist.set_arguments({&buff_input, &buff_f, &buff_g, &buff_h, &buff_k});
+    fusion_dist.set_arguments({&buff_input, &buff_k});
     fusion_dist.gen_time_space_domain();
     fusion_dist.gen_isl_ast();
     fusion_dist.gen_halide_stmt();

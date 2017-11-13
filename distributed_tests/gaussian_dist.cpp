@@ -159,8 +159,8 @@ int main(int argc, char **argv)
     tiramisu::buffer buff_kernelx("buff_kernelx", {tiramisu::expr(kernelx_extent_0)}, tiramisu::p_float32, tiramisu::a_input, &gaussian_tiramisu);
     tiramisu::buffer buff_kernely("buff_kernely", {tiramisu::expr(kernely_extent_0)}, tiramisu::p_float32, tiramisu::a_input, &gaussian_tiramisu);
 
-    tiramisu::buffer buff_gaussian_x("buff_gaussian_x", {tiramisu::expr(CHANNELS), tiramisu::expr(rows_per_node + 4), tiramisu::expr(COLS-4)}, tiramisu::p_float32, tiramisu::a_output, &gaussian_tiramisu);
-    tiramisu::buffer buff_gaussian_x_last("buff_gaussian_x_last", {tiramisu::expr(CHANNELS), tiramisu::expr(rows_per_node), tiramisu::expr(COLS-4)}, tiramisu::p_float32, tiramisu::a_output, &gaussian_tiramisu);
+    tiramisu::buffer buff_gaussian_x("buff_gaussian_x", {tiramisu::expr(CHANNELS), tiramisu::expr(rows_per_node + 4), tiramisu::expr(COLS-4)}, tiramisu::p_float32, tiramisu::a_temporary, &gaussian_tiramisu);
+    tiramisu::buffer buff_gaussian_x_last("buff_gaussian_x_last", {tiramisu::expr(CHANNELS), tiramisu::expr(rows_per_node), tiramisu::expr(COLS-4)}, tiramisu::p_float32, tiramisu::a_temporary, &gaussian_tiramisu);
 
     tiramisu::buffer buff_gaussian("buff_gaussian", {tiramisu::expr(CHANNELS), tiramisu::expr(rows_per_node), tiramisu::expr(COLS-4)}, tiramisu::p_uint64, tiramisu::a_output, &gaussian_tiramisu);
     tiramisu::buffer buff_gaussian_last("buff_gaussian_last", {tiramisu::expr(CHANNELS), tiramisu::expr(rows_per_node - 4), tiramisu::expr(COLS-4)}, tiramisu::p_uint64, tiramisu::a_output, &gaussian_tiramisu);
@@ -180,7 +180,7 @@ int main(int argc, char **argv)
 
     // Add schedules.
 
-    gaussian_tiramisu.set_arguments({&buff_input, &buff_kernelx, &buff_kernely, &buff_gaussian_x, &buff_gaussian_x_last, &buff_gaussian, &buff_gaussian_last});
+    gaussian_tiramisu.set_arguments({&buff_input, &buff_kernelx, &buff_kernely, /*&buff_gaussian_x, &buff_gaussian_x_last,*/ &buff_gaussian, &buff_gaussian_last});
     gaussian_tiramisu.gen_time_space_domain();
     gaussian_tiramisu.lift_ops_to_library_calls();
     gaussian_tiramisu.gen_isl_ast();

@@ -36,15 +36,15 @@ int main() {
     }
 
 
-    Halide::Buffer<uint64_t> buff_f = Halide::Buffer<uint64_t>(_COLS, _ROWS / NODES, CHANNELS);
-    Halide::Buffer<uint64_t> buff_g = Halide::Buffer<uint64_t>(_COLS, _ROWS / NODES, CHANNELS);
-    Halide::Buffer<uint64_t> buff_h = Halide::Buffer<uint64_t>(_COLS, _ROWS / NODES, CHANNELS);
+    //    Halide::Buffer<uint64_t> buff_f = Halide::Buffer<uint64_t>(_COLS, _ROWS / NODES, CHANNELS);
+    //    Halide::Buffer<uint64_t> buff_g = Halide::Buffer<uint64_t>(_COLS, _ROWS / NODES, CHANNELS);
+    //    Halide::Buffer<uint64_t> buff_h = Halide::Buffer<uint64_t>(_COLS, _ROWS / NODES, CHANNELS);
     Halide::Buffer<uint64_t> buff_k = Halide::Buffer<uint64_t>(_COLS, _ROWS / NODES, CHANNELS);
 
     std::cerr << "Rank: " << rank << std::endl;
     
     // Run once to get rid of overhead/any extra compilation stuff that needs to happen
-    fusion_dist(buff_input.raw_buffer(), buff_f.raw_buffer(), buff_g.raw_buffer(), buff_h.raw_buffer(), buff_k.raw_buffer());
+    fusion_dist(buff_input.raw_buffer(), buff_k.raw_buffer());
 
     MPI_Barrier(MPI_COMM_WORLD);
     for (int i=0; i<20; i++) {
@@ -53,7 +53,7 @@ int main() {
         }
         MPI_Barrier(MPI_COMM_WORLD);
         auto start = std::chrono::high_resolution_clock::now();
-        fusion_dist(buff_input.raw_buffer(), buff_f.raw_buffer(), buff_g.raw_buffer(), buff_h.raw_buffer(), buff_k.raw_buffer());
+        fusion_dist(buff_input.raw_buffer(), buff_k.raw_buffer());
         MPI_Barrier(MPI_COMM_WORLD);
         auto end = std::chrono::high_resolution_clock::now();
         if (rank == 0) {
