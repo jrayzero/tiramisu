@@ -88,7 +88,6 @@ int main(int argc, char **argv)
                                                                 q, q-1, q+1, q, async_block, sync_block,
                                                                 input(i,j), &sobel_dist);
 
-
     sobel_x.get_update(0).tag_distribute_level(i1);
     sobel_x.get_update(1).tag_distribute_level(i1);
     sobel_x.get_update(2).tag_distribute_level(i1);
@@ -115,6 +114,11 @@ int main(int argc, char **argv)
     exchange_last_node.s->tag_distribute_level(q);
     exchange_last_node.r->tag_distribute_level(q);
 
+    exchange.s->collapse_many({collapser(2, 0, COLS)});
+    exchange.r->collapse_many({collapser(2, 0, COLS)});
+    exchange_last_node.s->collapse_many({collapser(2, 0, COLS)});
+    exchange_last_node.r->collapse_many({collapser(2, 0, COLS)});
+
     exchange.s->before(*exchange.r, computation::root);
     exchange.r->before(*exchange_last_node.s, computation::root);
     exchange_last_node.s->before(*exchange_last_node.r, computation::root);
@@ -128,9 +132,9 @@ int main(int argc, char **argv)
     sobel_x.get_update(2).before(sobel_y.get_update(2), computation::root);
     sobel_y.get_update(2).before(sobel.get_update(2), computation::root);
 
-    tiramisu::buffer buff_input("buff_input", {ROWS_PER_NODE, COLS}, p_float32, a_input, &sobel_dist);
-    tiramisu::buffer buff_sobel_x("buff_sobel_x", {ROWS_PER_NODE + 2, COLS - 2}, p_float32, a_output, &sobel_dist);
-    tiramisu::buffer buff_sobel_x_last_node("buff_sobel_x_last_node", {ROWS_PER_NODE, COLS - 2}, p_float32, a_output, &sobel_dist);
+    tiramisu::buffer buff_input("buff_input", {ROWS_PER_NODE + 2, COLS}, p_float32, a_input, &sobel_dist);
+    tiramisu::buffer buff_sobel_x("buff_sobel_x", {ROWS_PER_NODE, COLS - 2}, p_float32, a_output, &sobel_dist);
+    tiramisu::buffer buff_sobel_x_last_node("buff_sobel_x_last_node", {ROWS_PER_NODE - 2, COLS - 2}, p_float32, a_output, &sobel_dist);
     tiramisu::buffer buff_sobel_y("buff_sobel_y", {ROWS_PER_NODE, COLS - 2}, p_float32, a_output, &sobel_dist);
     tiramisu::buffer buff_sobel_y_last_node("buff_sobel_y_last_node", {ROWS_PER_NODE - 2, COLS - 2}, p_float32, a_output, &sobel_dist);
     tiramisu::buffer buff_sobel("buff_sobel", {ROWS_PER_NODE, COLS - 2}, p_float32, a_output, &sobel_dist);
@@ -149,7 +153,6 @@ int main(int argc, char **argv)
 
     exchange.r->set_access("{exchange_r[q,i,j]->buff_input[" + std::to_string(ROWS_PER_NODE) + "+ i,j]}");
     exchange_last_node.r->set_access("{exchange_last_node_r[q,i,j]->buff_input[" + std::to_string(ROWS_PER_NODE) + "+ i,j]}");
-
 
     // Add schedules.
 
