@@ -2057,7 +2057,7 @@ void tiramisu::computation::vectorize(tiramisu::var L0_var, int v)
     DEBUG_NEWLINE(3);
 
     this->set_loop_level_names(original_loop_level_names);
-    this->name_unnamed_time_space_dimensions();
+//    this->name_unnamed_time_space_dimensions();
 
     DEBUG(3, tiramisu::str_dump("Names updated. New names are: "));
     for (auto n: this->get_loop_level_names())
@@ -3603,11 +3603,14 @@ void computation::set_loop_level_names(std::vector<std::string> names)
 
     for (int i = 0; i < this->get_loop_levels_number(); i++)
     {
+	if (isl_map_has_dim_name(this->get_schedule(), isl_dim_out, loop_level_into_dynamic_dimension(i)) == isl_bool_true)
+	{
 	    this->schedule = isl_map_set_dim_name(this->get_schedule(),
 	        isl_dim_out,
 		loop_level_into_dynamic_dimension(i),
                 names[i].c_str());
   	    DEBUG(3, tiramisu::str_dump("Setting the name of loop level " + std::to_string(i) + " into " + names[i].c_str()));
+	}
     }
 
     DEBUG(3, tiramisu::str_dump("The schedule after renaming: ", isl_map_to_str(this->get_schedule())));
@@ -5928,7 +5931,7 @@ std::string tiramisu::function::get_gpu_thread_iterator(const std::string &comp,
         {
             if (lev0 == std::get<0>(pd.second))
             {
-                res = ".__thread_id_x";
+                res = ".__thread_id_z";
             }
             else if (lev0 == std::get<1>(pd.second))
             {
@@ -5936,7 +5939,7 @@ std::string tiramisu::function::get_gpu_thread_iterator(const std::string &comp,
             }
             else if (lev0 == std::get<2>(pd.second))
             {
-                res = ".__thread_id_z";
+                res = ".__thread_id_x";
             }
             else
             {
@@ -5973,7 +5976,7 @@ std::string tiramisu::function::get_gpu_block_iterator(const std::string &comp, 
         {
             if (lev0 == std::get<0>(pd.second))
             {
-                res = ".__block_id_x";
+                res = ".__block_id_z";
             }
             else if (lev0 == std::get<1>(pd.second))
             {
@@ -5981,7 +5984,7 @@ std::string tiramisu::function::get_gpu_block_iterator(const std::string &comp, 
             }
             else if (lev0 == std::get<2>(pd.second))
             {
-                res = ".__block_id_z";
+                res = ".__block_id_x";
             }
             else
             {

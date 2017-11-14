@@ -99,9 +99,9 @@ int main() {
      * Create communication
      */
 
-    channel sync_block("sync_block", p_uint64, {FIFO, SYNC, BLOCK, MPI});
-    channel async_nonblock("async_nonblock", p_uint64, {FIFO, ASYNC, NONBLOCK, MPI});
-    channel async_block("async_block", p_uint64, {FIFO, ASYNC, BLOCK, MPI});
+    communication_prop sync_block("sync_block", p_uint64, {FIFO, SYNC, BLOCK, MPI});
+    communication_prop async_nonblock("async_nonblock", p_uint64, {FIFO, ASYNC, NONBLOCK, MPI});
+    communication_prop async_block("async_block", p_uint64, {FIFO, ASYNC, BLOCK, MPI});
 
     // transfer the top row to the node above you. That becomes the upper node's bottom row
     /*    send_recv upper_exchanges = computation::create_transfer("[one, nodes, cols]->{upper_s[q,y,x]: one<=q<nodes and 0<=y<2 and 0<=x<cols}",

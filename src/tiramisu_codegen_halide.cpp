@@ -1727,6 +1727,25 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                             halide_dim_sizes, Halide::Internal::const_true(), result);
 
                     buf->mark_as_allocated();
+
+		    for (const auto &l_stmt : comp->get_associated_let_stmts())
+		    {
+			DEBUG(3, tiramisu::str_dump("Generating the following let statement."));
+			DEBUG(3, tiramisu::str_dump("Name : " + l_stmt.first));
+			DEBUG(3, tiramisu::str_dump("Expression of the let statement: "));
+
+			l_stmt.second.dump(false);
+
+			std::vector<isl_ast_expr *> ie = {}; // Dummy variable.
+			tiramisu::expr tiramisu_let = replace_original_indices_with_transformed_indices(l_stmt.second, comp->get_iterators_map());
+			Halide::Expr let_expr = halide_expr_from_tiramisu_expr(comp->get_function(), ie, tiramisu_let);
+			result = Halide::Internal::LetStmt::make(
+				     l_stmt.first,
+				     let_expr,
+				     result);
+			DEBUG(10, tiramisu::str_dump("Generated let stmt:"));
+			DEBUG_NO_NEWLINE(10, std::cout << result);
+		    }
                 }
             }
             allocate_stmts_vector.clear();
@@ -1875,8 +1894,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                 }
                 else if (fct.should_map_to_gpu_thread(tagged_stmts[tt], level))
                 {
-                    // TODO(tiramisu): The for-type should have been "GPUThread"
-                    fortype = Halide::Internal::ForType::Parallel;
+                    fortype = Halide::Internal::ForType::GPUThread;
                     dev_api = Halide::DeviceAPI::OpenCL;
                     std::string gpu_iter = fct.get_gpu_thread_iterator(tagged_stmts[tt], level);
                     Halide::Expr new_iterator_var =
@@ -1895,8 +1913,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                 }
                 else if (fct.should_map_to_gpu_block(tagged_stmts[tt], level))
                 {
-                    // TODO(tiramisu): The for-type should have been "GPUBlock"
-                    fortype = Halide::Internal::ForType::Parallel;
+                    fortype = Halide::Internal::ForType::GPUBlock;
                     dev_api = Halide::DeviceAPI::OpenCL;
                     std::string gpu_iter = fct.get_gpu_block_iterator(tagged_stmts[tt], level);
                     Halide::Expr new_iterator_var =
@@ -2245,6 +2262,9 @@ void function::gen_halide_stmt()
                 generator::halide_expr_from_tiramisu_expr(this, ie, param.get_expr(), nullptr),
                 stmt);
     }
+
+    // Add producer tag
+    stmt = Halide::Internal::ProducerConsumer::make_produce("", stmt);
 
     this->halide_stmt = stmt;
 
@@ -3302,7 +3322,7 @@ void function::gen_halide_obj(const std::string &obj_file_name, Halide::Target::
     // Halide::Target::OpenCL, etc.
     std::vector<Halide::Target::Feature> features =
             {
-                    Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers
+	      Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers, Halide::Target::OpenCL
             };
     Halide::Target target(os, arch, bits, features);
 
