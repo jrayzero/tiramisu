@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-  int filter2D_dist(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
+  int filter2D_dist(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
   int filter2D_dist_argv(void **args);
   // Result is never null and points to constant static data
   const struct halide_filter_metadata_t *filter2D_data_metadata();

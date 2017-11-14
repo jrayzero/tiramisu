@@ -16,8 +16,6 @@
 
 using namespace tiramisu;
 
-#define NODES 5
-
 int main(int argc, char **argv)
 {
     // Set default tiramisu options.
@@ -33,13 +31,13 @@ int main(int argc, char **argv)
     constant cols("cols", expr(COLS), p_int32, true, NULL, 0, &filter2D_dist);
     constant channels("channels", expr(CHANNELS), p_int32, true, NULL, 0, &filter2D_dist);
 
-    tiramisu::computation kernel("{kernel[i, j]: 0<=i<3 and 0<=j<3}", expr(), false, tiramisu::p_float32, &filter2D_dist);
+    //    tiramisu::computation kernel("{kernel[i, j]: 0<=i<3 and 0<=j<3}", expr(), false, tiramisu::p_float32, &filter2D_dist);
     tiramisu::computation input("[channels, rows, cols]->{input[c, i, j]: 0<=c<channels and 0<=i<rows and 0<=j<cols}", expr(), false, tiramisu::p_float32, &filter2D_dist);
 
     var i("i"), j("j"), c("c");
-    tiramisu::expr filter2D_expr(input(c, i, j) * kernel(i,j) + input(c, i+1, j) * kernel(i,j) + input(c, i+2, j) * kernel(i,j)
-                                 + input(c, i, j+1) * kernel(i,j) + input(c, i+1, j+1) * kernel(i,j) + input(c, i+2, j+1) * kernel(i,j)
-                                 + input(c, i, j+2) * kernel(i,j) + input(c, i+1, j+2) * kernel(i,j) + input(c, i+2, j+2) * kernel(i,j));
+    tiramisu::expr filter2D_expr(input(c, i, j) * 0.0f + input(c, i+1, j) * 1.0f/5.0f + input(c, i+2, j) * 0.0f
+                                 + input(c, i, j+1) * 1.0f/5.0f + input(c, i+1, j+1) * 1.0f/5.0f + input(c, i+2, j+1) * 1.0f/5.0f
+                                 + input(c, i, j+2) * 0.0f + input(c, i+1, j+2) * 1.0f + input(c, i+2, j+2) * 0.0f);
     tiramisu::computation filter2D("[channels, rows, cols]->{filter2D[c, i, j]: 0<=c<channels and 0<=i<rows-2 and 0<=j<cols-2}",
                                    filter2D_expr,
                                    true, tiramisu::p_float32, &filter2D_dist);
@@ -98,19 +96,19 @@ int main(int argc, char **argv)
     filter2D_exchange_last_node.r->collapse_many({collapser(3, 0, COLS)});
 
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(CHANNELS), tiramisu::expr(rows_per_node) + 2, tiramisu::expr(COLS)}, tiramisu::p_float32, tiramisu::a_input, &filter2D_dist);
-    tiramisu::buffer buff_kernel("buff_kernel", {tiramisu::expr(3), tiramisu::expr(3)}, tiramisu::p_float32, tiramisu::a_input, &filter2D_dist);
+    //    tiramisu::buffer buff_kernel("buff_kernel", {tiramisu::expr(3), tiramisu::expr(3)}, tiramisu::p_float32, tiramisu::a_input, &filter2D_dist);
     tiramisu::buffer buff_filter2D("buff_filter2D", {tiramisu::expr(CHANNELS), tiramisu::expr(rows_per_node), tiramisu::expr(COLS) - 2}, tiramisu::p_float32, tiramisu::a_output, &filter2D_dist);
     tiramisu::buffer buff_filter2D_last_node("buff_filter2D_last_node", {tiramisu::expr(CHANNELS), tiramisu::expr(rows_per_node) - 2, tiramisu::expr(COLS) - 2}, tiramisu::p_float32, tiramisu::a_output, &filter2D_dist);
 
     input.set_access("{input[c, i, j]->buff_input[c, i, j]}");
-    kernel.set_access("{kernel[i, j]->buff_kernel[i, j]}");
+    //    kernel.set_access("{kernel[i, j]->buff_kernel[i, j]}");
     filter2D.get_update(0).set_access("{filter2D_0[c, i, j]->buff_filter2D[c, i, j]}");
     filter2D.get_update(1).set_access("{filter2D_1[c, i, j]->buff_filter2D[c, i, j]}");
     filter2D.get_update(2).set_access("{filter2D_2[c, i, j]->buff_filter2D_last_node[c, i, j]}");
     filter2D_exchange.r->set_access("{filter2D_exchange_r[q,c,y,x]->buff_input[c, " + std::to_string(rows_per_node) + " + y, x]}");
     filter2D_exchange_last_node.r->set_access("{filter2D_exchange_last_node_r[q,c,y,x]->buff_input[c, " + std::to_string(rows_per_node) + " + y, x]}");
 
-    filter2D_dist.set_arguments({&buff_input, &buff_kernel, &buff_filter2D, &buff_filter2D_last_node});
+    filter2D_dist.set_arguments({&buff_input, &buff_filter2D, &buff_filter2D_last_node});
     filter2D_dist.gen_time_space_domain();
     filter2D_dist.lift_ops_to_library_calls();
     filter2D_dist.gen_isl_ast();
