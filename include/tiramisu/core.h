@@ -36,7 +36,7 @@ class communicator;
 class send;
 class recv;
 class wait;
-class channel;
+class communication_prop;
 struct transfer;
 struct send_recv;
 
@@ -3699,13 +3699,13 @@ public:
       * e should be just a single access expression into the producer.
       */
     static send_recv create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr src,
-                                     tiramisu::expr dest, channel send_chan, channel recv_chan,
+                                     tiramisu::expr dest, communication_prop send_chan, communication_prop recv_chan,
                                      tiramisu::expr e, std::vector<tiramisu::computation *> consumers,
                                      tiramisu::function *fct);
 
     static send_recv create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_src,
                                         tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
-                                        channel send_chan, channel recv_chan, tiramisu::expr e, tiramisu::function *fct);
+                                        communication_prop send_chan, communication_prop recv_chan, tiramisu::expr e, tiramisu::function *fct);
 
 
     static void distribute(std::vector<std::vector<computation *>> ops, std::vector<int> predicates);
@@ -4043,7 +4043,7 @@ enum wait_type {
     WAIT_ALL
 };
 
-class channel {
+class communication_prop {
     friend communicator;
 private:
 
@@ -4053,11 +4053,11 @@ private:
 
     std::vector<tiramisu::channel_attr> attrs;
 
-    channel();
+    communication_prop();
 
 public:
 
-    channel(std::string name, tiramisu::primitive_t dtype, std::initializer_list<tiramisu::channel_attr> attrs);
+    communication_prop(std::string name, tiramisu::primitive_t dtype, std::initializer_list<tiramisu::channel_attr> attrs);
 
     void add_attr(tiramisu::channel_attr attr);
 
@@ -4087,7 +4087,7 @@ private:
 
 protected:
 
-    channel chan;
+    communication_prop chan;
 
     communicator();
 
@@ -4097,7 +4097,7 @@ public:
                  tiramisu::primitive_t data_type, tiramisu::function *fct);
 
     communicator(std::string iteration_domain_str, tiramisu::expr rhs,
-                     bool schedule_this_computation, tiramisu::primitive_t, tiramisu::channel chan,
+                     bool schedule_this_computation, tiramisu::primitive_t, tiramisu::communication_prop chan,
                      tiramisu::function *fct);
 
     // collapse a level
@@ -4110,7 +4110,7 @@ public:
 
     void add_dim(tiramisu::expr size);
 
-    channel get_channel() const;
+    communication_prop get_channel() const;
 
     tiramisu::expr get_num_elements() const;
 
@@ -4135,7 +4135,7 @@ private:
 
 public:
 
-    send(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs, channel chan,
+    send(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs, communication_prop chan,
          bool schedule_this_computation, tiramisu::function *fct, std::vector<expr> dims);
 
     tiramisu::computation *get_producer() const;
@@ -4179,10 +4179,10 @@ private:
 
 public:
 
-    recv(std::string iteration_domain_str, tiramisu::computation *consumer, bool schedule_this, tiramisu::channel chan,
+    recv(std::string iteration_domain_str, tiramisu::computation *consumer, bool schedule_this, tiramisu::communication_prop chan,
              tiramisu::function *fct);
 
-    recv(std::string iteration_domain_str, bool schedule_this, tiramisu::channel chan, tiramisu::function *fct);
+    recv(std::string iteration_domain_str, bool schedule_this, tiramisu::communication_prop chan, tiramisu::function *fct);
 
     tiramisu::send *get_matching_send() const;
 

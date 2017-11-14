@@ -7985,22 +7985,22 @@ void tiramisu::computation::storage_fold(tiramisu::var L0_var, int factor)
  * Channel
  */
 
-tiramisu::channel::channel(std::string name, tiramisu::primitive_t dtype,
+tiramisu::communication_prop::communication_prop(std::string name, tiramisu::primitive_t dtype,
                            std::initializer_list<tiramisu::channel_attr> attrs) : name(name), dtype(dtype) {
     this->attrs.insert(this->attrs.begin(), attrs);
 }
 
-channel::channel() { }
+communication_prop::communication_prop() { }
 
-void tiramisu::channel::add_attr(tiramisu::channel_attr attr) {
+void tiramisu::communication_prop::add_attr(tiramisu::channel_attr attr) {
     attrs.push_back(attr);
 }
 
-bool tiramisu::channel::contains_attr(tiramisu::channel_attr attr) const {
+bool tiramisu::communication_prop::contains_attr(tiramisu::channel_attr attr) const {
     return attrs.end() != std::find(attrs.begin(), attrs.end(), attr);
 }
 
-bool tiramisu::channel::contains_attrs(std::vector<tiramisu::channel_attr> attrs) const {
+bool tiramisu::communication_prop::contains_attrs(std::vector<tiramisu::channel_attr> attrs) const {
     for (auto attr : attrs) {
         if (this->attrs.end() == std::find(this->attrs.begin(), this->attrs.end(), attr)) {
             return false;
@@ -8009,15 +8009,15 @@ bool tiramisu::channel::contains_attrs(std::vector<tiramisu::channel_attr> attrs
     return true;
 }
 
-const std::string &tiramisu::channel::get_name() const {
+const std::string &tiramisu::communication_prop::get_name() const {
     return this->name;
 }
 
-tiramisu::primitive_t tiramisu::channel::get_dtype() const {
+tiramisu::primitive_t tiramisu::communication_prop::get_dtype() const {
     return this->dtype;
 }
 
-std::string tiramisu::channel::attr_to_string(tiramisu::channel_attr attr) {
+std::string tiramisu::communication_prop::attr_to_string(tiramisu::channel_attr attr) {
     switch (attr) {
         case SYNC: return "SYNC";
         case ASYNC: return "ASYNC";
@@ -8027,7 +8027,7 @@ std::string tiramisu::channel::attr_to_string(tiramisu::channel_attr attr) {
         case NONBLOCK: return "NONBLOCK";
         case CUDAEVENT: return "CUDAEVENT";
         default: {
-            assert(false && "Unknown channel attr specified.");
+            assert(false && "Unknown communication_prop attr specified.");
             return "";
         }
     }
@@ -8039,7 +8039,7 @@ std::string tiramisu::channel::attr_to_string(tiramisu::channel_attr attr) {
 
 tiramisu::communicator::communicator(std::string iteration_domain_str, tiramisu::expr e,
                                      bool schedule_this_computation, tiramisu::primitive_t data_type,
-                                     tiramisu::channel chan, tiramisu::function *fct) :
+                                     tiramisu::communication_prop chan, tiramisu::function *fct) :
         computation(iteration_domain_str, e, schedule_this_computation, data_type, fct), chan(chan) {}
 
 tiramisu::communicator::communicator(std::string iteration_domain_str, tiramisu::expr e, bool schedule_this_computation,
@@ -8067,7 +8067,7 @@ tiramisu::expr tiramisu::communicator::get_num_elements() const {
     return num;
 }
 
-channel tiramisu::communicator::get_channel() const {
+communication_prop tiramisu::communicator::get_channel() const {
     return chan;
 }
 
@@ -8094,7 +8094,7 @@ std::vector<communicator *> tiramisu::communicator::collapse(int level, tiramisu
  * Send
  */
 
-std::string create_send_func_name(const channel chan) {
+std::string create_send_func_name(const communication_prop chan) {
     std::string name = "send";
     if (chan.contains_attr(MPI)) {
         name += "_MPI";
@@ -8117,7 +8117,7 @@ std::string create_send_func_name(const channel chan) {
 int send::next_msg_tag = 0;
 
 tiramisu::send::send(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs,
-                     channel chan, bool schedule_this, tiramisu::function *fct, std::vector<expr> dims) :
+                     communication_prop chan, bool schedule_this, tiramisu::function *fct, std::vector<expr> dims) :
         communicator(iteration_domain_str, rhs, schedule_this, chan.get_dtype(),
                      chan, fct), producer(producer),
         msg_tag(tiramisu::expr(next_msg_tag++)) {
@@ -8147,7 +8147,7 @@ void tiramisu::send::set_matching_recv(tiramisu::recv *matching_recv) {
  * Recv
  */
 
-std::string create_recv_func_name(const channel chan) {
+std::string create_recv_func_name(const communication_prop chan) {
     std::string name = "recv";
     if (chan.contains_attr(MPI)) {
         name += "_MPI";
@@ -8163,14 +8163,14 @@ std::string create_recv_func_name(const channel chan) {
 }
 
 
-tiramisu::recv::recv(std::string iteration_domain_str, tiramisu::computation *consumer, bool schedule_this, tiramisu::channel chan,
+tiramisu::recv::recv(std::string iteration_domain_str, tiramisu::computation *consumer, bool schedule_this, tiramisu::communication_prop chan,
                      tiramisu::function *fct)
         : communicator(iteration_domain_str, tiramisu::expr(), schedule_this, chan.get_dtype(),
                        chan, fct), consumer(consumer) {
     _is_library_call = true;
 }
 
-tiramisu::recv::recv(std::string iteration_domain_str, bool schedule_this, tiramisu::channel chan, tiramisu::function *fct)
+tiramisu::recv::recv(std::string iteration_domain_str, bool schedule_this, tiramisu::communication_prop chan, tiramisu::function *fct)
         : communicator(iteration_domain_str, tiramisu::expr(), schedule_this, chan.get_dtype(),
                        chan, fct) {
     _is_library_call = true;
@@ -8426,7 +8426,7 @@ bool tiramisu::wait::is_wait() const {
 
 send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_src,
                                                  tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
-                                                 channel send_chan, channel recv_chan, tiramisu::expr e, tiramisu::function *fct) {
+                                                 communication_prop send_chan, communication_prop recv_chan, tiramisu::expr e, tiramisu::function *fct) {
     assert(e.get_op_type() == tiramisu::o_access);
     tiramisu::computation *producer = fct->get_computation_by_name(e.get_name())[0];
 
@@ -8468,7 +8468,7 @@ send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, s
 
 send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, std::string recv_iter_domain,
                                                  tiramisu::expr src,
-                                                 tiramisu::expr dest, channel send_chan, channel recv_chan,
+                                                 tiramisu::expr dest, communication_prop send_chan, communication_prop recv_chan,
                                                  tiramisu::expr e, std::vector<tiramisu::computation *> consumers,
                                                  tiramisu::function *fct) {
     assert(e.get_op_type() == tiramisu::o_access);

@@ -61,8 +61,8 @@ int main(int argc, char **argv)
      * Create communication
      */
 
-    channel sync_block("sync_block", p_float32, {FIFO, SYNC, BLOCK, MPI});
-    channel async_block("async_block", p_float32, {FIFO, ASYNC, BLOCK, MPI});
+    communication_prop sync_block("sync_block", p_float32, {FIFO, SYNC, BLOCK, MPI});
+    communication_prop async_block("async_block", p_float32, {FIFO, ASYNC, BLOCK, MPI});
     send_recv filter2D_exchange = computation::create_transfer("[one, nodes_minus_one, cols, channels]->{filter2D_exchange_s[q,c,i,j]: one<=q<nodes_minus_one and 0<=i<2 and 0<=j<cols and 0<=c<channels}",
                                                                "[nodes_minus_two, cols, channels]->{filter2D_exchange_r[q,c,i,j]: 0<=q<nodes_minus_two and 0<=i<2 and 0<=j<cols and 0<=c<channels}",
                                                                q, q-1, q+1, q, async_block, sync_block,
