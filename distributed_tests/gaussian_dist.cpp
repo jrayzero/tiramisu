@@ -97,9 +97,9 @@ int main(int argc, char **argv)
     generator::replace_expr_name(gaussian_s0.get_update(1).expression, "gaussian_x_s0", "gaussian_x_s0_1");
     generator::replace_expr_name(gaussian_s0.get_update(2).expression, "gaussian_x_s0", "gaussian_x_s0_2");
 
-    channel sync_block("sync_block", p_float32, {FIFO, SYNC, BLOCK, MPI});
-    channel async_nonblock("async_nonblock", p_float32, {FIFO, ASYNC, NONBLOCK, MPI});
-    channel async_block("async_block", p_float32, {FIFO, ASYNC, BLOCK, MPI});
+    communication_prop sync_block("sync_block", p_float32, {FIFO, SYNC, BLOCK, MPI});
+    communication_prop async_nonblock("async_nonblock", p_float32, {FIFO, ASYNC, NONBLOCK, MPI});
+    communication_prop async_block("async_block", p_float32, {FIFO, ASYNC, BLOCK, MPI});
 
     // transfer the computed rows from gaussian_x    
     send_recv gaussian_x_exchange = computation::create_transfer("[one, nodes_minus_one, cols, channels]->{gaussian_exchange_s[q,c,y,x]: one<=q<nodes_minus_one and 0<=y<4 and 0<=x<cols-4 and 0<=c<channels}",

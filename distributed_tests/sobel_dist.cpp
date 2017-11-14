@@ -74,8 +74,8 @@ int main(int argc, char **argv)
     generator::replace_expr_name(sobel.get_update(2).expression, "sobel_x", "sobel_x_2");
     generator::replace_expr_name(sobel.get_update(2).expression, "sobel_y", "sobel_y_2");
 
-    channel sync_block("sync_block", p_float32, {FIFO, SYNC, BLOCK, MPI});
-    channel async_block("async_block", p_float32, {FIFO, ASYNC, BLOCK, MPI});
+    communication_prop sync_block("sync_block", p_float32, {FIFO, SYNC, BLOCK, MPI});
+    communication_prop async_block("async_block", p_float32, {FIFO, ASYNC, BLOCK, MPI});
 
     // transfer the computed rows from gaussian_x
     send_recv exchange = computation::create_transfer("[one, nodes_minus_one, cols]->{exchange_s[q,i,j]: one<=q<nodes_minus_one and 0<=i<2 and 0<=j<cols}",
