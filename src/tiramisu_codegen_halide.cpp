@@ -1738,7 +1738,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
 
 			std::vector<isl_ast_expr *> ie = {}; // Dummy variable.
 			tiramisu::expr tiramisu_let = replace_original_indices_with_transformed_indices(l_stmt.second, comp->get_iterators_map());
-			Halide::Expr let_expr = halide_expr_from_tiramisu_expr(comp->get_function(), ie, tiramisu_let);
+			Halide::Expr let_expr = halide_expr_from_tiramisu_expr(comp->get_function(), ie, tiramisu_let, comp);
 			result = Halide::Internal::LetStmt::make(
 				     l_stmt.first,
 				     let_expr,
