@@ -1895,7 +1895,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                 else if (fct.should_map_to_gpu_thread(tagged_stmts[tt], level))
                 {
                     fortype = Halide::Internal::ForType::GPUThread;
-                    dev_api = Halide::DeviceAPI::OpenCL;
+                    dev_api = Halide::DeviceAPI::CUDA;
                     std::string gpu_iter = fct.get_gpu_thread_iterator(tagged_stmts[tt], level);
                     Halide::Expr new_iterator_var =
                             Halide::Internal::Variable::make(Halide::Int(32), gpu_iter);
@@ -1914,7 +1914,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                 else if (fct.should_map_to_gpu_block(tagged_stmts[tt], level))
                 {
                     fortype = Halide::Internal::ForType::GPUBlock;
-                    dev_api = Halide::DeviceAPI::OpenCL;
+                    dev_api = Halide::DeviceAPI::CUDA;
                     std::string gpu_iter = fct.get_gpu_block_iterator(tagged_stmts[tt], level);
                     Halide::Expr new_iterator_var =
                             Halide::Internal::Variable::make(Halide::Int(32), gpu_iter);
@@ -1970,29 +1970,29 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
         DEBUG(10, tiramisu::str_dump(ts + " "));
 
         if (convert_to_conditional) {
-            DEBUG(3, tiramisu::str_dump("Converting for loop into a rank conditional."));
+            DEBUG(3, tiramisu::str_dump("Tagging for loop as a conditional on the rank."));
             // TODO Jess, this is only going to work if the loop we need to stick on starts from 0. If the loop doesn't start from 0, will the code generator actually remove it?
-            if (offset) { // We need to create a for loop for this level and then wrap it in an if statement because our split was removed by the code generator
+            /*            if (offset) { // We need to create a for loop for this level and then wrap it in an if statement because our split was removed by the code generator
                 assert(false);
                 halide_body = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
                                                           fortype, dev_api, halide_body);
-            }
-            Halide::Expr rank_var =
-                    Halide::Internal::Variable::make(halide_type_from_tiramisu_type(p_int32), "rank");
-            Halide::Expr condition;
-            if (offset) {
-                condition = rank_var == 0;
-            } else {
-                condition = rank_var >= init_expr;
-                condition = condition && (rank_var < cond_upper_bound_halide_format);
-            }
-            Halide::Internal::Stmt else_s;
+                                                          }*/
+            //            Halide::Expr rank_var =
+            //                    Halide::Internal::Variable::make(halide_type_from_tiramisu_type(p_int32), "rank");
+            //            Halide::Expr condition;
+            //            if (offset) {
+            //                condition = rank_var == 0;
+            //            } else {
+            //                condition = rank_var >= init_expr;
+            //                condition = condition && (rank_var < cond_upper_bound_halide_format);
+            //            }
+            //            Halide::Internal::Stmt else_s;
             // We need a reference still to this iterator name, so set it equal to the rank
-            halide_body = Halide::Internal::LetStmt::make(iterator_str, rank_var, halide_body);
-            std::cerr << halide_body << std::endl;
-            result = Halide::Internal::IfThenElse::make(condition, halide_body, else_s);
+            //  halide_body = Halide::Internal::LetStmt::make(iterator_str, rank_var, halide_body);
+            //            result = Halide::Internal::IfThenElse::make(condition, halide_body, else_s);
+            result = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
+                                                 Halide::Internal::ForType::Conditional, dev_api, halide_body);
         } else {
-            std::cerr << halide_body << std::endl;
             DEBUG(3, tiramisu::str_dump("Creating the for loop."));
             result = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
                                                  fortype, dev_api, halide_body);
@@ -2209,7 +2209,7 @@ void function::gen_halide_stmt()
         Halide::Expr mpi_rank = Halide::Internal::Call::make(Halide::Int(32), Halide::Internal::Call::mrank,
                                                              std::vector<Halide::Expr>(),
                                                              Halide::Internal::Call::Intrinsic);
-        stmt = Halide::Internal::LetStmt::make("rank", mpi_rank, stmt);
+        stmt = Halide::Internal::LetStmt::make("rank", mpi_rank, stmt, true);
     }
 
     DEBUG(3, tiramisu::str_dump("The following Halide statement was generated:\n"); std::cout << stmt << std::endl);
@@ -3319,10 +3319,10 @@ void function::gen_halide_obj(const std::string &obj_file_name, Halide::Target::
                               Halide::Target::Arch arch, int bits) const
 {
     // TODO(tiramisu): For GPU schedule, we need to set the features, e.g.
-    // Halide::Target::OpenCL, etc.
+    // Halide::Target::CUDA, etc.
     std::vector<Halide::Target::Feature> features =
             {
-	      Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers, Halide::Target::OpenCL
+	      Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers//, Halide::Target::CUDA
             };
     Halide::Target target(os, arch, bits, features);
 

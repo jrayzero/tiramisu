@@ -107,9 +107,12 @@ Module lower_halide_pipeline(const string &pipeline_name,
 
     DEBUG(3, tiramisu::str_dump("Simplifying...\n"));
     s = simplify(s);
+    DEBUG(4, tiramisu::str_dump(stmt_to_string("Lowering after second simplifcation:\n", s)));
+    s = replace_for_loop_with_conditional(s);
+    DEBUG(4, tiramisu::str_dump(stmt_to_string("Lowering after loop conditional:\n", s)));
     s = unify_duplicate_lets(s);
     s = remove_trivial_for_loops(s);
-    DEBUG(4, tiramisu::str_dump(stmt_to_string("Lowering after second simplifcation:\n", s)));
+
 
     // TODO(tiramisu): Should we handle prefetch in tiramisu?
 
@@ -171,6 +174,12 @@ Module lower_halide_pipeline(const string &pipeline_name,
     DEBUG(3, tiramisu::str_dump("Splitting off Hexagon offload...\n"));
     s = inject_hexagon_rpc(s, t, result_module);
     DEBUG(4, tiramisu::str_dump(stmt_to_string("Lowering after splitting off Hexagon offload:\n", s)));
+    // TODO SUPER HACKYYYYYY
+    Halide::Expr mpi_rank = Halide::Internal::Call::make(Halide::Int(32), Halide::Internal::Call::mrank,
+                                                         std::vector<Halide::Expr>(),
+                                                         Halide::Internal::Call::Intrinsic);
+    s = Halide::Internal::LetStmt::make("rank", mpi_rank, s, true);
+    std::cout << "Lowering after rank insertion:\n" << s << "\n";
 
 
     vector<Argument> public_args = args;
