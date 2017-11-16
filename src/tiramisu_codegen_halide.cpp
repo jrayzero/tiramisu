@@ -3322,8 +3322,12 @@ void function::gen_halide_obj(const std::string &obj_file_name, Halide::Target::
     // Halide::Target::CUDA, etc.
     std::vector<Halide::Target::Feature> features =
             {
-	      Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers//, Halide::Target::CUDA
+	      Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers
+#if WITH_CUDA==1
+              , Halide::Target::CUDA//, Halide::Target::Debug
+#endif
             };
+
     Halide::Target target(os, arch, bits, features);
 
     std::vector<Halide::Argument> fct_arguments;

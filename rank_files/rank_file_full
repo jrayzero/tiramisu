@@ -1,0 +1,28 @@
+# GPU procs
+rank 0=nike3 slot=0:0-1
+rank 1=nike3 slot=1:0-1
+rank 2=nike4 slot=0:0-1
+rank 3=nike4 slot=1:0-1
+rank 4=nike5 slot=0:0-1
+rank 5=nike5 slot=1:0-1
+rank 6=nike6 slot=0:0-1
+rank 7=nike6 slot=1:0-1
+rank 8=nike8 slot=0:0-1
+rank 9=nike8 slot=1:0-1
+rank 10=nike9 slot=0:0-1
+rank 11=nike9 slot=1:0-1
+# CPU procs
+rank 12=nike3 slot=0:1-11
+rank 13=nike3 slot=1:1-11
+rank 14=nike4 slot=0:1-11
+rank 15=nike4 slot=1:1-11
+rank 16=nike5 slot=0:1-11
+rank 17=nike5 slot=1:1-11
+rank 18=nike6 slot=0:1-11
+rank 19=nike6 slot=1:1-11
+rank 20=nike8 slot=0:1-11
+rank 21=nike8 slot=1:1-11
+rank 22=nike9 slot=0:1-11
+rank 23=nike9 slot=1:1-11
+
+

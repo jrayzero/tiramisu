@@ -108,7 +108,11 @@ Module lower_halide_pipeline(const string &pipeline_name,
     DEBUG(3, tiramisu::str_dump("Simplifying...\n"));
     s = simplify(s);
     DEBUG(4, tiramisu::str_dump(stmt_to_string("Lowering after second simplifcation:\n", s)));
-    s = replace_for_loop_with_conditional(s);
+#if WITH_CUDA==1
+    s = replace_for_loop_with_conditional(s, 0, -1 * NODES/2);
+#else
+    s = replace_for_loop_with_conditional(s, NODES/2, 0);
+#endif
     DEBUG(4, tiramisu::str_dump(stmt_to_string("Lowering after loop conditional:\n", s)));
     s = unify_duplicate_lets(s);
     s = remove_trivial_for_loops(s);
