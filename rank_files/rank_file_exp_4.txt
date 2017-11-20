@@ -1,2 +1,0 @@
-# GPU procs
-rank 0=nike3 slot=0:0-1

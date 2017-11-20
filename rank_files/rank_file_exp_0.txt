@@ -1,3 +1,0 @@
-# GPU procs
-# CPU procs
-rank 0=nike3 slot=0:1-2
