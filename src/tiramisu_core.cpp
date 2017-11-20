@@ -1512,7 +1512,7 @@ void tiramisu::computation::tag_parallel_level(tiramisu::var L0_var)
     DEBUG_INDENT(-4);
 }
 
-void tiramisu::computation::tag_distribute_level(tiramisu::var L) {
+void tiramisu::computation::tag_distribute_level(tiramisu::var L, bool drop_rank_iter) {
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
 
@@ -1523,6 +1523,8 @@ void tiramisu::computation::tag_distribute_level(tiramisu::var L) {
     int L0 = dimensions[0];
 
     this->tag_distribute_level(L0);
+
+    this->drop_rank_iter_from_index = drop_rank_iter;
 
     DEBUG_INDENT(-4);
 }
@@ -1720,7 +1722,7 @@ void tiramisu::computation::separate(int dim, tiramisu::expr N, int v)
   DEBUG_INDENT(-4);
 }
 
-void tiramisu::computation::separate_at(int dim, std::vector<constant> separate_points, constant max, int dim_sched_after)
+void tiramisu::computation::separate_at(int dim, std::vector<constant> separate_points, constant max)
 {
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
@@ -1823,14 +1825,6 @@ void tiramisu::computation::separate_at(int dim, std::vector<constant> separate_
 
             this->get_update(last_update_computation).add_schedule_constraint("", cons.c_str());
 
-            // Mark the separated computation to be executed after the original (full)
-            // computation.
-            if (dim_sched_after == -2) {
-                this->get_update(last_update_computation).after(*this, dim);
-            } else if (dim_sched_after != -3) { // -3 means don't do any scheduling
-                this->get_update(last_update_computation).after(*this, dim_sched_after);
-            }
-
             DEBUG(3, tiramisu::str_dump("The separate computation:");
                     this->get_update(last_update_computation).dump());
         } else {
@@ -1841,6 +1835,12 @@ void tiramisu::computation::separate_at(int dim, std::vector<constant> separate_
     this->add_schedule_constraint("", constraint1.c_str());
 
     DEBUG(3, tiramisu::str_dump("The original computation:"); this->dump());
+
+    // rename all the updates by adding '_<ctr>' to the end of the name
+    int ctr = 0;
+    for (auto comp : this->get_updates()) {
+        comp->rename_computation(comp->get_name() + "_" + std::to_string(ctr++));
+    }
 
     DEBUG_INDENT(-4);
 }
