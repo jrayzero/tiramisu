@@ -1833,7 +1833,6 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
         // current level was marked as such.
         size_t tt = 0;
         bool convert_to_conditional = false;
-        bool offset = false;
         while (tt < tagged_stmts.size())
         {
             if (tagged_stmts[tt] != "")
@@ -1951,7 +1950,6 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                 }
                 else if (fct.should_distribute(tagged_stmts[tt], level)) {
                     // Change this loop into an if statement instead
-                    offset = fct.get_distributed_offset(tagged_stmts[tt]);
                     convert_to_conditional = true;
                     fct.remove_distributed_dim(tagged_stmts[tt], level);
                     tagged_stmts[tt] = "";
@@ -2261,7 +2259,7 @@ isl_ast_node *for_code_generator_after_for(isl_ast_node *node, isl_ast_build *bu
   * Note that the first arg in index_expr is the buffer name.  The other args
   * are the indices for each dimension of the buffer.
   */
-Halide::Expr generator::linearize_access(int dims, const halide_dimension_t *shape, isl_ast_expr *index_expr, tiramisu::expr offset)
+Halide::Expr generator::linearize_access(int dims, const halide_dimension_t *shape, isl_ast_expr *index_expr)
 {
     assert(isl_ast_expr_get_op_n_arg(index_expr) > 1);
 
@@ -2275,14 +2273,6 @@ Halide::Expr generator::linearize_access(int dims, const halide_dimension_t *sha
         Halide::Expr operand_h = halide_expr_from_isl_ast_expr(operand);
         index += operand_h * shape[dims - i].stride;
         isl_ast_expr_free(operand);
-    }
-
-    if (offset.is_defined()) {
-        assert(false && "Should offstes actually be allowed??");
-        std::vector<isl_ast_expr *> ie = {};
-        Halide::Expr h_offset = generator::halide_expr_from_tiramisu_expr(NULL, ie, offset, nullptr);
-        std::cerr << h_offset << std::endl;
-        index += h_offset;
     }
 
     DEBUG_INDENT(-4);
@@ -2499,8 +2489,7 @@ void tiramisu::computation::create_halide_assignment()
             DEBUG(3, tiramisu::str_dump("Linearizing lhs_access of the LHS index expression."));
             Halide::Expr lhs_index;
             if (lhs_tiramisu_buffer->has_constant_extents())
-                lhs_index = tiramisu::generator::linearize_access(lhs_buf_dims, lhs_shape, this->index_expr[0],
-                                                                  this->offset);
+                lhs_index = tiramisu::generator::linearize_access(lhs_buf_dims, lhs_shape, this->index_expr[0]);
             else
                 lhs_index = tiramisu::generator::linearize_access(lhs_buf_dims, strides_vector, this->index_expr[0]);
             DEBUG(3, tiramisu::str_dump("After linearization: ");
@@ -2655,7 +2644,7 @@ void tiramisu::computation::create_halide_assignment()
 
                 assert(this->req_index_expr != NULL);
                 Halide::Expr req_index = tiramisu::generator::linearize_access(req_buf_dims, req_shape,
-                                                                               this->req_index_expr, expr());
+                                                                               this->req_index_expr);
                 // Finally, index into the buffer
                 Halide::Type req_type = halide_type_from_tiramisu_type(p_req_ptr);
                 Halide::Expr result = Halide::Internal::Load::make(
@@ -2720,7 +2709,7 @@ void tiramisu::computation::create_halide_assignment()
 
                 assert(this->req_index_expr != NULL);
                 Halide::Expr req_index = tiramisu::generator::linearize_access(req_buf_dims, req_shape,
-                                                                               this->req_index_expr, expr());
+                                                                               this->req_index_expr);
                 // Finally, index into the buffer
                 Halide::Type req_type = halide_type_from_tiramisu_type(p_req_ptr);
                 Halide::Expr result = Halide::Internal::Load::make(
@@ -3127,8 +3116,7 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
                         DEBUG(10, tiramisu::str_dump("index_expr is NOT empty. Retrieving access indices from index_expr (i.e., retrieving indices adapted to the schedule)."));
                         if (tiramisu_buffer->has_constant_extents())
                             index = tiramisu::generator::linearize_access(tiramisu_buffer->get_dim_sizes().size(),
-                                                                          shape, index_expr[0],
-                                                                          comp ? comp->offset : expr());
+                                                                          shape, index_expr[0]);
                         else
                             index = tiramisu::generator::linearize_access(tiramisu_buffer->get_dim_sizes().size(),
                                                                           strides_vector, index_expr[0]);

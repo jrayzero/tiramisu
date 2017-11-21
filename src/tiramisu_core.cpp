@@ -953,22 +953,6 @@ bool function::should_distribute(const std::string &comp, int lev) const
     return found;
 }
 
-bool function::get_distributed_offset(const std::string &comp) const
-{
-    DEBUG_FCT_NAME(10);
-    DEBUG_INDENT(4);
-
-    assert(!comp.empty());
-
-    for (const auto &pd : this->distributed_dimensions_offsets)
-    {
-        if ((pd == comp)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 void function::set_context_set(isl_set *context)
 {
     assert((context != NULL) && "Context is NULL");
@@ -1359,8 +1343,7 @@ void tiramisu::computation::tag_distribute_level(int dist_dim)
 
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
-    this->is_distributed = true;
-    this->get_function()->add_distributed_dimension(this->get_name(), dist_dim, should_offset_distributed_level);
+    this->get_function()->add_distributed_dimension(this->get_name(), dist_dim);
     this->get_function()->_needs_rank_call = true;
     std::string old_dim_name = isl_map_get_dim_name(this->get_schedule(), isl_dim_out, dist_dim * 2 + 2);
     std::string new_dim_name = "d" + old_dim_name + "d";
@@ -1940,30 +1923,6 @@ std::vector<tiramisu::expr>* computation::compute_buffer_size()
 
     return dim_sizes;
 }
-
-// TODO (Jess) this should handle the distributed dimension differently because otherwise that will return 0, which is wrong.
-
-// Need this is you have a range of ranks
-//std::vector<tiramisu::expr> tiramisu::computation::compute_buffer_offset() {
-//    std::vector<tiramisu::expr> offsets;
-//    gen_time_space_domain();
-//    isl_set *tpd = get_time_processor_domain();
-//    int n_dims = isl_set_n_dim(tpd);
-//    int n_levels = (n_dims - 1) / 2 - 1; // skip the first level and do that separately
-//    // Needs to be done relative to the level that the is distributed. We don't care about the previous levels
-//    // TODO (Jess) for now, we only allow the outermost loop level to be distribteud
-//    assert(this->fct->should_distribute(this->get_name(), 0));
-//    // Now, insert the value of the rank, because that is the "min" value of the outermost distributed loop
-//    offsets.push_back(tiramisu::var("pred")); // "pred" is a reserved word here
-//    // don't just want the global one either...
-//    for (int i = 1; i < n_levels; i++) {
-////        int idx = i * 2 + 3;
-//        tiramisu::expr lower = utility::get_bound(tpd, i, false);
-//        offsets.push_back(lower);
-//    }
-//    expr blah = tiramisu::var("pred") + 1;
-//    return offsets;
-//}
 
 /**
  * Algorithm:
@@ -6407,15 +6366,12 @@ void tiramisu::function::add_parallel_dimension(std::string stmt_name, int vec_d
     this->parallel_dimensions.push_back({stmt_name, vec_dim});
 }
 
-void tiramisu::function::add_distributed_dimension(std::string stmt_name, int dim, bool offset)
+void tiramisu::function::add_distributed_dimension(std::string stmt_name, int dim)
 {
     assert(dim >= 0);
     assert(!stmt_name.empty());
 
     this->distributed_dimensions.push_back({stmt_name, dim});
-    if (offset) {
-        this->distributed_dimensions_offsets.push_back(stmt_name);
-    }
 }
 
 void tiramisu::function::add_unroll_dimension(std::string stmt_name, int level)

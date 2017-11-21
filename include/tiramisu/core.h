@@ -141,7 +141,6 @@ private:
       * should be distributed.
       */
     std::vector<std::pair<std::string, int>> distributed_dimensions;
-    std::vector<std::string> distributed_dimensions_offsets;
 
     /**
       * A vector representing the vectorized dimensions around
@@ -235,7 +234,7 @@ private:
       * The dimension 0 represents the outermost loop level (it
       * corresponds to the leftmost dimension in the iteration space).
       */
-    void add_distributed_dimension(std::string computation_name, int dim, bool offset);
+    void add_distributed_dimension(std::string computation_name, int dim);
 
     /**
       * Tag the dimension \p dim of the computation \p computation_name to
@@ -262,8 +261,6 @@ private:
       * or gen_time_processor_domain() are called.
       */
     void align_schedules();
-
-    static int get_n_levels_from_codegen(tiramisu::computation *comp, bool count_ids = false);
 
     /**
      * Get live in/out computations in the function.
@@ -645,8 +642,6 @@ protected:
       * at the loop level \p lev.
       */
     bool should_distribute(const std::string &comp, int lev) const;
-
-    bool get_distributed_offset(const std::string &comp) const;
 
     void remove_parallel_dim(const std::string &comp, int lev);
 
@@ -1240,23 +1235,9 @@ class computation
     friend send;
     friend recv;
 
-public:
-
-    void drop_rank_iter();
-
-    bool should_drop_rank_iter() const;
-
-    tiramisu::expr offset;
-
 private:
 
-    bool should_offset_distributed_level = false;
-
     bool drop_rank_iter_from_index = false;
-
-    bool is_distributed = false;
-
-    bool reads_from_recv = false;
 
     /**
       * Access function.  A map indicating how each computation should be stored
@@ -1882,9 +1863,8 @@ private:
       * This identity schedule is an identity relation created from the
       * time-processor domain.
       */
-public:
+
     isl_map *gen_identity_schedule_for_time_space_domain();
-protected:
 
     /**
       * Returns all updates the have been defined for this computation using
@@ -1975,6 +1955,11 @@ protected:
     // @}
 
 public:
+
+    void drop_rank_iter();
+
+    bool should_drop_rank_iter() const;
+
     /**
      * Rename this computation and modify the schedule and the access relation
      * accordingly.
@@ -3901,7 +3886,7 @@ protected:
      */
     //@{
     static Halide::Expr
-    linearize_access(int dims, const halide_dimension_t *shape, isl_ast_expr *index_expr, tiramisu::expr offset);
+    linearize_access(int dims, const halide_dimension_t *shape, isl_ast_expr *index_expr);
     static Halide::Expr
     linearize_access(int dims, const halide_dimension_t *shape, std::vector<tiramisu::expr> index_expr);
     static Halide::Expr
