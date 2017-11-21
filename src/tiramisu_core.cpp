@@ -618,8 +618,7 @@ void tiramisu::recv::add_definitions(std::string iteration_domain_str,
                                      bool schedule_this_computation, tiramisu::primitive_t t,
                                      tiramisu::function *fct)
 {
-    tiramisu::recv *new_c = new tiramisu::recv(iteration_domain_str, this->consumer, schedule_this_computation,
-                                               this->chan, fct);
+    tiramisu::recv *new_c = new tiramisu::recv(iteration_domain_str, schedule_this_computation, this->chan, fct);
     new_c->set_matching_send(this->get_matching_send());
     new_c->set_dest(this->get_dest());
     new_c->is_first = false;
@@ -6933,10 +6932,9 @@ tiramisu::expr tiramisu::computation::get_predicate() const
     return this->predicate;
 }
 
-void tiramisu::computation::add_predicate(tiramisu::expr predicate, bool is_distributed_predicate)
+void tiramisu::computation::add_predicate(tiramisu::expr predicate)
 {
     this->predicate = predicate;
-    this->_is_distributed_predicate = is_distributed_predicate;
 }
 
 /**
@@ -6965,7 +6963,6 @@ void tiramisu::computation::init_computation(std::string iteration_space_str,
     duplicate_number = 0;
     automatically_allocated_buffer = NULL;
     predicate = tiramisu::expr();
-    _is_distributed_predicate = false;
     this->is_a_parent_partition = false;
     this->is_a_child_partition = false;
 
@@ -7077,7 +7074,6 @@ tiramisu::computation::computation()
     this->req_access_map = nullptr;
     this->req_index_expr = nullptr;
     predicate = tiramisu::expr();
-    _is_distributed_predicate = false;
 }
 
 /**
@@ -8164,22 +8160,10 @@ std::string create_recv_func_name(const communication_prop chan) {
     return name;
 }
 
-
-tiramisu::recv::recv(std::string iteration_domain_str, tiramisu::computation *consumer, bool schedule_this, tiramisu::communication_prop chan,
-                     tiramisu::function *fct)
-        : communicator(iteration_domain_str, tiramisu::expr(), schedule_this, chan.get_dtype(),
-                       chan, fct), consumer(consumer) {
-    _is_library_call = true;
-}
-
 tiramisu::recv::recv(std::string iteration_domain_str, bool schedule_this, tiramisu::communication_prop chan, tiramisu::function *fct)
         : communicator(iteration_domain_str, tiramisu::expr(), schedule_this, chan.get_dtype(),
                        chan, fct) {
     _is_library_call = true;
-}
-
-tiramisu::computation *tiramisu::recv::get_consumer() const {
-    return consumer;
 }
 
 send * tiramisu::recv::get_matching_send() const {
@@ -8425,21 +8409,15 @@ bool tiramisu::wait::is_wait() const {
 
 send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_src,
                                                  tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
-                                                 communication_prop send_chan, communication_prop recv_chan, tiramisu::expr e, tiramisu::function *fct) {
-    assert(e.get_op_type() == tiramisu::o_access);
-    tiramisu::computation *producer = fct->get_computation_by_name(e.get_name())[0];
+                                                 communication_prop send_chan, communication_prop recv_chan, tiramisu::expr send_expr, tiramisu::function *fct) {
+    assert(send_expr.get_op_type() == tiramisu::o_access);
+    tiramisu::computation *producer = fct->get_computation_by_name(send_expr.get_name())[0];
 
     isl_set *s_iter_domain = isl_set_read_from_str(producer->get_ctx(), send_iter_domain.c_str());
     isl_set *r_iter_domain = isl_set_read_from_str(producer->get_ctx(), recv_iter_domain.c_str());
-    tiramisu::send *s = new tiramisu::send(isl_set_to_str(s_iter_domain), producer, e, send_chan, true,
+    tiramisu::send *s = new tiramisu::send(isl_set_to_str(s_iter_domain), producer, send_expr, send_chan, true,
                                            producer->get_function(), {1});
-    tiramisu::recv *r = nullptr;
-    //    if (!consumers.empty()) {
-    //        r = new tiramisu::recv(isl_set_to_str(r_iter_domain), consumers[0], true,
-    //                               recv_chan, fct);
-    //    } else {
-    r = new tiramisu::recv(isl_set_to_str(r_iter_domain), true, recv_chan, fct);
-    //    }
+    tiramisu::recv *r = new tiramisu::recv(isl_set_to_str(r_iter_domain), true, recv_chan, fct);
     isl_map *send_sched = s->gen_identity_schedule_for_iteration_domain();
     isl_map *recv_sched = r->gen_identity_schedule_for_iteration_domain();
 
@@ -8453,54 +8431,6 @@ send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, s
     s->set_matching_recv(r);
     r->set_matching_send(s);
 
-
-    //    for (auto c : consumers) {
-    //        c->reads_from_recv = true;
-    //    }
-
-    tiramisu::send_recv sr;
-    sr.s = s;
-    sr.r = r;
-
-    return sr;
-}
-
-send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, std::string recv_iter_domain,
-                                                 tiramisu::expr src,
-                                                 tiramisu::expr dest, communication_prop send_chan, communication_prop recv_chan,
-                                                 tiramisu::expr e, std::vector<tiramisu::computation *> consumers,
-                                                 tiramisu::function *fct) {
-    assert(e.get_op_type() == tiramisu::o_access);
-    tiramisu::computation *producer = fct->get_computation_by_name(e.get_name())[0];
-
-    isl_set *s_iter_domain = isl_set_read_from_str(producer->get_ctx(), send_iter_domain.c_str());
-    isl_set *r_iter_domain = isl_set_read_from_str(producer->get_ctx(), recv_iter_domain.c_str());
-    tiramisu::send *s = new tiramisu::send(isl_set_to_str(s_iter_domain), producer, e, send_chan, true,
-                                           producer->get_function(), {1});
-    tiramisu::recv *r = nullptr;
-    if (!consumers.empty()) {
-        r = new tiramisu::recv(isl_set_to_str(r_iter_domain), consumers[0], true,
-                               recv_chan, fct);
-    } else {
-        r = new tiramisu::recv(isl_set_to_str(r_iter_domain), true, recv_chan, fct);
-    }
-    isl_map *send_sched = s->gen_identity_schedule_for_iteration_domain();
-    isl_map *recv_sched = r->gen_identity_schedule_for_iteration_domain();
-
-    s->set_src(src);
-    s->set_dest(dest);
-    r->set_src(src);
-    r->set_dest(dest);
-
-    s->set_schedule(send_sched);
-    r->set_schedule(recv_sched);
-    s->set_matching_recv(r);
-    r->set_matching_send(s);
-
-    for (auto c : consumers) {
-        c->reads_from_recv = true;
-    }
-
     tiramisu::send_recv sr;
     sr.s = s;
     sr.r = r;
@@ -8510,24 +8440,6 @@ send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, s
 
 void tiramisu::computation::set_parent_computation(tiramisu::computation *parent_computation) {
     this->parent_computation = parent_computation;
-}
-
-void tiramisu::computation::distribute(std::vector<std::vector<tiramisu::computation *>> ops,
-                                       std::vector<int> predicates) {
-    assert(ops.size() == predicates.size());
-    int idx = 0;
-    ops[0][0]->get_function()->_needs_rank_call = true;
-    for (auto op_group_iter = ops.begin(); op_group_iter != ops.end(); op_group_iter++) {
-        for (auto op_iter = op_group_iter->begin(); op_iter != op_group_iter->end(); op_iter++) {
-            assert(!(*op_iter)->is_a_parent_partition && "You are trying to distribute a partitioned operation!");
-            (*op_iter)->add_predicate(tiramisu::expr(predicates[idx]), true);
-        }
-        idx++;
-    }
-}
-
-bool tiramisu::computation::is_distributed_predicate() const {
-    return _is_distributed_predicate;
 }
 
 bool tiramisu::function::needs_rank_call() const {

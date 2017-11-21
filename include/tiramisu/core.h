@@ -1416,11 +1416,6 @@ private:
     tiramisu::expr predicate;
 
     /**
-     * True if this predicated is being used for separating distributed computations (such as for ranks in MPI)
-     */
-    bool _is_distributed_predicate;
-
-    /**
       * The schedules of the computation.
       */
     isl_map * schedule;
@@ -2038,7 +2033,7 @@ public:
     //@{
     bool separateAndSplit(tiramisu::var L0, int sizeX);
     bool separateAndSplit(tiramisu::var L0, int sizeX,
-	    tiramisu::var L0_outer, tiramisu::var L0_inner);
+                          tiramisu::var L0_outer, tiramisu::var L0_inner);
     //@}
 
     /**
@@ -2133,7 +2128,7 @@ public:
     void tag_gpu_level(int L0, int L1, int L2, int L3);
     void tag_gpu_level(int L0, int L1, int L2, int L3, int L4, int L5);
     // @}
-    
+
     /**
       * Tag the loop level \p L0 and \p L1 to be mapped to GPU block
       * dimensions.
@@ -2225,7 +2220,7 @@ public:
       * {i0, x0, x1, i3}.
       */
     void update_names(std::vector<std::string> original_loop_level_names, std::vector<std::string> new_names,
-		      int start_erasing, int nb_loop_levels_to_erase);
+                      int start_erasing, int nb_loop_levels_to_erase);
 
     /**
       * A vector describing the access variables in the original definition of  a computation.
@@ -2319,8 +2314,6 @@ protected:
      * was added using add_predicate().
      */
     tiramisu::expr get_predicate() const;
-
-    bool is_distributed_predicate() const;
 
     /**
       * Return the name of the computation.
@@ -2734,7 +2727,7 @@ public:
      * The compiler will then transform automatically the multiple conditions (condition around each
      * computation) into one condition around the whole block.
      */
-    void add_predicate(tiramisu::expr predicate, bool is_distributed_predicate=false);
+    void add_predicate(tiramisu::expr predicate);
 
     /**
       * \brief Schedule this computation to run after the computation \p comp.
@@ -3130,7 +3123,7 @@ public:
       */
     int get_loop_level_number_from_dimension_name(std::string dim_name)
     {
-	    return this->get_loop_level_numbers_from_dimension_names({dim_name})[0];
+        return this->get_loop_level_numbers_from_dimension_names({dim_name})[0];
     }
 
     /**
@@ -3692,23 +3685,10 @@ public:
         }
     }
 
-    // Code for communication
-
-    /**
-      * send_recv_iter_dom should be defined over the iterations of the producer that we need.
-      * e should be just a single access expression into the producer.
-      */
-    static send_recv create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr src,
-                                     tiramisu::expr dest, communication_prop send_chan, communication_prop recv_chan,
-                                     tiramisu::expr e, std::vector<tiramisu::computation *> consumers,
-                                     tiramisu::function *fct);
-
     static send_recv create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_src,
-                                        tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
-                                        communication_prop send_chan, communication_prop recv_chan, tiramisu::expr e, tiramisu::function *fct);
-
-
-    static void distribute(std::vector<std::vector<computation *>> ops, std::vector<int> predicates);
+                                     tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
+                                     communication_prop send_chan, communication_prop recv_chan, tiramisu::expr send_expr,
+                                     tiramisu::function *fct);
 
 };
 
@@ -3784,7 +3764,7 @@ public:
       */
     tiramisu::computation *get_computation_with_whom_this_is_computed()
     {
-	    return compute_with_computation;
+        return compute_with_computation;
     }
 
     /**
@@ -3972,7 +3952,7 @@ public:
      * \p upper is a boolean that should be set to true to extract
      * the upper bound and false to extract the lower bound.
      */
-     static expr extract_bound_expression(isl_ast_node *ast, int dim, bool upper);
+    static expr extract_bound_expression(isl_ast_node *ast, int dim, bool upper);
 
     /**
      * Return a tiramisu::expr representing the bound of
@@ -4090,8 +4070,8 @@ public:
                  tiramisu::primitive_t data_type, tiramisu::function *fct);
 
     communicator(std::string iteration_domain_str, tiramisu::expr rhs,
-                     bool schedule_this_computation, tiramisu::primitive_t, tiramisu::communication_prop chan,
-                     tiramisu::function *fct);
+                 bool schedule_this_computation, tiramisu::primitive_t, tiramisu::communication_prop chan,
+                 tiramisu::function *fct);
 
     // collapse a level
     std::vector<communicator *> collapse(int level, tiramisu::expr collapse_from_iter,
@@ -4160,8 +4140,6 @@ public:
 class recv : public communicator {
 private:
 
-    tiramisu::computation *consumer = nullptr;
-
     send *matching_send = nullptr;
 
     tiramisu::expr src;
@@ -4171,9 +4149,6 @@ private:
     tiramisu::expr msg_tag;
 
 public:
-
-    recv(std::string iteration_domain_str, tiramisu::computation *consumer, bool schedule_this, tiramisu::communication_prop chan,
-             tiramisu::function *fct);
 
     recv(std::string iteration_domain_str, bool schedule_this, tiramisu::communication_prop chan, tiramisu::function *fct);
 
@@ -4188,8 +4163,6 @@ public:
     void set_src(tiramisu::expr src);
 
     void set_dest(tiramisu::expr dest);
-
-    tiramisu::computation *get_consumer() const;
 
     void override_msg_tag(tiramisu::expr msg_tag);
 

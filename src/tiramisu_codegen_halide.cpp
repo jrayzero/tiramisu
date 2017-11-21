@@ -1339,20 +1339,20 @@ isl_ast_node *generator::stmt_code_generator(isl_ast_node *node, isl_ast_build *
             isl_map_free(req_access);
         }
 
-       /*
-        * Compute the iterators map.
-        * The iterators map is map between the original names of the iterators of a computation
-        * and their transformed form after schedule (also after renaming).
-        *
-        * If in the original computation, we had
-        *
-        * {C[i0, i1]: ...}
-        *
-        * And if in the generated code, the iterators are called c0, c1, c2 and c3 and
-        * the loops are tiled, then the map will be
-        *
-        * {<i0, c0*10+c2>, <i1, c1*10+c3>}.
-        **/
+        /*
+         * Compute the iterators map.
+         * The iterators map is map between the original names of the iterators of a computation
+         * and their transformed form after schedule (also after renaming).
+         *
+         * If in the original computation, we had
+         *
+         * {C[i0, i1]: ...}
+         *
+         * And if in the generated code, the iterators are called c0, c1, c2 and c3 and
+         * the loops are tiled, then the map will be
+         *
+         * {<i0, c0*10+c2>, <i1, c1*10+c3>}.
+         **/
         std::map<std::string, isl_ast_expr *> iterators_map = generator::compute_iterators_map(comp, build);
         comp->set_iterators_map(iterators_map);
 
@@ -1402,7 +1402,7 @@ isl_ast_node *generator::stmt_code_generator(isl_ast_node *node, isl_ast_build *
                     }
                 }
             }
- 
+
             // We want to insert the elements of index_expressions vector one by one in the beginning of comp->get_index_expr()
             for (int i = index_expressions.size() - 1; i >= 0; i--)
             {
@@ -1713,7 +1713,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                     // that represents a computation access.
                     const auto sz = buf->get_dim_sizes()[i];
                     std::vector<isl_ast_expr *> ie = {};
-		    tiramisu::expr dim_sz = replace_original_indices_with_transformed_indices(sz, comp->get_iterators_map());
+                    tiramisu::expr dim_sz = replace_original_indices_with_transformed_indices(sz, comp->get_iterators_map());
                     halide_dim_sizes.push_back(generator::halide_expr_from_tiramisu_expr(NULL, ie, dim_sz, comp));
                 }
 
@@ -1726,24 +1726,24 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
 
                     buf->mark_as_allocated();
 
-		    for (const auto &l_stmt : comp->get_associated_let_stmts())
-		    {
-			DEBUG(3, tiramisu::str_dump("Generating the following let statement."));
-			DEBUG(3, tiramisu::str_dump("Name : " + l_stmt.first));
-			DEBUG(3, tiramisu::str_dump("Expression of the let statement: "));
+                    for (const auto &l_stmt : comp->get_associated_let_stmts())
+                    {
+                        DEBUG(3, tiramisu::str_dump("Generating the following let statement."));
+                        DEBUG(3, tiramisu::str_dump("Name : " + l_stmt.first));
+                        DEBUG(3, tiramisu::str_dump("Expression of the let statement: "));
 
-			l_stmt.second.dump(false);
+                        l_stmt.second.dump(false);
 
-			std::vector<isl_ast_expr *> ie = {}; // Dummy variable.
-			tiramisu::expr tiramisu_let = replace_original_indices_with_transformed_indices(l_stmt.second, comp->get_iterators_map());
-			Halide::Expr let_expr = halide_expr_from_tiramisu_expr(comp->get_function(), ie, tiramisu_let, comp);
-			result = Halide::Internal::LetStmt::make(
-				     l_stmt.first,
-				     let_expr,
-				     result);
-			DEBUG(10, tiramisu::str_dump("Generated let stmt:"));
-			DEBUG_NO_NEWLINE(10, std::cout << result);
-		    }
+                        std::vector<isl_ast_expr *> ie = {}; // Dummy variable.
+                        tiramisu::expr tiramisu_let = replace_original_indices_with_transformed_indices(l_stmt.second, comp->get_iterators_map());
+                        Halide::Expr let_expr = halide_expr_from_tiramisu_expr(comp->get_function(), ie, tiramisu_let, comp);
+                        result = Halide::Internal::LetStmt::make(
+                                l_stmt.first,
+                                let_expr,
+                                result);
+                        DEBUG(10, tiramisu::str_dump("Generated let stmt:"));
+                        DEBUG_NO_NEWLINE(10, std::cout << result);
+                    }
                 }
             }
             allocate_stmts_vector.clear();
@@ -2074,22 +2074,14 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                                                                         comp);
                 Halide::Internal::Stmt if_s = result;
                 Halide::Internal::Stmt else_s;
-                if (!comp->is_distributed_predicate()) {
-                    DEBUG(3, tiramisu::str_dump("Adding a predicate around the computation.");
-                            std::cout << predicate);
-                    DEBUG(3, tiramisu::str_dump("Generating code for the if branch."));
-                    DEBUG(10, tiramisu::str_dump("If branch: ");
-                            std::cout << if_s);
-                    result = Halide::Internal::IfThenElse::make(predicate, if_s, else_s);
-                    DEBUG(10, tiramisu::str_dump("The predicated statement is ");
-                            std::cout << result);
-                } else { // For now, just handle as if it is MPI ranks
-                    assert(comp->get_predicate().get_int_val() != -1 && "Not handling -1 rank yet");
-                    Halide::Expr mpi_rank_var =
-                            Halide::Internal::Variable::make(halide_type_from_tiramisu_type(p_int32), "rank");
-                    Halide::Expr eq = mpi_rank_var == predicate;
-                    result = Halide::Internal::IfThenElse::make(eq, if_s, else_s);
-                }
+                DEBUG(3, tiramisu::str_dump("Adding a predicate around the computation.");
+                        std::cout << predicate);
+                DEBUG(3, tiramisu::str_dump("Generating code for the if branch."));
+                DEBUG(10, tiramisu::str_dump("If branch: ");
+                        std::cout << if_s);
+                result = Halide::Internal::IfThenElse::make(predicate, if_s, else_s);
+                DEBUG(10, tiramisu::str_dump("The predicated statement is ");
+                        std::cout << result);
             }
         }
     }
@@ -2379,35 +2371,35 @@ void tiramisu::computation::create_halide_assignment()
                 this->expression.dump(false));
         DEBUG_NEWLINE(10);
 
-	// Assuming this computation is not the original computation, but a
-	// definition that was added to the original computation. We need to
-	// retrieve the original computation.
-	tiramisu::constant *root = (tiramisu::constant *)
-	    this->get_root_of_definition_tree();
+        // Assuming this computation is not the original computation, but a
+        // definition that was added to the original computation. We need to
+        // retrieve the original computation.
+        tiramisu::constant *root = (tiramisu::constant *)
+                this->get_root_of_definition_tree();
 
-	Halide::Expr result;
-	if (root->get_computation_with_whom_this_is_computed() != NULL)
-	{
- 	  DEBUG(10, tiramisu::str_dump("1."));
+        Halide::Expr result;
+        if (root->get_computation_with_whom_this_is_computed() != NULL)
+        {
+            DEBUG(10, tiramisu::str_dump("1."));
 
-	  result = generator::halide_expr_from_tiramisu_expr(this->get_function(),
-			this->get_index_expr(),
-			replace_original_indices_with_transformed_indices(this->expression,
-		    						          root->get_computation_with_whom_this_is_computed()->get_iterators_map()), nullptr);
- 	  DEBUG(10, tiramisu::str_dump("2."));
-	}
-	else
-	{
- 	  DEBUG(10, tiramisu::str_dump("3."));
+            result = generator::halide_expr_from_tiramisu_expr(this->get_function(),
+                                                               this->get_index_expr(),
+                                                               replace_original_indices_with_transformed_indices(this->expression,
+                                                                                                                 root->get_computation_with_whom_this_is_computed()->get_iterators_map()), nullptr);
+            DEBUG(10, tiramisu::str_dump("2."));
+        }
+        else
+        {
+            DEBUG(10, tiramisu::str_dump("3."));
 
-	  result = generator::halide_expr_from_tiramisu_expr(this->get_function(),
-			this->get_index_expr(),
-							     this->expression, nullptr);
+            result = generator::halide_expr_from_tiramisu_expr(this->get_function(),
+                                                               this->get_index_expr(),
+                                                               this->expression, nullptr);
 
-	  DEBUG(10, tiramisu::str_dump("4."));
-	}
+            DEBUG(10, tiramisu::str_dump("4."));
+        }
 
-	DEBUG(10, tiramisu::str_dump("The expression translated to a Halide expression: "); std::cout << result << std::endl);
+        DEBUG(10, tiramisu::str_dump("The expression translated to a Halide expression: "); std::cout << result << std::endl);
 
         Halide::Type l_type = halide_type_from_tiramisu_type(this->get_data_type());
 
@@ -3302,9 +3294,9 @@ void function::gen_halide_obj(const std::string &obj_file_name, Halide::Target::
     // Halide::Target::CUDA, etc.
     std::vector<Halide::Target::Feature> features =
             {
-	      Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers
+                    Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers
 #if WITH_CUDA==1
-              , Halide::Target::CUDA//, Halide::Target::Debug
+                    , Halide::Target::CUDA//, Halide::Target::Debug
 #endif
             };
 
