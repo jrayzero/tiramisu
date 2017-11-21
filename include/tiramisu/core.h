@@ -2196,6 +2196,11 @@ public:
     std::vector<tiramisu::computation *> updates;
 
     /**
+     * A mapping of dimension names to new names (applied right before the ast is generated)
+     */
+    std::map<std::string, std::string> out_dim_name_map;
+
+    /**
       * Update loop level names. This function should be called after each scheduling operation
       * because scheduling usually changes the original loop level names.
       * This function erases \p nb_loop_levels_to_erase loop level names starting from the
@@ -3090,7 +3095,7 @@ public:
         return output;
     }
 
-    void separate_at(int dim, std::vector<constant> separate_points, constant max);
+    void separate_at(int dim, std::vector<tiramisu::expr> _separate_points, tiramisu::expr _max);
 
     /**
       * Generate the time-space domain of the computation.

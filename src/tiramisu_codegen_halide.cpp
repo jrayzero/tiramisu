@@ -1754,11 +1754,9 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
     else if (isl_ast_node_get_type(node) == isl_ast_node_for)
     {
         DEBUG(3, tiramisu::str_dump("Generating code for Halide::For"));
-
         isl_ast_expr *iter = isl_ast_node_for_get_iterator(node);
         char *cstr = isl_ast_expr_to_C_str(iter);
         std::string iterator_str = std::string(cstr);
-
         isl_ast_expr *init = isl_ast_node_for_get_init(node);
         isl_ast_expr *cond = isl_ast_node_for_get_cond(node);
         isl_ast_expr *inc  = isl_ast_node_for_get_inc(node);
@@ -1968,10 +1966,15 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
         DEBUG(10, tiramisu::str_dump(ts + " "));
 
         if (convert_to_conditional) {
-            DEBUG(3, tiramisu::str_dump("Tagging for loop as a conditional on the rank."));
-            result = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
-                                                 Halide::Internal::ForType::Distributed, dev_api, halide_body);
-
+            DEBUG(3, tiramisu::str_dump("Converting for loop into a rank conditional."));
+            Halide::Expr rank_var =
+                    Halide::Internal::Variable::make(halide_type_from_tiramisu_type(p_int32), "rank");
+            Halide::Expr condition = rank_var >= init_expr;
+            condition = condition && (rank_var < cond_upper_bound_halide_format);
+            Halide::Internal::Stmt else_s;
+            // We need a reference still to this iterator name, so set it equal to the rank
+            halide_body = Halide::Internal::LetStmt::make(iterator_str, rank_var, halide_body);
+            result = Halide::Internal::IfThenElse::make(condition, halide_body, else_s);
         } else {
             DEBUG(3, tiramisu::str_dump("Creating the for loop."));
             result = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
