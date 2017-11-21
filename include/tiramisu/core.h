@@ -3097,7 +3097,7 @@ public:
         return output;
     }
 
-    void separate_at(int dim, std::vector<constant> separate_points, constant max, int dim_sched_after);
+    void separate_at(int dim, std::vector<constant> separate_points, constant max);
 
     /**
       * Generate the time-space domain of the computation.
@@ -3425,7 +3425,7 @@ public:
     /**
      * Tag the loop level \p L to be distributed.
      */
-    void tag_distribute_level(tiramisu::var L);
+    void tag_distribute_level(tiramisu::var L, bool drop_rank_iter = true);
 
     /**
       * Tag the loop level \p L to be vectorized.
@@ -4077,13 +4077,6 @@ class communicator : public computation {
 private:
 
     std::vector<tiramisu::expr> dims;
-
-    /**
-      * Asynchronous communication returns an object that you can use to wait on. This access function
-      * defines how to write those objects to buffer. The user doesn't have to do that--it is automatically
-      * constructed if it is needed.
-      */
-    isl_map *async_access = nullptr;
 
 protected:
 

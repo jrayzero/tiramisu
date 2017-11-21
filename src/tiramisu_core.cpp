@@ -1227,7 +1227,6 @@ void function::gen_isl_ast()
     DEBUG(3, tiramisu::str_dump("Identity schedule intersect trimmed Time-Processor domain:",
                                 isl_union_map_to_str(umap)));
     DEBUG(3, tiramisu::str_dump("\n"));
-    isl_union_map_dump(umap);
     this->ast = isl_ast_build_node_from_schedule_map(ast_build, umap);
 
     isl_ast_build_free(ast_build);
@@ -8347,8 +8346,6 @@ void tiramisu::function::lift_ops_to_library_calls() {
     for (std::vector<tiramisu::computation *>::iterator op_iter = body.begin(); op_iter != body.end(); op_iter++) {
         if ((*op_iter)->is_send()) {
             send *s = static_cast<send *>(*op_iter);
-            recv *r = s->get_matching_recv();
-            //            tiramisu::expr tag(s->get_msg_tag());
             tiramisu::expr num_elements(s->get_num_elements());
             tiramisu::expr send_type(s->get_channel().get_dtype());
             bool isnonblock = s->get_channel().contains_attr(NONBLOCK);
@@ -8357,7 +8354,7 @@ void tiramisu::function::lift_ops_to_library_calls() {
             s->library_call_args[0] = s->get_src();
             s->library_call_args[1] = num_elements;
             s->library_call_args[2] = s->get_dest();
-            s->library_call_args[3] = s->get_msg_tag();//tag;
+            s->library_call_args[3] = s->get_msg_tag();
             s->library_call_args[5] = send_type;
             if (isnonblock) {
                 // This additional RHS argument is to the request buffer. It is really more of a side effect.
@@ -8366,7 +8363,6 @@ void tiramisu::function::lift_ops_to_library_calls() {
         } else if ((*op_iter)->is_recv()) {
             recv *r = static_cast<recv *>(*op_iter);
             send *s = r->get_matching_send();
-            //            tiramisu::expr tag(s->get_msg_tag());
             tiramisu::expr num_elements(r->get_num_elements());
             tiramisu::expr recv_type(s->get_channel().get_dtype());
             bool isnonblock = r->get_channel().contains_attr(NONBLOCK);
@@ -8375,7 +8371,7 @@ void tiramisu::function::lift_ops_to_library_calls() {
             r->library_call_args[0] = r->get_dest();
             r->library_call_args[1] = num_elements;
             r->library_call_args[2] = r->get_src();
-            r->library_call_args[3] = r->get_msg_tag().is_defined() ? r->get_msg_tag() : s->get_msg_tag();//s->get_msg_tag();//tag;
+            r->library_call_args[3] = r->get_msg_tag().is_defined() ? r->get_msg_tag() : s->get_msg_tag();
             r->library_call_args[5] = recv_type;
             r->lhs_access_type = tiramisu::o_address_of;
             if (isnonblock) {

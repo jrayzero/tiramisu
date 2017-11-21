@@ -463,9 +463,7 @@ isl_constraint *generator::get_constraint_for_access(int access_dimension,
             tiramisu::expr op0 = access_expression.get_operand(0);
             tiramisu::expr op1 = access_expression.get_operand(1);
             cst = generator::get_constraint_for_access(access_dimension, op0, access_relation, cst, coeff, fct);
-            isl_constraint_dump(cst);
             cst = generator::get_constraint_for_access(access_dimension, op1, access_relation, cst, coeff, fct);
-            isl_constraint_dump(cst);
         }
         else if (access_expression.get_op_type() == tiramisu::o_sub)
         {
@@ -1971,27 +1969,9 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
 
         if (convert_to_conditional) {
             DEBUG(3, tiramisu::str_dump("Tagging for loop as a conditional on the rank."));
-            // TODO Jess, this is only going to work if the loop we need to stick on starts from 0. If the loop doesn't start from 0, will the code generator actually remove it?
-            /*            if (offset) { // We need to create a for loop for this level and then wrap it in an if statement because our split was removed by the code generator
-                assert(false);
-                halide_body = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
-                                                          fortype, dev_api, halide_body);
-                                                          }*/
-            //            Halide::Expr rank_var =
-            //                    Halide::Internal::Variable::make(halide_type_from_tiramisu_type(p_int32), "rank");
-            //            Halide::Expr condition;
-            //            if (offset) {
-            //                condition = rank_var == 0;
-            //            } else {
-            //                condition = rank_var >= init_expr;
-            //                condition = condition && (rank_var < cond_upper_bound_halide_format);
-            //            }
-            //            Halide::Internal::Stmt else_s;
-            // We need a reference still to this iterator name, so set it equal to the rank
-            //  halide_body = Halide::Internal::LetStmt::make(iterator_str, rank_var, halide_body);
-            //            result = Halide::Internal::IfThenElse::make(condition, halide_body, else_s);
             result = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
-                                                 Halide::Internal::ForType::Conditional, dev_api, halide_body);
+                                                 Halide::Internal::ForType::Distributed, dev_api, halide_body);
+
         } else {
             DEBUG(3, tiramisu::str_dump("Creating the for loop."));
             result = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
