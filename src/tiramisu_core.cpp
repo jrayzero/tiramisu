@@ -19,6 +19,8 @@ namespace tiramisu
 {
 std::map<std::string, computation *> computations_list;
 bool global::auto_data_mapping;
+primitive_t global::loop_iterator_type;
+
 
 // Used for the generation of new variable names.
 const var computation::root = var("root");

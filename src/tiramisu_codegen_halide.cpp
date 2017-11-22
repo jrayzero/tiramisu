@@ -1804,22 +1804,22 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
 
         Halide::Expr init_expr = halide_expr_from_isl_ast_expr(init);
         if (init_expr.type() !=
-            halide_type_from_tiramisu_type(global::get_loop_iterator_default_data_type()))
+            halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()))
         {
             init_expr =
                     Halide::Internal::Cast::make(
-                            halide_type_from_tiramisu_type(global::get_loop_iterator_default_data_type()),
+                            halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()),
                             init_expr);
         }
         DEBUG(3, tiramisu::str_dump("init expression: "); std::cout << init_expr);
         Halide::Expr cond_upper_bound_halide_format =
                 simplify(halide_expr_from_isl_ast_expr(cond_upper_bound_isl_format));
         if (cond_upper_bound_halide_format.type() !=
-            halide_type_from_tiramisu_type(global::get_loop_iterator_default_data_type()))
+            halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()))
         {
             cond_upper_bound_halide_format =
                     Halide::Internal::Cast::make(
-                            halide_type_from_tiramisu_type(global::get_loop_iterator_default_data_type()),
+                            halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()),
                             cond_upper_bound_halide_format);
         }
         DEBUG(3, tiramisu::str_dump("Upper bound expression: ");
@@ -2252,6 +2252,23 @@ isl_ast_node *for_code_generator_after_for(isl_ast_node *node, isl_ast_build *bu
     return node;
 }
 
+template <typename T>
+Halide::Expr get_halide_expr_as_tiramisu_type(T val, primitive_t ttype) {
+    switch (ttype) {
+        case p_uint8: return Halide::Expr((uint8_t)val);
+        case p_uint16: return Halide::Expr((uint16_t)val);
+        case p_uint32: return Halide::Expr((uint32_t)val);
+        case p_uint64: return Halide::Expr((uint64_t)val);
+        case p_int8: return Halide::Expr((int8_t)val);
+        case p_int16: return Halide::Expr((int16_t)val);
+        case p_int32: return Halide::Expr((int32_t)val);
+        case p_int64: return Halide::Expr((int64_t)val);
+        case p_float32: return Halide::Expr((float)val);
+        case p_float64: return Halide::Expr((double)val);
+        default: { assert(false && "Bad type specified"); return Halide::Expr(); }
+    }
+}
+
 /**
   * Linearize a multidimensional access to a Halide buffer.
   * Supposing that we have buf[N1][N2][N3], transform buf[i][j][k]
@@ -2266,12 +2283,12 @@ Halide::Expr generator::linearize_access(int dims, const halide_dimension_t *sha
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
     // ISL dimension is ordered from outermost to innermost.
-    Halide::Expr index = 0;
+    Halide::Expr index = get_halide_expr_as_tiramisu_type(0, global::get_loop_iterator_data_type());
     for (int i = dims; i >= 1; --i)
     {
         isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i);
         Halide::Expr operand_h = halide_expr_from_isl_ast_expr(operand);
-        index += operand_h * shape[dims - i].stride;
+        index += operand_h * Halide::Expr(shape[dims - i].stride);
         isl_ast_expr_free(operand);
     }
 
@@ -2288,12 +2305,12 @@ Halide::Expr generator::linearize_access(int dims, const halide_dimension_t *sha
     assert(index_expr.size() > 0);
     // ISL dimension is ordered from outermost to innermost.
 
-    Halide::Expr index = 0;
+    Halide::Expr index = get_halide_expr_as_tiramisu_type(0, global::get_loop_iterator_data_type());
     for (int i = dims; i >= 1; --i)
     {
         std::vector<isl_ast_expr *> ie = {};
         Halide::Expr operand_h = generator::halide_expr_from_tiramisu_expr(NULL, ie, index_expr[i - 1], nullptr);
-        index += operand_h * shape[dims - i].stride;
+        index += operand_h * Halide::Expr(shape[dims - i].stride);
     }
 
     DEBUG_INDENT(-4);
@@ -2309,7 +2326,7 @@ Halide::Expr generator::linearize_access(int dims, std::vector<Halide::Expr> &st
     assert(index_expr.size() > 0);
     // ISL dimension is ordered from outermost to innermost.
 
-    Halide::Expr index = 0;
+    Halide::Expr index = get_halide_expr_as_tiramisu_type(0, global::get_loop_iterator_data_type());
     for (int i = dims; i >= 1; --i)
     {
         std::vector<isl_ast_expr *> ie = {};
@@ -2331,7 +2348,7 @@ Halide::Expr generator::linearize_access(int dims, std::vector<Halide::Expr> &st
 
     // ISL dimension is ordered from outermost to innermost.
 
-    Halide::Expr index = 0;
+    Halide::Expr index = get_halide_expr_as_tiramisu_type(0, global::get_loop_iterator_data_type());
     for (int i = dims; i >= 1; --i)
     {
         isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i);
@@ -3312,6 +3329,7 @@ void function::gen_halide_obj(const std::string &obj_file_name, Halide::Target::
 
     m.compile(Halide::Outputs().object(obj_file_name));
     m.compile(Halide::Outputs().c_header(obj_file_name + ".h"));
+    m.compile(Halide::Outputs().llvm_assembly(obj_file_name + ".ll"));
 }
 
 void tiramisu::generator::replace_expr_name(tiramisu::expr &current_exp, std::string name_to_replace,
