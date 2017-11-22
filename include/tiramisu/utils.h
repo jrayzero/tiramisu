@@ -34,6 +34,21 @@ inline void init_buffer(Halide::Buffer<T> &buf, T val)
 }
 
 template<typename T>
+inline void check_buffer_value(Halide::Buffer<T> &buf, T val)
+{
+    for (int z = 0; z < buf.channels(); z++)
+    {
+        for (int y = 0; y < buf.height(); y++)
+        {
+            for (int x = 0; x < buf.width(); x++)
+            {
+                assert(buf(x, y, z) == val);
+            }
+        }
+    }
+}
+
+template<typename T>
 inline void print_buffer(const Halide::Buffer<T> &buf)
 {
     std::string channels_size = ((buf.channels()>1)?std::to_string(buf.channels())+",":"");
