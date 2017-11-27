@@ -3332,8 +3332,8 @@ void function::gen_halide_obj(const std::string &obj_file_name, Halide::Target::
     m.compile(Halide::Outputs().llvm_assembly(obj_file_name + ".ll"));
 }
 
-void tiramisu::generator::replace_expr_name(tiramisu::expr &current_exp, std::string name_to_replace,
-                                            std::string replace_with, bool insert_access) {
+void tiramisu::generator::update_producer_expr_name(tiramisu::expr &current_exp, std::string name_to_replace,
+                                                    std::string replace_with, bool insert_access) {
 
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
@@ -3376,7 +3376,7 @@ void tiramisu::generator::replace_expr_name(tiramisu::expr &current_exp, std::st
             case tiramisu::o_address:
             {
                 tiramisu::expr &exp0 = current_exp.op[0];
-                generator::replace_expr_name(exp0, name_to_replace, replace_with, insert_access);
+                generator::update_producer_expr_name(exp0, name_to_replace, replace_with, insert_access);
                 break;
             }
             case tiramisu::o_logical_and:
@@ -3403,8 +3403,8 @@ void tiramisu::generator::replace_expr_name(tiramisu::expr &current_exp, std::st
             {
                 tiramisu::expr &exp0 = current_exp.op[0];
                 tiramisu::expr &exp1 = current_exp.op[1];
-                generator::replace_expr_name(exp0, name_to_replace, replace_with, insert_access);
-                generator::replace_expr_name(exp1, name_to_replace, replace_with, insert_access);
+                generator::update_producer_expr_name(exp0, name_to_replace, replace_with, insert_access);
+                generator::update_producer_expr_name(exp1, name_to_replace, replace_with, insert_access);
                 break;
             }
             case tiramisu::o_select:
@@ -3413,15 +3413,15 @@ void tiramisu::generator::replace_expr_name(tiramisu::expr &current_exp, std::st
                 tiramisu::expr &exp0 = current_exp.op[0];
                 tiramisu::expr &exp1 = current_exp.op[1];
                 tiramisu::expr &exp2 = current_exp.op[2];
-                generator::replace_expr_name(exp0, name_to_replace, replace_with, insert_access);
-                generator::replace_expr_name(exp1, name_to_replace, replace_with, insert_access);
-                generator::replace_expr_name(exp2, name_to_replace, replace_with, insert_access);
+                generator::update_producer_expr_name(exp0, name_to_replace, replace_with, insert_access);
+                generator::update_producer_expr_name(exp1, name_to_replace, replace_with, insert_access);
+                generator::update_producer_expr_name(exp2, name_to_replace, replace_with, insert_access);
                 break;
             }
             case tiramisu::o_call:
             {
                 for (auto &e : current_exp.argument_vector) {
-                    generator::replace_expr_name(e, name_to_replace, replace_with, insert_access);
+                    generator::update_producer_expr_name(e, name_to_replace, replace_with, insert_access);
                 }
                 break;
             }

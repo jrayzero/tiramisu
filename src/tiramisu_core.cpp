@@ -1710,15 +1710,19 @@ void tiramisu::computation::separate(int dim, tiramisu::expr N, int v)
     DEBUG_INDENT(-4);
 }
 
-void tiramisu::computation::separate_at(int dim, std::vector<tiramisu::expr> _separate_points, tiramisu::expr _max)
+void tiramisu::computation::separate_at(var _level, std::vector<tiramisu::expr> _separate_points, tiramisu::expr _max)
 {
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
 
-    DEBUG(3, tiramisu::str_dump("Separating the computation at level " + std::to_string(dim)));
+    DEBUG(3, tiramisu::str_dump("Separating the computation at level " + _level.get_name()));
 
     DEBUG(3, tiramisu::str_dump("Generating the time-space domain."));
     this->gen_time_space_domain();
+
+    std::vector<int> dimensions =
+            this->get_loop_level_numbers_from_dimension_names({_level.get_name()});
+    int level = dimensions[0];
 
     //////////////////////////////////////////////////////////////////////////////
 
@@ -1762,23 +1766,23 @@ void tiramisu::computation::separate_at(int dim, std::vector<tiramisu::expr> _se
     std::vector<std::string> constraints;
     // This is the first constraint
     std::string constraint1 = constraint +
-                              this->get_dimension_name_for_loop_level(dim) + " < " + separate_points[0].get_name() + "}";
+                              this->get_dimension_name_for_loop_level(level) + " < " + separate_points[0].get_name() + "}";
     DEBUG(3, tiramisu::str_dump("The constraint is:" + constraint1));
 
     // We create the constraint (i >= separate_point). This is the last constraint
     DEBUG(3, tiramisu::str_dump("Constructing the constraint (i>=middle)"));
     std::string constraintn = constraint +
-                              this->get_dimension_name_for_loop_level(dim) + " >= " +
+                              this->get_dimension_name_for_loop_level(level) + " >= " +
                               separate_points[separate_points.size() - 1].get_name() + " and " +
-                              this->get_dimension_name_for_loop_level(dim) + " < " + max.get_name() + "}";
+                              this->get_dimension_name_for_loop_level(level) + " < " + max.get_name() + "}";
     DEBUG(3, tiramisu::str_dump("The constraint is:" + constraintn));
 
 
     // create the intermediate constraints
     for (int i = 1; i < separate_points.size(); i++) {
         std::string cons = constraint +
-                           this->get_dimension_name_for_loop_level(dim) + " >= " + separate_points[i-1].get_name() + " and ";
-        cons += this->get_dimension_name_for_loop_level(dim) + " < " + separate_points[i].get_name() + "}";
+                           this->get_dimension_name_for_loop_level(level) + " >= " + separate_points[i-1].get_name() + " and ";
+        cons += this->get_dimension_name_for_loop_level(level) + " < " + separate_points[i].get_name() + "}";
         constraints.push_back(cons);
     }
     constraints.push_back(constraintn);
