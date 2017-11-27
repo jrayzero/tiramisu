@@ -2175,16 +2175,6 @@ void function::gen_halide_stmt()
     // Generate the statement that represents the whole function
     stmt = tiramisu::generator::halide_stmt_from_isl_node(*this, this->get_isl_ast(), 0, generated_stmts);
 
-    if (this->_needs_rank_call) {
-        // add a call to MPI rank to the beginning of the function
-        Halide::Expr mpi_rank_var =
-                Halide::Internal::Variable::make(halide_type_from_tiramisu_type(tiramisu::p_int32), "rank");
-        Halide::Expr mpi_rank = Halide::Internal::Call::make(Halide::Int(32), Halide::Internal::Call::mrank,
-                                                             std::vector<Halide::Expr>(),
-                                                             Halide::Internal::Call::Intrinsic);
-        stmt = Halide::Internal::LetStmt::make("rank", mpi_rank, stmt, true);
-    }
-
     DEBUG(3, tiramisu::str_dump("The following Halide statement was generated:\n"); std::cout << stmt << std::endl);
 
     // Allocate buffers that are not passed as an argument to the function
@@ -2234,6 +2224,16 @@ void function::gen_halide_stmt()
                 param.get_name(),
                 generator::halide_expr_from_tiramisu_expr(this, ie, param.get_expr(), nullptr),
                 stmt);
+    }
+
+    if (this->_needs_rank_call) {
+        // add a call to MPI rank to the beginning of the function
+        Halide::Expr mpi_rank_var =
+                Halide::Internal::Variable::make(halide_type_from_tiramisu_type(tiramisu::p_int32), "rank");
+        Halide::Expr mpi_rank = Halide::Internal::Call::make(Halide::Int(32), Halide::Internal::Call::mrank,
+                                                             std::vector<Halide::Expr>(),
+                                                             Halide::Internal::Call::Intrinsic);
+        stmt = Halide::Internal::LetStmt::make("rank", mpi_rank, stmt, true);
     }
 
     // Add producer tag
