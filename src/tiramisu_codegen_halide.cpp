@@ -29,6 +29,29 @@ Halide::Argument::Kind halide_argtype_from_tiramisu_argtype(tiramisu::argument_t
 std::string generate_new_variable_name();
 Halide::Expr make_halide_call(Halide::Type type, std::string func_name, std::vector<Halide::Expr> args);
 Halide::Expr halide_expr_from_tiramisu_type(tiramisu::primitive_t ptype);
+
+template <typename T>
+Halide::Expr get_halide_expr_as_tiramisu_type(T val, primitive_t ttype) {
+    switch (ttype) {
+        case p_uint8: return Halide::Expr((uint8_t)val);
+        case p_uint16: return Halide::Expr((uint16_t)val);
+        case p_uint32: return Halide::Expr((uint32_t)val);
+        case p_uint64: return Halide::Expr((uint64_t)val);
+        case p_int8: return Halide::Expr((int8_t)val);
+        case p_int16: return Halide::Expr((int16_t)val);
+        case p_int32: return Halide::Expr((int32_t)val);
+        case p_int64: return Halide::Expr((int64_t)val);
+        case p_float32: return Halide::Expr((float)val);
+        case p_float64: return Halide::Expr((double)val);
+        default: { assert(false && "Bad type specified"); return Halide::Expr(); }
+    }
+}
+
+// Used when ISL creates a computation with one of our constants but we parse the added operand with the wrong type
+//std::vector<Halide::Expr> repair_types(std::vector<Halide::Expr> operands) {
+//
+//}
+
 std::vector<computation *> function::get_computation_by_name(std::string name) const
 {
     assert(!name.empty());
@@ -1114,12 +1137,6 @@ tiramisu::expr replace_original_indices_with_transformed_indices(tiramisu::expr 
     else if (exp.get_expr_type() == tiramisu::e_var)
     {
         std::map<std::string, isl_ast_expr *>::iterator it;
-        if (exp.get_name() == "y1") {
-            for (auto x: iterators_map) {
-                auto s = x.first;
-                isl_ast_expr_dump(x.second);
-            }
-        }
         it = iterators_map.find(exp.get_name());
         if (it != iterators_map.end())
             output_expr = tiramisu_expr_from_isl_ast_expr(iterators_map[exp.get_name()]);
@@ -2252,23 +2269,6 @@ isl_ast_node *for_code_generator_after_for(isl_ast_node *node, isl_ast_build *bu
     return node;
 }
 
-template <typename T>
-Halide::Expr get_halide_expr_as_tiramisu_type(T val, primitive_t ttype) {
-    switch (ttype) {
-        case p_uint8: return Halide::Expr((uint8_t)val);
-        case p_uint16: return Halide::Expr((uint16_t)val);
-        case p_uint32: return Halide::Expr((uint32_t)val);
-        case p_uint64: return Halide::Expr((uint64_t)val);
-        case p_int8: return Halide::Expr((int8_t)val);
-        case p_int16: return Halide::Expr((int16_t)val);
-        case p_int32: return Halide::Expr((int32_t)val);
-        case p_int64: return Halide::Expr((int64_t)val);
-        case p_float32: return Halide::Expr((float)val);
-        case p_float64: return Halide::Expr((double)val);
-        default: { assert(false && "Bad type specified"); return Halide::Expr(); }
-    }
-}
-
 /**
   * Linearize a multidimensional access to a Halide buffer.
   * Supposing that we have buf[N1][N2][N3], transform buf[i][j][k]
@@ -3332,8 +3332,19 @@ void function::gen_halide_obj(const std::string &obj_file_name, Halide::Target::
     m.compile(Halide::Outputs().llvm_assembly(obj_file_name + ".ll"));
 }
 
-void tiramisu::generator::update_producer_expr_name(tiramisu::expr &current_exp, std::string name_to_replace,
+void tiramisu::generator::update_producer_expr_name(tiramisu::computation *comp, std::string name_to_replace,
                                                     std::string replace_with, bool insert_access) {
+    DEBUG_FCT_NAME(3);
+    DEBUG_INDENT(4);
+
+    tiramisu::generator::_update_producer_expr_name(comp->expression, name_to_replace, replace_with, insert_access);
+
+    DEBUG_INDENT(-4);
+    DEBUG_FCT_NAME(3);
+}
+
+void tiramisu::generator::_update_producer_expr_name(tiramisu::expr &current_exp, std::string name_to_replace,
+                                                     std::string replace_with, bool insert_access) {
 
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
@@ -3376,7 +3387,7 @@ void tiramisu::generator::update_producer_expr_name(tiramisu::expr &current_exp,
             case tiramisu::o_address:
             {
                 tiramisu::expr &exp0 = current_exp.op[0];
-                generator::update_producer_expr_name(exp0, name_to_replace, replace_with, insert_access);
+                generator::_update_producer_expr_name(exp0, name_to_replace, replace_with, insert_access);
                 break;
             }
             case tiramisu::o_logical_and:
@@ -3403,8 +3414,8 @@ void tiramisu::generator::update_producer_expr_name(tiramisu::expr &current_exp,
             {
                 tiramisu::expr &exp0 = current_exp.op[0];
                 tiramisu::expr &exp1 = current_exp.op[1];
-                generator::update_producer_expr_name(exp0, name_to_replace, replace_with, insert_access);
-                generator::update_producer_expr_name(exp1, name_to_replace, replace_with, insert_access);
+                generator::_update_producer_expr_name(exp0, name_to_replace, replace_with, insert_access);
+                generator::_update_producer_expr_name(exp1, name_to_replace, replace_with, insert_access);
                 break;
             }
             case tiramisu::o_select:
@@ -3413,15 +3424,15 @@ void tiramisu::generator::update_producer_expr_name(tiramisu::expr &current_exp,
                 tiramisu::expr &exp0 = current_exp.op[0];
                 tiramisu::expr &exp1 = current_exp.op[1];
                 tiramisu::expr &exp2 = current_exp.op[2];
-                generator::update_producer_expr_name(exp0, name_to_replace, replace_with, insert_access);
-                generator::update_producer_expr_name(exp1, name_to_replace, replace_with, insert_access);
-                generator::update_producer_expr_name(exp2, name_to_replace, replace_with, insert_access);
+                generator::_update_producer_expr_name(exp0, name_to_replace, replace_with, insert_access);
+                generator::_update_producer_expr_name(exp1, name_to_replace, replace_with, insert_access);
+                generator::_update_producer_expr_name(exp2, name_to_replace, replace_with, insert_access);
                 break;
             }
             case tiramisu::o_call:
             {
                 for (auto &e : current_exp.argument_vector) {
-                    generator::update_producer_expr_name(e, name_to_replace, replace_with, insert_access);
+                    generator::_update_producer_expr_name(e, name_to_replace, replace_with, insert_access);
                 }
                 break;
             }

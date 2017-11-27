@@ -1294,13 +1294,12 @@ private:
      */
     int duplicate_number;
 
-public:
     /**
       * An expression representing the computation
       * ("what" should be computed).
       */
     tiramisu::expr expression;
-private:
+
     /**
       * If has_multiple_definitions() is true, then this variable contains the
       * computation that was defined first among all the multiple definitions.
@@ -3915,13 +3914,20 @@ protected:
                                                    std::vector<isl_map *> &accesses,
                                                    bool return_buffer_accesses);
 
+    /**
+     * Traverse a tiramisu expression (\p current_exp) until an expression with the specified name is found.
+     * Replace that name with a new name. Replaces all occurrences.
+     */
+    static void _update_producer_expr_name(tiramisu::expr &current_exp, std::string name_to_replace,
+                                          std::string replace_with, bool insert_access = false);
+
 public:
 
     /**
      * Traverse a tiramisu expression (\p current_exp) until an expression with the specified name is found.
      * Replace that name with a new name. Replaces all occurrences.
      */
-    static void update_producer_expr_name(tiramisu::expr &current_exp, std::string name_to_replace,
+    static void update_producer_expr_name(tiramisu::computation *comp, std::string name_to_replace,
                                           std::string replace_with, bool insert_access = false);
 
 };

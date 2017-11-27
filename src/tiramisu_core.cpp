@@ -8049,6 +8049,9 @@ void tiramisu::communicator::add_dim(tiramisu::expr dim) {
 
 tiramisu::expr tiramisu::communicator::get_num_elements() const {
     tiramisu::expr num = expr(1);
+    if (!dims.empty()) {
+        num = tiramisu::expr(tiramisu::o_cast, dims[0].get_data_type(), num);
+    }
     for (std::vector<tiramisu::expr>::const_iterator iter = dims.cbegin(); iter != dims.cend(); iter++) {
         num = *iter * num;
     }
