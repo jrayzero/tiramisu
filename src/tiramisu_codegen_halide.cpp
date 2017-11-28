@@ -977,7 +977,7 @@ void generator::get_rhs_accesses(const tiramisu::function *func, const tiramisu:
     DEBUG_FCT_NAME(3);
 }
 
-tiramisu::expr tiramisu_expr_from_isl_ast_expr(isl_ast_expr *isl_expr)
+tiramisu::expr tiramisu_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, bool convert_to_loop_type = false)
 {
     DEBUG_FCT_NAME(10);
     DEBUG_INDENT(4);
@@ -990,7 +990,12 @@ tiramisu::expr tiramisu_expr_from_isl_ast_expr(isl_ast_expr *isl_expr)
     if (isl_ast_expr_get_type(isl_expr) == isl_ast_expr_int)
     {
         isl_val *init_val = isl_ast_expr_get_val(isl_expr);
-        result = tiramisu::expr((int32_t) isl_val_get_num_si(init_val));
+        if (!convert_to_loop_type) {
+            result = tiramisu::expr((int32_t) isl_val_get_num_si(init_val));
+        } else {
+            result = tiramisu::expr(tiramisu::o_cast, global::get_loop_iterator_data_type(),
+                                    tiramisu::expr((int64_t)isl_val_get_num_si(init_val)));
+        }
         isl_val_free(init_val);
     }
     else if (isl_ast_expr_get_type(isl_expr) == isl_ast_expr_id)
@@ -1006,20 +1011,29 @@ tiramisu::expr tiramisu_expr_from_isl_ast_expr(isl_ast_expr *isl_expr)
         std::vector<tiramisu::expr> new_arguments;
 
         isl_ast_expr *expr0 = isl_ast_expr_get_op_arg(isl_expr, 0);
-        op0 = tiramisu_expr_from_isl_ast_expr(expr0);
+        op0 = tiramisu_expr_from_isl_ast_expr(expr0, convert_to_loop_type);
+        if (convert_to_loop_type) {
+            op0 = tiramisu::expr(tiramisu::o_cast, global::get_loop_iterator_data_type(), op0);
+        }
         isl_ast_expr_free(expr0);
 
         if (isl_ast_expr_get_op_n_arg(isl_expr) > 1)
         {
             isl_ast_expr *expr1 = isl_ast_expr_get_op_arg(isl_expr, 1);
-            op1 = tiramisu_expr_from_isl_ast_expr(expr1);
+            op1 = tiramisu_expr_from_isl_ast_expr(expr1, convert_to_loop_type);
+            if (convert_to_loop_type) {
+                op1 = tiramisu::expr(tiramisu::o_cast, global::get_loop_iterator_data_type(), op1);
+            }
             isl_ast_expr_free(expr1);
         }
 
         if (isl_ast_expr_get_op_n_arg(isl_expr) > 2)
         {
             isl_ast_expr *expr2 = isl_ast_expr_get_op_arg(isl_expr, 2);
-            op2 = tiramisu_expr_from_isl_ast_expr(expr2);
+            op2 = tiramisu_expr_from_isl_ast_expr(expr2, convert_to_loop_type);
+            if (convert_to_loop_type) {
+                op2 = tiramisu::expr(tiramisu::o_cast, global::get_loop_iterator_data_type(), op2);
+            }
             isl_ast_expr_free(expr2);
         }
 
@@ -1138,10 +1152,12 @@ tiramisu::expr replace_original_indices_with_transformed_indices(tiramisu::expr 
     {
         std::map<std::string, isl_ast_expr *>::iterator it;
         it = iterators_map.find(exp.get_name());
-        if (it != iterators_map.end())
-            output_expr = tiramisu_expr_from_isl_ast_expr(iterators_map[exp.get_name()]);
-        else
+        if (it != iterators_map.end()) {
+            output_expr = tiramisu::expr(tiramisu::o_cast, global::get_loop_iterator_data_type(),
+                                         tiramisu_expr_from_isl_ast_expr(iterators_map[exp.get_name()], true));
+        } else {
             output_expr = exp;
+        }
     }
     else if ((exp.get_expr_type() == tiramisu::e_op) && (exp.get_op_type() == tiramisu::o_access))
     {
@@ -1455,14 +1471,18 @@ void print_isl_ast_expr_vector(
     }
 }
 
-Halide::Expr halide_expr_from_isl_ast_expr(isl_ast_expr *isl_expr)
+Halide::Expr halide_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, bool convert_to_loop_type = false)
 {
     Halide::Expr result;
 
     if (isl_ast_expr_get_type(isl_expr) == isl_ast_expr_int)
     {
         isl_val *init_val = isl_ast_expr_get_val(isl_expr);
-        result = Halide::Expr((int32_t)isl_val_get_num_si(init_val));
+        if (!convert_to_loop_type) {
+            result = Halide::Expr((int32_t) isl_val_get_num_si(init_val));
+        } else {
+            result = get_halide_expr_as_tiramisu_type(isl_val_get_num_si(init_val), global::get_loop_iterator_data_type());
+        }
         isl_val_free(init_val);
     }
     else if (isl_ast_expr_get_type(isl_expr) == isl_ast_expr_id)
@@ -1477,20 +1497,29 @@ Halide::Expr halide_expr_from_isl_ast_expr(isl_ast_expr *isl_expr)
         Halide::Expr op0, op1, op2;
 
         isl_ast_expr *expr0 = isl_ast_expr_get_op_arg(isl_expr, 0);
-        op0 = halide_expr_from_isl_ast_expr(expr0);
+        op0 = halide_expr_from_isl_ast_expr(expr0, convert_to_loop_type);
+        if (convert_to_loop_type) {
+            op0 = Halide::cast(halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()), op0);
+        }
         isl_ast_expr_free(expr0);
 
         if (isl_ast_expr_get_op_n_arg(isl_expr) > 1)
         {
             isl_ast_expr *expr1 = isl_ast_expr_get_op_arg(isl_expr, 1);
-            op1 = halide_expr_from_isl_ast_expr(expr1);
+            op1 = halide_expr_from_isl_ast_expr(expr1, convert_to_loop_type);
+            if (convert_to_loop_type) {
+                op1 = Halide::cast(halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()), op1);
+            }
             isl_ast_expr_free(expr1);
         }
 
         if (isl_ast_expr_get_op_n_arg(isl_expr) > 2)
         {
             isl_ast_expr *expr2 = isl_ast_expr_get_op_arg(isl_expr, 2);
-            op2 = halide_expr_from_isl_ast_expr(expr2);
+            op2 = halide_expr_from_isl_ast_expr(expr2, convert_to_loop_type);
+            if (convert_to_loop_type) {
+                op2 = Halide::cast(halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()), op2);
+            }
             isl_ast_expr_free(expr2);
         }
 
@@ -1819,7 +1848,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
         assert(cond_upper_bound_isl_format != NULL);
         DEBUG(3, tiramisu::str_dump("Creating for loop init expression."));
 
-        Halide::Expr init_expr = halide_expr_from_isl_ast_expr(init);
+        Halide::Expr init_expr = halide_expr_from_isl_ast_expr(init, true);
         if (init_expr.type() !=
             halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()))
         {
@@ -1830,7 +1859,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
         }
         DEBUG(3, tiramisu::str_dump("init expression: "); std::cout << init_expr);
         Halide::Expr cond_upper_bound_halide_format =
-                simplify(halide_expr_from_isl_ast_expr(cond_upper_bound_isl_format));
+                simplify(halide_expr_from_isl_ast_expr(cond_upper_bound_isl_format, true));
         if (cond_upper_bound_halide_format.type() !=
             halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()))
         {
@@ -2061,7 +2090,6 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
 
             comp->create_halide_assignment();
             result = comp->get_generated_halide_stmt();
-            std::cerr << result << std::endl;
 
             for (const auto &l_stmt : comp->get_associated_let_stmts())
             {
@@ -2124,7 +2152,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
         }
         else
         {
-            Halide::Expr c = halide_expr_from_isl_ast_expr(cond);
+            Halide::Expr c = halide_expr_from_isl_ast_expr(cond, true);
 
             DEBUG(3, tiramisu::str_dump("Condition: "); std::cout << c);
             DEBUG(3, tiramisu::str_dump("Generating code for the if branch."));
@@ -2247,9 +2275,10 @@ void function::gen_halide_stmt()
         // add a call to MPI rank to the beginning of the function
         Halide::Expr mpi_rank_var =
                 Halide::Internal::Variable::make(halide_type_from_tiramisu_type(tiramisu::p_int32), "rank");
-        Halide::Expr mpi_rank = Halide::Internal::Call::make(Halide::Int(32), Halide::Internal::Call::mrank,
-                                                             std::vector<Halide::Expr>(),
-                                                             Halide::Internal::Call::Intrinsic);
+        Halide::Expr mpi_rank = Halide::cast(halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()),
+                                             Halide::Internal::Call::make(Halide::Int(32), Halide::Internal::Call::mrank,
+                                                                          std::vector<Halide::Expr>(),
+                                                                          Halide::Internal::Call::Intrinsic));
         stmt = Halide::Internal::LetStmt::make("rank", mpi_rank, stmt, true);
     }
 
@@ -2287,7 +2316,7 @@ Halide::Expr generator::linearize_access(int dims, const halide_dimension_t *sha
     for (int i = dims; i >= 1; --i)
     {
         isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i);
-        Halide::Expr operand_h = halide_expr_from_isl_ast_expr(operand);
+        Halide::Expr operand_h = halide_expr_from_isl_ast_expr(operand, true);
         index += operand_h * Halide::Expr(shape[dims - i].stride);
         isl_ast_expr_free(operand);
     }
@@ -2352,7 +2381,7 @@ Halide::Expr generator::linearize_access(int dims, std::vector<Halide::Expr> &st
     for (int i = dims; i >= 1; --i)
     {
         isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i);
-        Halide::Expr operand_h = halide_expr_from_isl_ast_expr(operand);
+        Halide::Expr operand_h = halide_expr_from_isl_ast_expr(operand, true);
         index += operand_h * strides[dims - i];
         isl_ast_expr_free(operand);
     }

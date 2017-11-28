@@ -38,7 +38,7 @@ std::string generate_new_variable_name();
 tiramisu::expr traverse_expr_and_replace_non_affine_accesses(tiramisu::computation *comp,
                                                              const tiramisu::expr &exp);
 
-tiramisu::expr tiramisu_expr_from_isl_ast_expr(isl_ast_expr *isl_expr);
+tiramisu::expr tiramisu_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, bool convert_to_loop_type = false);
 
 /**
   * Add a dimension to the range of a map in the specified position.
@@ -8328,10 +8328,10 @@ void tiramisu::function::lift_ops_to_library_calls() {
             bool isnonblock = s->get_channel().contains_attr(NONBLOCK);
             s->rhs_argument_idx = 4;
             s->library_call_args.resize(isnonblock ? 7 : 6);
-            s->library_call_args[0] = s->get_src();
-            s->library_call_args[1] = num_elements;
-            s->library_call_args[2] = s->get_dest();
-            s->library_call_args[3] = s->get_msg_tag();
+            s->library_call_args[0] = 0;//tiramisu::expr(tiramisu::o_cast, p_int32, s->get_src());
+            s->library_call_args[1] = tiramisu::expr(tiramisu::o_cast, p_int32, num_elements);
+            s->library_call_args[2] = tiramisu::expr(tiramisu::o_cast, p_int32, s->get_dest());
+            s->library_call_args[3] = tiramisu::expr(tiramisu::o_cast, p_int32, s->get_msg_tag());
             s->library_call_args[5] = send_type;
             if (isnonblock) {
                 // This additional RHS argument is to the request buffer. It is really more of a side effect.
@@ -8345,10 +8345,10 @@ void tiramisu::function::lift_ops_to_library_calls() {
             bool isnonblock = r->get_channel().contains_attr(NONBLOCK);
             r->lhs_argument_idx = 4;
             r->library_call_args.resize(isnonblock ? 7 : 6);
-            r->library_call_args[0] = r->get_dest();
-            r->library_call_args[1] = num_elements;
-            r->library_call_args[2] = r->get_src();
-            r->library_call_args[3] = r->get_msg_tag().is_defined() ? r->get_msg_tag() : s->get_msg_tag();
+            r->library_call_args[0] = 0;//tiramisu::expr(tiramisu::o_cast, p_int32, r->get_dest());
+            r->library_call_args[1] = tiramisu::expr(tiramisu::o_cast, p_int32, num_elements);
+            r->library_call_args[2] = tiramisu::expr(tiramisu::o_cast, p_int32, r->get_src());
+            r->library_call_args[3] = tiramisu::expr(tiramisu::o_cast, p_int32, r->get_msg_tag().is_defined() ? r->get_msg_tag() : s->get_msg_tag());
             r->library_call_args[5] = recv_type;
             r->lhs_access_type = tiramisu::o_address_of;
             if (isnonblock) {
