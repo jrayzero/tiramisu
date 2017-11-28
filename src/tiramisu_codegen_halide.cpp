@@ -2455,18 +2455,14 @@ void tiramisu::computation::create_halide_assignment()
     else {
         DEBUG(3, tiramisu::str_dump("This is not a let statement."));
         if (this->is_send()) {
-            this->library_call_args[0] = replace_original_indices_with_transformed_indices(this->library_call_args[0],
+            this->library_call_args[1] = replace_original_indices_with_transformed_indices(this->library_call_args[1],
                                                                                            this->get_iterators_map());
             this->library_call_args[2] = replace_original_indices_with_transformed_indices(this->library_call_args[2],
-                                                                                           this->get_iterators_map());
-            this->library_call_args[3] = replace_original_indices_with_transformed_indices(this->library_call_args[3],
                                                                                            this->get_iterators_map());
         } else if (this->is_recv()) {
-            this->library_call_args[0] = replace_original_indices_with_transformed_indices(this->library_call_args[0],
+            this->library_call_args[1] = replace_original_indices_with_transformed_indices(this->library_call_args[1],
                                                                                            this->get_iterators_map());
             this->library_call_args[2] = replace_original_indices_with_transformed_indices(this->library_call_args[2],
-                                                                                           this->get_iterators_map());
-            this->library_call_args[3] = replace_original_indices_with_transformed_indices(this->library_call_args[3],
                                                                                            this->get_iterators_map());
         }
 
