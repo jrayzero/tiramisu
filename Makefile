@@ -5,7 +5,7 @@ include configure_paths.sh
 CXX = mpicxx
 CXXFLAGS = -g -std=c++11 -O3 -Wall -Wno-sign-compare -fno-rtti -fvisibility=hidden -march=corei7-avx -mtune=corei7-avx -fopenmp -DNODES=${MPI_NODES}
 INCLUDES = -Iinclude/ -I${ISL_INCLUDE_DIRECTORY} -I${HALIDE_SOURCE_DIRECTORY}/include -I${HALIDE_SOURCE_DIRECTORY}/tools -Ibuild/ -I3rdParty/isl/include -I/data/scratch/jray/anaconda2/include/
-LIBRARIES = -Lbuild/ -L${ISL_LIB_DIRECTORY} -L3rdParty/isl/.libs -lisl -lgmp -L${HALIDE_LIB_DIRECTORY} -lHalide -lmpi_cxx -ldl -lpthread -lz `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
+LIBRARIES = -Lbuild/ -L${ISL_LIB_DIRECTORY} -L3rdParty/isl/.libs -lisl -lgmp -L${HALIDE_LIB_DIRECTORY} -lHalide -lmpi -ldl -lpthread -lz `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
 HEADER_FILES = \
 	include/tiramisu/core.h \
 	include/tiramisu/debug.h \
@@ -141,7 +141,7 @@ TEST_GEN = build/test_01_fct_generator \
     build/test_88_fct_generator \
     build/test_89_fct_generator
 
-
+#    build/test_74_fct_generator
 #build/test_07_fct_generator
 
 TEST_BIN = build/test_global \
@@ -321,7 +321,6 @@ TEST_RUN = \
     run_test_88 \
     run_test_89
 
-
 #################################################
 
 
@@ -332,9 +331,9 @@ BENCH_REF_GEN = \
 	build/bench_halide_heat2d_generator \
 	build/bench_halide_cvtcolor_generator \
 	build/bench_halide_filter2D_generator \
-	build/bench_halide_fusion_generator
-	build/bench_halide_heat2d_generator
-	build/bench_halide_blurxy_generator
+	build/bench_halide_fusion_generator \
+	build/bench_halide_heat2d_generator \
+	build/bench_halide_blurxy_generator 
 # Not supported yet: build/bench_halide_rgbyuv420_generator
 
 BENCH_TIRAMISU_GEN = \
@@ -344,8 +343,8 @@ BENCH_TIRAMISU_GEN = \
 	build/bench_tiramisu_heat2d_generator \
 	build/bench_tiramisu_cvtcolor_generator \
 	build/bench_tiramisu_filter2D_generator \
-	build/bench_tiramisu_fusion_generator
-	build/bench_tiramisu_heat2d_generator
+	build/bench_tiramisu_fusion_generator \
+	build/bench_tiramisu_heat2d_generator \
 	build/bench_tiramisu_blurxy_generator
 # Not supported yet: build/bench_tiramisu_rgbyuv420_generator
 
@@ -358,7 +357,7 @@ BENCH_BIN = \
 	build/bench_filter2D \
 	build/bench_fusion \
 	build/bench_heat2d \
-	build/bench_blurxy \
+	build/bench_blurxy 
 # Not supported yet: build/bench_rgbyuv420
 
 
@@ -433,6 +432,33 @@ build/generated_warp_affine_dist.o: build/warp_affine_dist_fct_generator
 build/warp_affine_dist: distributed_tests/wrapper_warp_affine_dist.cpp build/warp_affine_dist_fct_generator build/generated_warp_affine_dist.o distributed_tests/wrapper_warp_affine_dist.h ${OBJ} ${HEADER_FILES}
 	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
 
+
+# fusion_dist
+fusion_dist: $(OBJ) build/fusion_dist_fct_generator build/fusion_dist
+build/fusion_dist_fct_generator: distributed_tests/fusion_dist.cpp
+	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $@
+build/generated_fusion_dist.o: build/fusion_dist_fct_generator
+build/fusion_dist: distributed_tests/wrapper_fusion_dist.cpp build/fusion_dist_fct_generator build/generated_fusion_dist.o distributed_tests/wrapper_fusion_dist.h ${OBJ} ${HEADER_FILES}
+	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
+# gaussian_dist
+gaussian_dist: $(OBJ) build/gaussian_dist_fct_generator build/gaussian_dist
+build/gaussian_dist_fct_generator: distributed_tests/gaussian_dist.cpp
+	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $@
+build/generated_gaussian_dist.o: build/gaussian_dist_fct_generator
+build/gaussian_dist: distributed_tests/wrapper_gaussian_dist.cpp build/gaussian_dist_fct_generator build/generated_gaussian_dist.o distributed_tests/wrapper_gaussian_dist.h ${OBJ} ${HEADER_FILES}
+	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
+# filter2D_dist
+filter2D_dist: $(OBJ) build/filter2D_dist_fct_generator build/filter2D_dist
+build/filter2D_dist_fct_generator: distributed_tests/filter2D_dist.cpp
+	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $@
+build/generated_filter2D_dist.o: build/filter2D_dist_fct_generator
+build/filter2D_dist: distributed_tests/wrapper_filter2D_dist.cpp build/filter2D_dist_fct_generator build/generated_filter2D_dist.o distributed_tests/wrapper_filter2D_dist.h ${OBJ} ${HEADER_FILES}
+	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
 
 ###################################################################
 

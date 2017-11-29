@@ -147,8 +147,8 @@ int main() {
      * Buffers
      */
 
-    tiramisu::expr bx_select_dim0(tiramisu::o_select, var("rank") == nodes-1, tiramisu::expr(rows_per_node+2), tiramisu::expr(rows_per_node));
-    tiramisu::expr by_select_dim0(tiramisu::o_select, var("rank") == nodes-1, tiramisu::expr(rows_per_node+2), tiramisu::expr(rows_per_node));
+    tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == nodes-1, tiramisu::expr(rows_per_node+2), tiramisu::expr(rows_per_node));
+    tiramisu::expr by_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == nodes-1, tiramisu::expr(rows_per_node+2), tiramisu::expr(rows_per_node));
 
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(rows_per_node), tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);

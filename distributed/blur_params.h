@@ -11,7 +11,7 @@
 #define ITERS 20
 
 #define ROWS 10
-#define COLS 5
+#define COLS 7
 #define NODES 2
 #define T_LOOP_ITER_TYPE tiramisu::p_int64
 #define C_LOOP_ITER_TYPE int64_t
