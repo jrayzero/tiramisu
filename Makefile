@@ -5,7 +5,7 @@ include configure_paths.sh
 CXX = mpicxx
 CXXFLAGS = -g -std=c++11 -O0 -Wall -Wno-sign-compare -fno-rtti -fvisibility=hidden -march=corei7-avx -mtune=corei7-avx -fopenmp -DNODES=${MPI_NODES}
 INCLUDES = -Iinclude/ -I${ISL_INCLUDE_DIRECTORY} -I${HALIDE_SOURCE_DIRECTORY}/include -I${HALIDE_SOURCE_DIRECTORY}/tools -Ibuild/ -I3rdParty/isl/include -I/data/scratch/jray/anaconda2/include/
-LIBRARIES = -Lbuild/ -L${ISL_LIB_DIRECTORY} -L3rdParty/isl/.libs -lisl -lgmp -L${HALIDE_LIB_DIRECTORY} -lHalide -lmpi -ldl -lpthread -lz `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
+LIBRARIES = -Lbuild/ -L${ISL_LIB_DIRECTORY} -L3rdParty/isl/.libs -lisl -lgmp -L${HALIDE_LIB_DIRECTORY} -lHalide -lmpi_cxx -ldl -lpthread -lz `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
 HEADER_FILES = \
 	include/tiramisu/core.h \
 	include/tiramisu/debug.h \
@@ -401,7 +401,7 @@ build/blur_generator: distributed/blur.cpp
 	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
 	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $@
 build/generated_blur_dist.o: build/blur_generator
-build/blur: distributed/wrapper_blur.cpp build/blur_generator build/generated_blur.o distributed/wrapper_blur.h ${OBJ} ${HEADER_FILES} distributed/blur_params.h
+build/blur: distributed/wrapper_blur.cpp build/blur_generator build/generated_blur_dist.o distributed/wrapper_blur.h ${OBJ} ${HEADER_FILES} distributed/blur_params.h
 	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
 
 # dblurxy
