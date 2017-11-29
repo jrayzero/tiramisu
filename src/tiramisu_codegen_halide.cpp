@@ -3328,14 +3328,9 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
 void function::gen_halide_obj(const std::string &obj_file_name, Halide::Target::OS os,
                               Halide::Target::Arch arch, int bits) const
 {
-    // TODO(tiramisu): For GPU schedule, we need to set the features, e.g.
-    // Halide::Target::CUDA, etc.
     std::vector<Halide::Target::Feature> features =
             {
-                    Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers
-#if WITH_CUDA==1
-                    , Halide::Target::CUDA//, Halide::Target::Debug
-#endif
+                    Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers, Halide::Target::CUDA
             };
 
     Halide::Target target(os, arch, bits, features);
