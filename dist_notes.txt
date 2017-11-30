@@ -1,0 +1,2 @@
+- Make sure everything (linker, etc) is pointing to the modified ISL library
+- Compile Halide with the correct MPI implementation

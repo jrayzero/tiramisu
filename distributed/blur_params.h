@@ -10,9 +10,10 @@
 #define PRINT_ITER_0
 #define ITERS 20
 
-#define ROWS 10
-#define COLS 7
-//#define NODES 2
+//#define DISTRIBUTE
+
+#define ROWS 100
+#define COLS 10
 #define T_LOOP_ITER_TYPE tiramisu::p_int64
 #define C_LOOP_ITER_TYPE int64_t
 #define T_DATA_TYPE tiramisu::p_uint64

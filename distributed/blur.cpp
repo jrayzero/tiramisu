@@ -33,7 +33,12 @@ int main() {
 
     C_LOOP_ITER_TYPE rows = ROWS;
     C_LOOP_ITER_TYPE cols = COLS;
+#ifdef DISTRIBUTE
     C_LOOP_ITER_TYPE nodes = NODES;
+#else
+    C_LOOP_ITER_TYPE nodes = 1;
+#endif
+
     C_LOOP_ITER_TYPE rows_per_node = rows / nodes;
 
     // -------------------------------------------------------
@@ -60,6 +65,8 @@ int main() {
     // -------------------------------------------------------
     // Layer II
     // -------------------------------------------------------
+
+#ifdef DISTRIBUTE
 
     constant nodes_const("nodes", expr(nodes), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
@@ -98,11 +105,12 @@ int main() {
                                                                    "[cols, nodes]->{bx_exchange_last_node_r[q,y,x]: nodes-2<=q<nodes-1 and 0<=y<2 and 0<=x<cols-2 and nodes>1}",
                                                                    q, q-(C_LOOP_ITER_TYPE)1, q+(C_LOOP_ITER_TYPE)1, q, async_block, sync_block,
                                                                    bx.get_update(2)(y,x), &blur_dist);
-
+#endif
     /*
      * Ordering
      */
 
+#ifdef DISTRIBUTE
     bx.get_update(0).before(bx.get_update(1), computation::root);
     bx.get_update(1).before(bx.get_update(2), computation::root);
     bx.get_update(2).before(*bx_exchange.s, computation::root);
@@ -129,11 +137,16 @@ int main() {
     bx_exchange.r->tag_distribute_level(q, false);
     bx_exchange_last_node.s->tag_distribute_level(q, false);
     bx_exchange_last_node.r->tag_distribute_level(q, false);
+#else 
+    bx.before(by, computation::root);
+#endif
+
 
     // -------------------------------------------------------
     // Layer III
     // -------------------------------------------------------
 
+#ifdef DISTRIBUTE
     /*
      * Collapsing
      */
@@ -142,13 +155,18 @@ int main() {
     bx_exchange.r->collapse_many({collapser(2, 0, (C_LOOP_ITER_TYPE)cols), collapser(1, 0, (C_LOOP_ITER_TYPE)2)});
     bx_exchange_last_node.s->collapse_many({collapser(2, 0, (C_LOOP_ITER_TYPE)cols), collapser(1, 0, (C_LOOP_ITER_TYPE)2)});
     bx_exchange_last_node.r->collapse_many({collapser(2, 0, (C_LOOP_ITER_TYPE)cols), collapser(1, 0, (C_LOOP_ITER_TYPE)2)});
-
+#endif
     /*
      * Buffers
      */
 
+#ifdef DISTRIBUTE
     tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == nodes-1, tiramisu::expr(rows_per_node+2), tiramisu::expr(rows_per_node));
     tiramisu::expr by_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == nodes-1, tiramisu::expr(rows_per_node+2), tiramisu::expr(rows_per_node));
+#else 
+    tiramisu::expr bx_select_dim0(rows_per_node);
+    tiramisu::expr by_select_dim0(rows_per_node - 2);
+#endif
 
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(rows_per_node), tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);
@@ -160,15 +178,19 @@ int main() {
                              T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
+#ifdef DISTRIBUTE
     bx.get_update(0).set_access("{bx_0[y, x]->buff_bx[y, x]}");
     bx.get_update(1).set_access("{bx_1[y, x]->buff_bx[y, x]}");
     bx.get_update(2).set_access("{bx_2[y, x]->buff_bx[y, x]}");
     by.get_update(0).set_access("{by_0[y, x]->buff_by[y, x]}");
     by.get_update(1).set_access("{by_1[y, x]->buff_by[y, x]}");
     by.get_update(2).set_access("{by_2[y, x]->buff_by[y, x]}");
-
     bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_bx[" + std::to_string(rows_per_node) + " + y, x]}");
     bx_exchange_last_node.r->set_access("{bx_exchange_last_node_r[q,y,x]->buff_bx[" + std::to_string(rows_per_node) + " + y, x]}");
+#else 
+    bx.get_update(0).set_access("{bx[y, x]->buff_bx[y, x]}");
+    by.get_update(0).set_access("{by[y, x]->buff_by[y, x]}");
+#endif
 
     blur_dist.set_arguments({&buff_input, &buff_by});
 
