@@ -14,7 +14,6 @@ make install
 
 # Halide
 cd ../../
-export WITH_MVAPICH2=1
 set +e
 rm -rf Halide
 git clone https://github.com/jrayzero/Halide
