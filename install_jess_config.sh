@@ -9,10 +9,11 @@ mkdir build
 set -e
 ./autogen.sh
 ./configure --prefix=$PWD/build/ --with-int=imath
-srun make -j 20
-srun make install
+make -j 20
+make install
 
 # Halide
+cd ../../
 export WITH_MVAPICH2=1
 set +e
 rm -rf Halide
@@ -20,5 +21,4 @@ git clone https://github.com/jrayzero/Halide
 cd Halide
 set -e
 git checkout tiramisu_mpi
-#srun make -j 20
 echo "Edit Halide Makefile to use your preferred MPI implementation. (OpenMPI or MVAPICH2)"
