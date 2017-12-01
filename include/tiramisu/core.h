@@ -853,12 +853,12 @@ public:
 
       */
     void gen_halide_obj(const std::string &obj_file_name, Halide::Target::OS os,
-                        Halide::Target::Arch arch, int bits) const;
+                        Halide::Target::Arch arch, int bits, std::vector<Halide::Target::Feature > additional_features = {}) const;
 
     /**
       * \overload
       */
-    void gen_halide_obj(const std::string &obj_file_name) const;
+    void gen_halide_obj(const std::string &obj_file_name, std::vector<Halide::Target::Feature> additional_features = {}) const;
 
     /**
       * Generate a Halide stmt that represents the function.

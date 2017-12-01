@@ -3326,12 +3326,16 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
 }
 
 void function::gen_halide_obj(const std::string &obj_file_name, Halide::Target::OS os,
-                              Halide::Target::Arch arch, int bits) const
+                              Halide::Target::Arch arch, int bits, std::vector<Halide::Target::Feature> additional_features) const
 {
     std::vector<Halide::Target::Feature> features =
             {
-                    Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers, Halide::Target::CUDA
+                    Halide::Target::AVX, Halide::Target::SSE41, Halide::Target::LargeBuffers
             };
+    if (!additional_features.empty()) {
+        features.insert(features.begin(), additional_features.begin(), additional_features.end());
+    }
+
 
     Halide::Target target(os, arch, bits, features);
 

@@ -1017,10 +1017,10 @@ void function::add_iterator_name(const std::string &iteratorName)
   * If the machine parameters are not supplied, it will detect one automatically.
   */
 // @{
-void function::gen_halide_obj(const std::string &obj_file_name) const
+void function::gen_halide_obj(const std::string &obj_file_name, std::vector<Halide::Target::Feature> additional_features) const
 {
     Halide::Target target = Halide::get_host_target();
-    gen_halide_obj(obj_file_name, target.os, target.arch, 64);//target.bits);
+    gen_halide_obj(obj_file_name, target.os, target.arch, 64, additional_features);
 }
 // @}
 
