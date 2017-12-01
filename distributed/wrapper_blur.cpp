@@ -20,7 +20,7 @@ int main() {
 #else
     int rank = 0;
 #endif
-
+    
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
 
 #ifdef DISTRIBUTE
@@ -36,10 +36,14 @@ int main() {
         }
     }
 
+#ifdef DISTRIBUTE
+    Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS - 2, (rank == NODES - 1) ? rows_per_node - 2 : rows_per_node);
+#else
     Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS - 2, rows_per_node - 2);
+#endif
 
     blur_dist(buff_input.raw_buffer(), buff_output.raw_buffer());
-
+    
 #ifdef DISTRIBUTE
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
@@ -65,7 +69,7 @@ int main() {
         if (i == 0) {
             std::string output_fn = "./build/blur_dist_rank_" + std::to_string(rank) + ".txt";
             std::ofstream myfile;
-            myfile.open (output_fn);
+            myfile.open(output_fn);
             for (int y = 0; y < rows_per_node - 2; y++) {
                 for (int x = 0; x < COLS - 2; x++) {
                     myfile << buff_output(x, y) << std::endl;
@@ -77,8 +81,8 @@ int main() {
         if (i == 0) {
             std::string output_fn = "./build/blur_dist_rank_" + std::to_string(rank) + ".txt";
             std::ofstream myfile;
-            myfile.open (output_fn);
-            for (int y = 0; y < rank == NODES - 1 ? rows_per_node - 2 : rows_per_node; y++) {
+            myfile.open(output_fn);
+            for (int y = 0; y < ((rank == NODES - 1) ? (rows_per_node - 2) : rows_per_node); y++) {
                 for (int x = 0; x < COLS - 2; x++) {
                     myfile << buff_output(x, y) << std::endl;
                 }
@@ -90,14 +94,13 @@ int main() {
         MPI_Barrier(MPI_COMM_WORLD);
 #endif
     }
-
+    
     if (rank == 0) {
         print_time("performance_CPU.csv", "blur_dist", {"Tiramisu_dist"}, {median(duration_vector)});
         std::cout.flush();
 
 #if defined(CHECK_RESULTS) && defined(DISTRIBUTE)
-        MPI_Barrier(MPI_COMM_WORLD);
-// combine the rank files together
+ // combine the rank files together
         C_DATA_TYPE *got = (C_DATA_TYPE*)malloc(sizeof(C_DATA_TYPE) * (ROWS - 2) * (COLS - 2));
         int idx = 0;
         for (int n = 0; n < NODES; n++) {
@@ -117,6 +120,7 @@ int main() {
             }
         }
         idx = 0;
+	std::cerr << "Comparing" << std::endl;
         for (int r = 0; r < ROWS - 2; r++) {
             for (int c = 0; c < COLS - 2; c++) {
                 assert(((full_input(c,r) + full_input(c+1, r) + full_input(c+2, r) + full_input(c, r+1) +
@@ -125,6 +129,7 @@ int main() {
             }
         }
         free(got);
+
 #elif defined(CHECK_RESULTS) // not distributed
         next = 0;
         Halide::Buffer<C_DATA_TYPE> full_input = Halide::Buffer<C_DATA_TYPE>(COLS, ROWS);
@@ -141,13 +146,11 @@ int main() {
             }
         }
 #endif
-
-    }
-
+}
+    std::cerr << "DONE with rank " << rank << std::endl;
 #ifdef DISTRIBUTE
     MPI_Finalize();
 #endif
-    std::cerr << "DONE with rank " << rank << std::endl;
     return 0;
 
 }

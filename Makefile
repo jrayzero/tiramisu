@@ -2,6 +2,8 @@ include configure_paths.sh
 
 #############################################################@
 
+ISL_INCLUDE_DIRECTORY=3rdParty/isl/build/include
+ISL_LIB_DIRECTORY=3rdParty/isl/build/lib
 CXX = mpicxx
 CXXFLAGS = -g -std=c++11 -O3 -Wall -Wno-sign-compare -fno-rtti -fvisibility=hidden -march=corei7-avx -mtune=corei7-avx -fopenmp -DNODES=${MPI_NODES}
 INCLUDES = -Iinclude/ -I${ISL_INCLUDE_DIRECTORY} -I${HALIDE_SOURCE_DIRECTORY}/include -I${HALIDE_SOURCE_DIRECTORY}/tools -Ibuild/ -I3rdParty/isl/include -I/data/scratch/jray/anaconda2/include/

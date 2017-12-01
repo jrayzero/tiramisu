@@ -10,7 +10,7 @@
 #define PRINT_ITER_0
 #define ITERS 20
 
-//#define DISTRIBUTE
+#define DISTRIBUTE
 #define CHECK_RESULTS
 
 #define ROWS 100

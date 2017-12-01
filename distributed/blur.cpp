@@ -161,8 +161,8 @@ int main() {
      */
 
 #ifdef DISTRIBUTE
-    tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == nodes-1, tiramisu::expr(rows_per_node+2), tiramisu::expr(rows_per_node));
-    tiramisu::expr by_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == nodes-1, tiramisu::expr(rows_per_node+2), tiramisu::expr(rows_per_node));
+    tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == nodes-1, tiramisu::expr(rows_per_node), tiramisu::expr(rows_per_node+2));
+    tiramisu::expr by_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == nodes-1, tiramisu::expr(rows_per_node), tiramisu::expr(rows_per_node-2));
 #else 
     tiramisu::expr bx_select_dim0(rows_per_node);
     tiramisu::expr by_select_dim0(rows_per_node - 2);
