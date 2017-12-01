@@ -11,6 +11,7 @@
 #define ITERS 20
 
 //#define DISTRIBUTE
+#define CHECK_RESULTS
 
 #define ROWS 100
 #define COLS 10

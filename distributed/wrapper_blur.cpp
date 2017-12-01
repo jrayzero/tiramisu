@@ -61,7 +61,7 @@ int main() {
             duration_vector.push_back(duration);
             std::cerr << "Iteration " << i << " done in " << duration.count() << "ms." << std::endl;
         }
-#if defined(PRINT_ITER_0) && !defined(DISTRIBUTE)
+#if defined(CHECK_RESULTS) && !defined(DISTRIBUTE)
         if (i == 0) {
             std::string output_fn = "./build/blur_dist_rank_" + std::to_string(rank) + ".txt";
             std::ofstream myfile;
@@ -73,7 +73,7 @@ int main() {
             }
             myfile.close();
         }
-#elif defined(PRINT_ITER_0)
+#elif defined(CHECK_RESULTS)
         if (i == 0) {
             std::string output_fn = "./build/blur_dist_rank_" + std::to_string(rank) + ".txt";
             std::ofstream myfile;
@@ -93,13 +93,61 @@ int main() {
 
     if (rank == 0) {
         print_time("performance_CPU.csv", "blur_dist", {"Tiramisu_dist"}, {median(duration_vector)});
+        std::cout.flush();
+
+#if defined(CHECK_RESULTS) && defined(DISTRIBUTE)
+        MPI_Barrier(MPI_COMM_WORLD);
+// combine the rank files together
+        C_DATA_TYPE *got = (C_DATA_TYPE*)malloc(sizeof(C_DATA_TYPE) * (ROWS - 2) * (COLS - 2));
+        int idx = 0;
+        for (int n = 0; n < NODES; n++) {
+            std::ifstream in_file;
+            in_file.open("./build/blur_dist_rank_" + std::to_string(n) + ".txt");
+            std::string line;
+            while(std::getline(in_file, line)) {
+                got[idx++] = (C_DATA_TYPE)std::stoi(line);
+            }
+            in_file.close();
+        }
+        next = 0;
+        Halide::Buffer<C_DATA_TYPE> full_input = Halide::Buffer<C_DATA_TYPE>(COLS, ROWS);
+        for (int y = 0; y < ROWS; y++) {
+            for (int x = 0; x < COLS; x++) {
+                full_input(x, y) = next++;
+            }
+        }
+        idx = 0;
+        for (int r = 0; r < ROWS - 2; r++) {
+            for (int c = 0; c < COLS - 2; c++) {
+                assert(((full_input(c,r) + full_input(c+1, r) + full_input(c+2, r) + full_input(c, r+1) +
+                        full_input(c, r+2) + full_input(c+1, r+1) + full_input(c+1, r+2) + full_input(c+2, r+1) +
+                        full_input(c+2, r+2)) / 9) == got[idx++]);
+            }
+        }
+        free(got);
+#elif defined(CHECK_RESULTS) // not distributed
+        next = 0;
+        Halide::Buffer<C_DATA_TYPE> full_input = Halide::Buffer<C_DATA_TYPE>(COLS, ROWS);
+        for (int y = 0; y < ROWS; y++) {
+            for (int x = 0; x < COLS; x++) {
+                full_input(x, y) = next++;
+            }
+        }
+        for (int r = 0; r < ROWS - 2; r++) {
+            for (int c = 0; c < COLS - 2; c++) {
+                assert(((full_input(c,r) + full_input(c+1, r) + full_input(c+2, r) + full_input(c, r+1) +
+                         full_input(c, r+2) + full_input(c+1, r+1) + full_input(c+1, r+2) + full_input(c+2, r+1) +
+                         full_input(c+2, r+2)) / 9) == buff_output(c,r));
+            }
+        }
+#endif
+
     }
 
 #ifdef DISTRIBUTE
-    MPI_Barrier(MPI_COMM_WORLD);
     MPI_Finalize();
 #endif
-
+    std::cerr << "DONE with rank " << rank << std::endl;
     return 0;
 
 }
