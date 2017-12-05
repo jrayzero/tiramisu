@@ -83,10 +83,13 @@ Module lower_halide_pipeline(const string &pipeline_name,
         s = select_gpu_api(s, t);
         DEBUG(4, tiramisu::str_dump(stmt_to_string("Lowering after selecting a GPU API:\n", s)));
 
+#ifdef USE_HALIDE_DEV_COPIES
         DEBUG(3, tiramisu::str_dump("Injecting host <-> dev buffer copies...\n"));
+
         s = inject_host_dev_buffer_copies(s, t);
         DEBUG(4, tiramisu::str_dump(stmt_to_string("Lowering after injecting host <-> dev buffer copies:\n",
                                     s)));
+#endif
     }
 
     if (t.has_feature(Target::OpenGL))
