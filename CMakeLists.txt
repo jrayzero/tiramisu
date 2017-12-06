@@ -10,7 +10,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 add_definitions(-DBIN_DIR=\"${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/\")
 
 # compiler flags
-set(CMAKE_CXX_FLAGS "-DNODES=2 -g -std=c++11 -O3 -Wall -Wno-sign-compare -fno-rtti -fvisibility=hidden")
+set(CMAKE_CXX_FLAGS "-g -std=c++11 -O3 -Wall -Wno-sign-compare -fno-rtti -fvisibility=hidden")
 
 # includes
 include_directories(${ISL_SOURCE_DIR}/include ${ISL_SOURCE_DIR} /usr/lib/openmpi/include/ /home/jray/include ${CMAKE_SOURCE_DIR}/include ${HALIDE_SOURCE_DIR}/include ${HALIDE_SOURCE_DIR}/tools ${CMAKE_SOURCE_DIR}/build  /Users/je23693/anaconda2/include/python2.7)
@@ -22,7 +22,12 @@ set(LIBS "-lisl -lgmp -lHalide -ldl -lpthread -lz -lpng16 -ljpeg -lncurses -lmpi
 # build the main tiramisu library
 file(GLOB TIRAMISU_SRC ${CMAKE_SOURCE_DIR}/src/*.cpp)
 file(GLOB TIRAMISU_INCLUDE ${CMAKE_SOURCE_DIR}/include/tiramisu/*.h)
-add_library(tiramisu STATIC ${TIRAMISU_SRC} ${TIRAMISU_INCLUDE})
+add_library(tiramisu STATIC ${TIRAMISU_SRC} ${TIRAMISU_INCLUDE} ${CMAKE_SOURCE_DIR}/build/tiramisu_cuda.o)
+add_custom_command(OUTPUT ${CMAKE_SOURCE_DIR}/build/tiramisu_cuda.o
+        COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/compile_cuda_files.sh
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Running nvcc on tiramisu_cuda.cu"
+        SOURCES ${CMAKE_SOURCE_DIR}/src/tiramisu_cuda.cu)
 
 add_executable(generated_blur distributed/blur.cpp distributed/blur_params.h)
 add_executable(blur distributed/wrapper_blur.cpp ${CMAKE_SOURCE_DIR}/build/generated_blur_dist.o)

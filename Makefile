@@ -5,7 +5,9 @@ include configure_paths.sh
 ISL_INCLUDE_DIRECTORY=3rdParty/isl/build/include
 ISL_LIB_DIRECTORY=3rdParty/isl/build/lib
 CXX = mpicxx
+NVCC = nvcc
 CXXFLAGS = -g -std=c++11 -O3 -Wall -Wno-sign-compare -fno-rtti -fvisibility=hidden -march=corei7-avx -mtune=corei7-avx -fopenmp -DNODES=${MPI_NODES}
+NVCCFLAGS = -ccbin ${NVCC_CLANG} -g -std=c++11 -O3 -Xcompiler -Wall -Xcompiler -fPIC -Xcompiler -Wno-sign-compare -Xcompiler -fno-rtti -Xcompiler -fvisibility=hidden -Xcompiler -march=corei7-avx -Xcompiler -mtune=corei7-avx
 INCLUDES = -Iinclude/ -I${ISL_INCLUDE_DIRECTORY} -I${HALIDE_SOURCE_DIRECTORY}/include -I${HALIDE_SOURCE_DIRECTORY}/tools -Ibuild/ -I3rdParty/isl/include -I/data/scratch/jray/anaconda2/include/
 LIBRARIES = -Lbuild/ -L${ISL_LIB_DIRECTORY} -L3rdParty/isl/.libs -lisl -lgmp -L${HALIDE_LIB_DIRECTORY} -lHalide -lmpi_cxx -ldl -lpthread -lz `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
 HEADER_FILES = \
@@ -13,7 +15,9 @@ HEADER_FILES = \
 	include/tiramisu/debug.h \
 	include/tiramisu/utils.h \
 	include/tiramisu/expr.h \
-	include/tiramisu/type.h
+	include/tiramisu/type.h \
+	include/tiramisu/tiramisu_cuda.h
+
 OBJ = \
 	build/tiramisu_expr.o \
 	build/tiramisu_core.o \
@@ -22,7 +26,8 @@ OBJ = \
 	build/tiramisu_debug.o \
 	build/tiramisu_utils.o \
 	build/tiramisu_codegen_halide_lowering.o \
-	build/tiramisu_codegen_from_halide.o
+	build/tiramisu_codegen_from_halide.o \
+	build/tiramisu_cuda.o
 
 TUTO_GEN = \
 	build/tutorial_01_fct_generator \
@@ -371,8 +376,9 @@ all: builddir ${OBJ}
 builddir:
 	@if [ ! -d "build" ]; then mkdir -p build; fi
 
-
 # Build the Tiramisu library object files.  The list of these files is in $(OBJ).
+build/tiramisu_cuda.o: src/tiramisu_cuda.cu $(HEADER_FILES)
+	$(NVCC) ${NVCCFLAGS} ${INCLUDES} -c $< -odir build/
 build/tiramisu_%.o: src/tiramisu_%.cpp $(HEADER_FILES)
 	$(CXX) -fPIC ${CXXFLAGS} ${INCLUDES} -c $< -o $@
 build/tiramisu_codegen_%.o: src/tiramisu_codegen_%.cpp $(HEADER_FILES)
