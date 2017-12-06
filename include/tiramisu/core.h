@@ -2047,6 +2047,8 @@ public:
       */
     void set_loop_level_names(std::vector<std::string> names);
 
+protected:
+
     /**
       * Set the names of the dimensions of the schedule domain.
       * The dimension names are specified using \p names, their positions
@@ -2229,8 +2231,6 @@ public:
     bool operator==(tiramisu::computation comp1);
 
     void set_parent_computation(tiramisu::computation *parent_computation);
-
-protected:
 
     /**
       * Does this operation represent a function call?

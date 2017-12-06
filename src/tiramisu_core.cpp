@@ -5921,21 +5921,33 @@ std::string tiramisu::function::get_gpu_thread_iterator(const std::string &comp,
         if ((pd.first == comp) && ((std::get<0>(pd.second) == lev0) || (std::get<1>(pd.second) == lev0) ||
                                    (std::get<2>(pd.second) == lev0)))
         {
-            if (lev0 == std::get<0>(pd.second))
-            {
-                res = ".__thread_id_z";
-            }
-            else if (lev0 == std::get<1>(pd.second))
-            {
-                res = ".__thread_id_y";
-            }
-            else if (lev0 == std::get<2>(pd.second))
-            {
-                res = ".__thread_id_x";
-            }
-            else
-            {
-                tiramisu::error("Level not mapped to GPU.", true);
+            if (std::get<1>(pd.second) != -1 && std::get<2>(pd.second) != -1) {
+                // we have 3 levels of gpu threads
+                if (lev0 == std::get<0>(pd.second)) {
+                    res = ".__thread_id_z";
+                } else if (lev0 == std::get<1>(pd.second)) {
+                    res = ".__thread_id_y";
+                } else if (lev0 == std::get<2>(pd.second)) {
+                    res = ".__thread_id_x";
+                } else {
+                    tiramisu::error("Level not mapped to GPU.", true);
+                }
+            } else if (std::get<2>(pd.second) == -1) {
+                // z level isn't used, so there are two levels
+                if (lev0 == std::get<0>(pd.second)) {
+                    res = ".__thread_id_y";
+                } else if (lev0 == std::get<1>(pd.second)) {
+                    res = ".__thread_id_x";
+                } else {
+                    tiramisu::error("Level not mapped to GPU.", true);
+                }
+            } else {
+                // z and y levels aren't used, so there is one level
+                if (lev0 == std::get<0>(pd.second)) {
+                    res = ".__thread_id_x";
+                } else {
+                    tiramisu::error("Level not mapped to GPU.", true);
+                }
             }
 
             std::string str = "Dimension " + std::to_string(lev0) +
@@ -5964,32 +5976,42 @@ std::string tiramisu::function::get_gpu_block_iterator(const std::string &comp, 
     for (const auto &pd : this->gpu_block_dimensions)
     {
         if ((pd.first == comp) && ((std::get<0>(pd.second) == lev0) || (std::get<1>(pd.second) == lev0) ||
-                                   (std::get<2>(pd.second) == lev0)))
-        {
-            if (lev0 == std::get<0>(pd.second))
-            {
-                res = ".__block_id_z";
+                                   (std::get<2>(pd.second) == lev0))) {
+            if (std::get<1>(pd.second) != -1 && std::get<2>(pd.second) != -1) {
+                // we have 3 levels of gpu blocks
+                if (lev0 == std::get<0>(pd.second)) {
+                    res = ".__block_id_z";
+                } else if (lev0 == std::get<1>(pd.second)) {
+                    res = ".__block_id_y";
+                } else if (lev0 == std::get<2>(pd.second)) {
+                    res = ".__block_id_x";
+                } else {
+                    tiramisu::error("Level not mapped to GPU.", true);
+                }
+            } else if (std::get<2>(pd.second) == -1) {
+                // z level isn't used, so there are two levels
+                if (lev0 == std::get<0>(pd.second)) {
+                    res = ".__block_id_y";
+                } else if (lev0 == std::get<1>(pd.second)) {
+                    res = ".__block_id_x";
+                } else {
+                    tiramisu::error("Level not mapped to GPU.", true);
+                }
+            } else {
+                // z and y levels aren't used, so there is one level
+                if (lev0 == std::get<0>(pd.second)) {
+                    res = ".__block_id_x";
+                } else {
+                    tiramisu::error("Level not mapped to GPU.", true);
+                }
             }
-            else if (lev0 == std::get<1>(pd.second))
-            {
-                res = ".__block_id_y";
-            }
-            else if (lev0 == std::get<2>(pd.second))
-            {
-                res = ".__block_id_x";
-            }
-            else
-            {
-                tiramisu::error("Level not mapped to GPU.", true);
-            }
-
-            std::string str = "Dimension " + std::to_string(lev0) +
-                              " should be mapped to iterator " + res;
-            str = str + ". It was compared against: " + std::to_string(std::get<0>(pd.second)) +
-                  ", " + std::to_string(std::get<1>(pd.second)) + " and " +
-                  std::to_string(std::get<2>(pd.second));
-            DEBUG(3, tiramisu::str_dump(str));
         }
+        std::string str = "Dimension " + std::to_string(lev0) +
+                          " should be mapped to iterator " + res;
+        str = str + ". It was compared against: " + std::to_string(std::get<0>(pd.second)) +
+              ", " + std::to_string(std::get<1>(pd.second)) + " and " +
+              std::to_string(std::get<2>(pd.second));
+        DEBUG(3, tiramisu::str_dump(str));
     }
 
     DEBUG_INDENT(-4);
