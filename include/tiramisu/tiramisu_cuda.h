@@ -5,18 +5,26 @@
 #ifndef TIRAMISU_TIRAMISU_CUDA_H
 #define TIRAMISU_TIRAMISU_CUDA_H
 
-#include "HalideRuntime.h"
+#include "cuda_runtime_api.h"
 
-// overrides of the weak halide functions for CUDA functions
+void tiramisu_cuda_malloc(void *device_ptr, size_t bytes);
 
-int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
-                         const halide_device_interface_t *device_interface);
+void tiramisu_cuda_free(void *device_ptr);
 
-int halide_device_free(void *user_context, struct halide_buffer_t *buf);
+void tiramisu_cuda_memcpy_h2d(void *dst, const void *src, size_t count);
 
-int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf);
+void tiramisu_cuda_memcpy_h2h(void *dst, const void *src, size_t count);
 
-int halide_copy_to_device(void *user_context, struct halide_buffer_t *buf,
-                          const struct halide_device_interface_t *device_interface);
+void tiramisu_cuda_memcpy_d2h(void *dst, const void *src, size_t count);
+
+void tiramisu_cuda_memcpy_d2d(void *dst, const void *src, size_t count);
+
+void tiramisu_cuda_memcpy_h2d_async(void *dst, const void *src, size_t count, cudaStream_t stream);
+
+void tiramisu_cuda_memcpy_h2h_async(void *dst, const void *src, size_t count, cudaStream_t stream);
+
+void tiramisu_cuda_memcpy_d2h_async(void *dst, const void *src, size_t count, cudaStream_t stream);
+
+void tiramisu_cuda_memcpy_d2d_async(void *dst, const void *src, size_t count, cudaStream_t stream);
 
 #endif //TIRAMISU_TIRAMISU_CUDA_H

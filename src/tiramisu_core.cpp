@@ -3272,21 +3272,7 @@ void tiramisu::computation::after(computation &comp, int level)
 
     this->get_function()->starting_computations.erase(this);
 
-    /*    if (comp.is_recv()) {
-      if (this->get_function()->sched_graph_reversed[this].size() > 1) {
-        for (auto iter : this->get_function()->sched_graph_reversed[this]) {
-          if (iter->second == level) {
-            this->get_function()->sched_graph_reversed[this].remove(iter);
-            break;
-          }
-        }
-      } else {
-        this->get_function()->sched_graph_reversed[this].clear();
-        }*/
     this->get_function()->sched_graph_reversed[this][&comp] = level;
-    //    } else {
-    //        this->get_function()->sched_graph_reversed[this][&comp] = level;
-    //    }
 
     assert(this->get_function()->sched_graph_reversed[this].size() < 2 &&
            "Node has more than one predecessor.");
@@ -6860,25 +6846,6 @@ void tiramisu::buffer::dump(bool exhaustive) const
         std::cout << std::endl << std::endl;
     }
 }
-//
-//tiramisu::dist_buffer::dist_buffer(std::string name, std::vector<tiramisu::expr> dim_sizes,
-//                                   tiramisu::primitive_t type, tiramisu::function *fct) : output_buffer(-1) {
-//    buffer *b = new buffer(name, dim_sizes, type, tiramisu::a_dist, fct);
-//    this->buffs.push_back(b);
-//}
-//
-//tiramisu::dist_buffer::dist_buffer(std::vector<std::string> names, std::vector<std::vector<tiramisu::expr>> dim_sizes,
-//                                   tiramisu::primitive_t type, tiramisu::function *fct) : output_buffer(-1) {
-//    assert(names.size() == dim_sizes.size());
-//    for (int i = 0; i < names.size(); i++) {
-//        buffer *b = new buffer(names[i], dim_sizes[i], type, tiramisu::a_dist, fct);
-//        this->buffs.push_back(b);
-//    }
-//}
-//
-//void tiramisu::dist_buffer::set_output_buffer(int idx) {
-//    this->output_buffer = idx;
-//}
 
 Halide::Type halide_type_from_tiramisu_type(tiramisu::primitive_t type)
 {
@@ -8032,10 +7999,9 @@ std::string tiramisu::communication_prop::attr_to_string(tiramisu::channel_attr 
         case SYNC: return "SYNC";
         case ASYNC: return "ASYNC";
         case MPI: return "MPI";
-        case FIFO: return "FIFO";
+        case CUDA: return "CUDA";
         case BLOCK: return "BLOCK";
         case NONBLOCK: return "NONBLOCK";
-        case CUDAEVENT: return "CUDAEVENT";
         default: {
             assert(false && "Unknown communication_prop attr specified.");
             return "";
@@ -8111,6 +8077,8 @@ std::string create_send_func_name(const communication_prop chan) {
     std::string name = "send";
     if (chan.contains_attr(MPI)) {
         name += "_MPI";
+    } else if (chan.contains_attr(CUDA)) {
+        name += "_CUDA";
     }
     if (chan.contains_attr(SYNC)) {
         name += "_sync";
@@ -8162,6 +8130,9 @@ void tiramisu::send::set_matching_recv(tiramisu::recv *matching_recv) {
 
 std::string create_recv_func_name(const communication_prop chan) {
     std::string name = "recv";
+    if (chan.contains_attr(CUDA)) {
+        return name; // won't actually be using this
+    }
     if (chan.contains_attr(MPI)) {
         name += "_MPI";
     }
@@ -8341,53 +8312,96 @@ void split_string(std::string str, std::string delimiter,
     vector.push_back(token);
 }
 
-void tiramisu::function::lift_ops_to_library_calls() {
-    for (std::vector<tiramisu::computation *>::iterator op_iter = body.begin(); op_iter != body.end(); op_iter++) {
-        if ((*op_iter)->is_send()) {
-            send *s = static_cast<send *>(*op_iter);
-            tiramisu::expr num_elements(s->get_num_elements());
-            tiramisu::expr send_type(s->get_channel().get_dtype());
-            bool isnonblock = s->get_channel().contains_attr(NONBLOCK);
-            s->rhs_argument_idx = 3;
-            s->library_call_args.resize(isnonblock ? 6 : 5);
-            s->library_call_args[0] = tiramisu::expr(tiramisu::o_cast, p_int32, num_elements);
-            s->library_call_args[1] = tiramisu::expr(tiramisu::o_cast, p_int32, s->get_dest());
-            s->library_call_args[2] = tiramisu::expr(tiramisu::o_cast, p_int32, s->get_msg_tag());
-            s->library_call_args[4] = send_type;
-            if (isnonblock) {
-                // This additional RHS argument is to the request buffer. It is really more of a side effect.
-                s->req_argument_idx = 5;
+void tiramisu::function::lift_mpi_comp(tiramisu::computation *comp) {
+    if (comp->is_send()) {
+        send *s = static_cast<send *>(comp);
+        tiramisu::expr num_elements(s->get_num_elements());
+        tiramisu::expr send_type(s->get_channel().get_dtype());
+        bool isnonblock = s->get_channel().contains_attr(NONBLOCK);
+        s->rhs_argument_idx = 3;
+        s->library_call_args.resize(isnonblock ? 6 : 5);
+        s->library_call_args[0] = tiramisu::expr(tiramisu::o_cast, p_int32, num_elements);
+        s->library_call_args[1] = tiramisu::expr(tiramisu::o_cast, p_int32, s->get_dest());
+        s->library_call_args[2] = tiramisu::expr(tiramisu::o_cast, p_int32, s->get_msg_tag());
+        s->library_call_args[4] = send_type;
+        if (isnonblock) {
+            // This additional RHS argument is to the request buffer. It is really more of a side effect.
+            s->req_argument_idx = 5;
+        }
+    } else if (comp->is_recv()) {
+        recv *r = static_cast<recv *>(comp);
+        send *s = r->get_matching_send();
+        tiramisu::expr num_elements(r->get_num_elements());
+        tiramisu::expr recv_type(s->get_channel().get_dtype());
+        bool isnonblock = r->get_channel().contains_attr(NONBLOCK);
+        r->lhs_argument_idx = 3;
+        r->library_call_args.resize(isnonblock ? 6 : 5);
+        r->library_call_args[0] = tiramisu::expr(tiramisu::o_cast, p_int32, num_elements);
+        r->library_call_args[1] = tiramisu::expr(tiramisu::o_cast, p_int32, r->get_src());
+        r->library_call_args[2] = tiramisu::expr(tiramisu::o_cast, p_int32, r->get_msg_tag().is_defined() ?
+                                                                            r->get_msg_tag() : s->get_msg_tag());
+        r->library_call_args[4] = recv_type;
+        r->lhs_access_type = tiramisu::o_address_of;
+        if (isnonblock) {
+            // This RHS argument is to the request buffer. It is really more of a side effect.
+            r->req_argument_idx = 5;
+        }
+    } else if (comp->is_wait()) {
+        wait *w = static_cast<wait *>(comp);
+        w->rhs_argument_idx = 0;
+        w->library_call_args.resize(1);
+    }
+}
+
+// So you still need an access function for the recv
+void tiramisu::function::lift_cuda_comp(tiramisu::computation *comp) {
+    // Processed as one sided communication, so do together.
+    if (comp->is_send()) {
+//        // Combine the send and recv together
+//        send *s = static_cast<send *>(comp);
+//        recv *r = s->get_matching_recv();
+//        s->set_schedule_this_comp(false);
+//        r->set_schedule_this_comp(false);
+//        one_sided_send_recv *ossr = new one_sided_send_recv(s, r);
+//        ossr->after(*this->get_computation_by_name("by_2")[0], computation::root);
+////        ossr->set_schedule(ossr->gen_identity_schedule_for_iteration_domain());
+////        s->set_low_level_schedule(NULL);
+////        r->set_low_level_schedule(NULL);
+//
+//        // update the sched graph to put this new operation in the place of the original send
+//
+//        ossr->set_schedule_this_comp(false);
+////        ossr->set_remove_this_comp(true);
+//        //        s->set_remove_this_comp(true);
+//        //        r->set_remove_this_comp(true);
+//        tiramisu::expr num_elements(s->get_num_elements());
+//        bool is_async = s->get_channel().contains_attr(ASYNC);
+//        ossr->lhs_argument_idx = 0; // dest
+//        ossr->rhs_argument_idx = 1; // src
+//        ossr->library_call_args.resize(is_async ? 4 : 3);
+//        ossr->library_call_args[2] = tiramisu::expr(tiramisu::o_cast, p_int32, num_elements);
+//        if (is_async) {
+//            // The stream which we model like an MPI wait
+//            ossr->req_argument_idx = 3;
+//        }
+    } else if (comp->is_wait()) { // stream synchronize
+        wait *w = static_cast<wait *>(comp);
+        w->rhs_argument_idx = 0;
+        w->library_call_args.resize(1);
+    }
+}
+
+void tiramisu::function::lift_dist_comps() {
+    for (std::vector<tiramisu::computation *>::iterator comp = body.begin(); comp != body.end(); comp++) {
+        if ((*comp)->is_send() || (*comp)->is_recv() || (*comp)->is_wait()) {
+            communication_prop chan = static_cast<tiramisu::communicator *>(*comp)->get_channel();
+            if (chan.contains_attr(MPI)) {
+                lift_mpi_comp(*comp);
+            } else if (chan.contains_attr(CUDA)) {
+                lift_cuda_comp(*comp);
+            } else {
+                assert(false);
             }
-        } else if ((*op_iter)->is_recv()) {
-            recv *r = static_cast<recv *>(*op_iter);
-            send *s = r->get_matching_send();
-            tiramisu::expr num_elements(r->get_num_elements());
-            tiramisu::expr recv_type(s->get_channel().get_dtype());
-            bool isnonblock = r->get_channel().contains_attr(NONBLOCK);
-            r->lhs_argument_idx = 3;
-            r->library_call_args.resize(isnonblock ? 6 : 5);
-            r->library_call_args[0] = tiramisu::expr(tiramisu::o_cast, p_int32, num_elements);
-            r->library_call_args[1] = tiramisu::expr(tiramisu::o_cast, p_int32, r->get_src());
-            r->library_call_args[2] = tiramisu::expr(tiramisu::o_cast, p_int32, r->get_msg_tag().is_defined() ? r->get_msg_tag() : s->get_msg_tag());
-            r->library_call_args[4] = recv_type;
-            r->lhs_access_type = tiramisu::o_address_of;
-            if (isnonblock) {
-                // This RHS argument is to the request buffer. It is really more of a side effect.
-                r->req_argument_idx = 5;
-            }
-        } else if ((*op_iter)->is_reader()) {
-            reader *r = static_cast<reader *>(*op_iter);
-            r->lhs_argument_idx = 2;
-            r->rhs_argument_idx = 3;
-            r->library_call_args.resize(5);
-            r->library_call_args[0] = r->get_filename();
-            r->library_call_args[1] = r->get_num_elements();
-            r->library_call_args[4] = tiramisu::expr(tiramisu::p_float32);
-            r->lhs_access_type = tiramisu::o_address_of;
-        } else if ((*op_iter)->is_wait()) {
-            wait *w = static_cast<wait *>(*op_iter);
-            w->rhs_argument_idx = 0;
-            w->library_call_args.resize(1);
         }
     }
 }
@@ -8420,9 +8434,18 @@ bool tiramisu::wait::is_wait() const {
     return true;
 }
 
-send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_src,
-                                                 tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
-                                                 communication_prop send_chan, communication_prop recv_chan, tiramisu::expr send_expr, tiramisu::function *fct) {
+comm tiramisu::computation::create_xfer(std::string send_iter_domain, std::string recv_iter_domain,
+                                             tiramisu::expr send_src,
+                                             tiramisu::expr send_dest, tiramisu::expr recv_src,
+                                             tiramisu::expr recv_dest,
+                                             communication_prop send_chan, communication_prop recv_chan,
+                                             tiramisu::expr send_expr, tiramisu::function *fct) {
+    if (send_chan.contains_attr(MPI)) {
+        assert(recv_chan.contains_attr(MPI));
+    } else if (send_chan.contains_attr(CUDA)) {
+        assert(recv_chan.contains_attr(CUDA));
+    }
+
     assert(send_expr.get_op_type() == tiramisu::o_access);
     tiramisu::computation *producer = fct->get_computation_by_name(send_expr.get_name())[0];
 
@@ -8444,11 +8467,11 @@ send_recv tiramisu::computation::create_transfer(std::string send_iter_domain, s
     s->set_matching_recv(r);
     r->set_matching_send(s);
 
-    tiramisu::send_recv sr;
-    sr.s = s;
-    sr.r = r;
+    tiramisu::comm c;
+    c.s = s;
+    c.r = r;
 
-    return sr;
+    return c;
 }
 
 void tiramisu::computation::set_parent_computation(tiramisu::computation *parent_computation) {

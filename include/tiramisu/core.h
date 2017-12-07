@@ -38,7 +38,7 @@ class recv;
 class wait;
 class communication_prop;
 struct transfer;
-struct send_recv;
+struct comm;
 
 struct HalideCodegenOutput
 {
@@ -337,6 +337,12 @@ private:
      *
      */
     void rename_computations();
+
+    /**
+     * Look for operations that are library calls and prep their arguments.
+     */
+    void lift_mpi_comp(tiramisu::computation *comp);
+    void lift_cuda_comp(tiramisu::computation *comp);
 
 protected:
 
@@ -914,7 +920,7 @@ public:
     /**
      * Look for operations that are library calls and prep their arguments.
      */
-    void lift_ops_to_library_calls();
+    void lift_dist_comps();
 
     bool needs_rank_call() const;
 
@@ -3674,10 +3680,12 @@ public:
         }
     }
 
-    static send_recv create_transfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_src,
-                                     tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
-                                     communication_prop send_chan, communication_prop recv_chan, tiramisu::expr send_expr,
-                                     tiramisu::function *fct);
+    static comm create_xfer(std::string send_iter_domain, std::string recv_iter_domain,
+                                 tiramisu::expr send_src,
+                                 tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
+                                 communication_prop send_chan, communication_prop recv_chan,
+                                 tiramisu::expr send_expr,
+                                 tiramisu::function *fct);
 
 };
 
@@ -3919,7 +3927,7 @@ protected:
      * Replace that name with a new name. Replaces all occurrences.
      */
     static void _update_producer_expr_name(tiramisu::expr &current_exp, std::string name_to_replace,
-                                          std::string replace_with, bool insert_access = false);
+                                           std::string replace_with, bool insert_access = false);
 
 public:
 
@@ -3996,11 +4004,9 @@ enum channel_attr {
     ASYNC,
     BLOCK,
     NONBLOCK,
-    // ordering
-            FIFO,
     // paradigm
             MPI,
-    CUDAEVENT,
+    CUDA
 };
 
 struct transfer {
@@ -4010,7 +4016,7 @@ struct transfer {
     tiramisu::wait *recv_w;
 };
 
-struct send_recv {
+struct comm {
     tiramisu::send *s;
     tiramisu::recv *r;
 };
@@ -4135,6 +4141,8 @@ public:
 };
 
 class recv : public communicator {
+    friend class computation;
+    friend class function;
 private:
 
     send *matching_send = nullptr;

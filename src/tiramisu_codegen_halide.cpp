@@ -27,7 +27,7 @@ namespace tiramisu
 
 Halide::Argument::Kind halide_argtype_from_tiramisu_argtype(tiramisu::argument_t type);
 std::string generate_new_variable_name();
-Halide::Expr make_halide_call(Halide::Type type, std::string func_name, std::vector<Halide::Expr> args);
+Halide::Expr make_comm_call(Halide::Type type, std::string func_name, std::vector<Halide::Expr> args);
 Halide::Expr halide_expr_from_tiramisu_type(tiramisu::primitive_t ptype);
 
 template <typename T>
@@ -63,11 +63,6 @@ tiramisu::expr get_tiramisu_expr_as_tiramisu_type(T val, primitive_t ttype) {
         default: { assert(false && "Bad type specified"); return tiramisu::expr(); }
     }
 }
-
-// Used when ISL creates a computation with one of our constants but we parse the added operand with the wrong type
-//std::vector<Halide::Expr> repair_types(std::vector<Halide::Expr> operands) {
-//
-//}
 
 std::vector<computation *> function::get_computation_by_name(std::string name) const
 {
@@ -2707,8 +2702,8 @@ void tiramisu::computation::create_halide_assignment()
             }
             if (this->is_library_call()) {
                 // Now, create the function call and evaluate it. This becomes the Halide stmt
-                this->stmt = Halide::Internal::Evaluate::make(make_halide_call(Halide::Bool(), this->library_call_name,
-                                                                               halide_call_args));
+                this->stmt = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), this->library_call_name,
+                                                                             halide_call_args));
             }
 
             DEBUG(3, tiramisu::str_dump("Halide::Internal::Store::make statement created."));
@@ -2769,8 +2764,8 @@ void tiramisu::computation::create_halide_assignment()
                 // which is either a send or a receive
                 halide_call_args[req_argument_idx] = result;
             }
-            this->stmt = Halide::Internal::Evaluate::make(make_halide_call(Halide::Bool(), this->library_call_name,
-                                                                           halide_call_args));
+            this->stmt = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), this->library_call_name,
+                                                                         halide_call_args));
         }
     }
 
@@ -3287,8 +3282,8 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
                     Halide::Expr he = generator::halide_expr_from_tiramisu_expr(fct, index_expr, e, comp);
                     vec.push_back(he);
                 }
-                result = make_halide_call(halide_type_from_tiramisu_type(tiramisu_expr.get_data_type()),
-                                          tiramisu_expr.get_name(), vec);
+                result = make_comm_call(halide_type_from_tiramisu_type(tiramisu_expr.get_data_type()),
+                                        tiramisu_expr.get_name(), vec);
                 DEBUG(10, tiramisu::str_dump("op type: o_call"));
                 break;
             }
@@ -3481,7 +3476,8 @@ void tiramisu::generator::_update_producer_expr_name(tiramisu::expr &current_exp
 
 // Handle any special function calls in here where the call type isn't extern, or the tiramisu name and halide name
 // differ
-Halide::Expr make_halide_call(Halide::Type type, std::string func_name, std::vector<Halide::Expr> args) {
+Halide::Expr make_comm_call(Halide::Type type, std::string func_name, std::vector<Halide::Expr> args) {
+    // TODO if I move MPI comm to tiramisu, I don't need all of this
     if (func_name == "send_MPI_sync_block") {
         return Halide::Internal::Call::make(type, Halide::Internal::Call::mssend, args,
                                             Halide::Internal::Call::CallType::Intrinsic);
