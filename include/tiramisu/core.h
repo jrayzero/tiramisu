@@ -1185,31 +1185,6 @@ public:
     void mark_as_allocated();
 };
 
-//class dist_buffer {
-//private:
-//
-//    /**
-//     * If not -1, this buffer should be an output one
-//     */
-//    int output_buffer;
-//
-//    /**
-//     * The representative buffers
-//     */
-//    std::vector<buffer *> buffs;
-//
-//public:
-//
-//    dist_buffer(std::string name, std::vector<tiramisu::expr> dim_sizes,
-//                tiramisu::primitive_t type, tiramisu::function *fct);
-//
-//    dist_buffer(std::vector<std::string> names, std::vector<std::vector<tiramisu::expr>> dim_sizes,
-//                tiramisu::primitive_t type, tiramisu::function *fct);
-//
-//    void set_output_buffer(int idx);
-//
-//};
-
 /**
   * \brief A class that represents computations.
   *
@@ -3683,7 +3658,6 @@ public:
                             tiramisu::function *fct);
 
 };
-
 
 /**
   * A class that represents loop invariants.

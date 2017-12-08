@@ -129,7 +129,8 @@ enum argument_t
 {
     a_input,
     a_output,
-    a_temporary
+    a_temporary,
+    a_temporary_gpu
 };
 
 /**
