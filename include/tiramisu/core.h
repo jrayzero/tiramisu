@@ -3364,17 +3364,6 @@ public:
                tiramisu::var L0_outer, tiramisu::var L0_inner);
     //@}
 
-    void split_at(var L0_var, int split_point, tiramisu::var L0_outer, tiramisu::var L0_inner);
-
-    /**
-     * Does the same as the above split functions, but does some extra bookkeeping needed for distributing.
-     * @param L0
-     * @param sizeX
-     */
-    void distributed_split(tiramisu::var L0, int sizeX);
-    void distributed_split(tiramisu::var L0, int sizeX, tiramisu::var L0_outer, tiramisu::var L0_inner);
-
-
     /**
      * Fold the storage of the computation.
      * Fold the loop level \p dim by a factor \p f.
