@@ -3477,7 +3477,7 @@ void tiramisu::generator::_update_producer_expr_name(tiramisu::expr &current_exp
 // Handle any special function calls in here where the call type isn't extern, or the tiramisu name and halide name
 // differ
 Halide::Expr make_comm_call(Halide::Type type, std::string func_name, std::vector<Halide::Expr> args) {
-    // TODO if I move MPI comm to tiramisu, I don't need all of this
+    // TODO if I move MPI xfer to tiramisu, I don't need all of this
     if (func_name == "send_MPI_sync_block") {
         return Halide::Internal::Call::make(type, Halide::Internal::Call::mssend, args,
                                             Halide::Internal::Call::CallType::Intrinsic);
@@ -3502,8 +3502,6 @@ Halide::Expr make_comm_call(Halide::Type type, std::string func_name, std::vecto
     } else if (func_name == "wait") {
         return Halide::Internal::Call::make(type, Halide::Internal::Call::mwait, args,
                                             Halide::Internal::Call::CallType::Intrinsic);
-    } else if (func_name == "send_CUDA_sync_block") {
-        return Halide::Internal::Call::make(type, "tiramisu_cuda_memcpy_h2d", args, Halide::Internal::Call::CallType::Extern);
     } else { // default is an extern
         return Halide::Internal::Call::make(type, func_name, args, Halide::Internal::Call::CallType::Extern);
     }

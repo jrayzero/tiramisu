@@ -39,7 +39,7 @@ class wait;
 class one_sided;
 class communication_prop;
 struct transfer;
-struct comm;
+struct xfer;
 
 struct HalideCodegenOutput
 {
@@ -3647,14 +3647,14 @@ public:
         }
     }
 
-    static comm create_xfer(std::string send_iter_domain, std::string recv_iter_domain,
+    static xfer create_xfer(std::string send_iter_domain, std::string recv_iter_domain,
                             tiramisu::expr send_src,
                             tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
                             communication_prop send_chan, communication_prop recv_chan,
                             tiramisu::expr send_expr,
                             tiramisu::function *fct);
 
-    static comm create_xfer(std::string iter_domain, communication_prop chan, tiramisu::expr expr,
+    static xfer create_xfer(std::string iter_domain, communication_prop chan, tiramisu::expr expr,
                             tiramisu::function *fct);
 
 };
@@ -3975,7 +3975,12 @@ enum channel_attr {
     NONBLOCK,
     // paradigm
             MPI,
-    CUDA
+    CUDA,
+    // Direction
+    CPU2CPU,
+    CPU2GPU,
+    GPU2CPU,
+    GPU2GPU
 };
 
 struct transfer {
@@ -3985,7 +3990,7 @@ struct transfer {
     tiramisu::wait *recv_w;
 };
 
-struct comm {
+struct xfer {
     tiramisu::send *s;
     tiramisu::recv *r;
     tiramisu::one_sided *os;
@@ -3996,6 +4001,7 @@ enum wait_type {
     WAIT_ALL
 };
 
+// TODO make a check for valid property combinations
 class communication_prop {
     friend communicator;
 private:

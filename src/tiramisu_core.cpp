@@ -7923,25 +7923,39 @@ std::vector<communicator *> tiramisu::communicator::collapse(int level, tiramisu
  */
 
 std::string create_send_func_name(const communication_prop chan) {
-    std::string name = "send";
     if (chan.contains_attr(MPI)) {
-        name += "_MPI";
+        std::string name = "send_MPI";
+        if (chan.contains_attr(SYNC)) {
+            name += "_sync";
+        }
+        if (chan.contains_attr(ASYNC)) {
+            name += "_async";
+        }
+        if (chan.contains_attr(BLOCK)) {
+            name += "_block";
+        }
+        if (chan.contains_attr(NONBLOCK)) {
+            name += "_nonblock";
+        }
+        return name;
     } else if (chan.contains_attr(CUDA)) {
-        name += "_CUDA";
+        std::string name = "tiramisu_cuda_memcpy";
+        if (chan.contains_attr(CPU2CPU)) {
+            name += "_h2h";
+        } else if (chan.contains_attr(CPU2GPU)) {
+            name += "_h2d";
+        } else if (chan.contains_attr(GPU2GPU)) {
+            name += "_d2d";
+        } else if (chan.contains_attr(GPU2CPU)) {
+            name += "_d2h";
+        } else {
+            assert(false && "Unknown CUDA transfer direction");
+        }
+        if (chan.contains_attr(ASYNC)) {
+            name += "_async";
+        }
+        return name;
     }
-    if (chan.contains_attr(SYNC)) {
-        name += "_sync";
-    }
-    if (chan.contains_attr(ASYNC)) {
-        name += "_async";
-    }
-    if (chan.contains_attr(BLOCK)) {
-        name += "_block";
-    }
-    if (chan.contains_attr(NONBLOCK)) {
-        name += "_nonblock";
-    }
-    return name;
 }
 
 int send::next_msg_tag = 0;
@@ -8291,7 +8305,7 @@ bool tiramisu::one_sided::is_one_sided() const {
     return true;
 }
 
-comm tiramisu::computation::create_xfer(std::string send_iter_domain, std::string recv_iter_domain,
+xfer tiramisu::computation::create_xfer(std::string send_iter_domain, std::string recv_iter_domain,
                                         tiramisu::expr send_src,
                                         tiramisu::expr send_dest, tiramisu::expr recv_src,
                                         tiramisu::expr recv_dest,
@@ -8324,7 +8338,7 @@ comm tiramisu::computation::create_xfer(std::string send_iter_domain, std::strin
     s->set_matching_recv(r);
     r->set_matching_send(s);
 
-    tiramisu::comm c;
+    tiramisu::xfer c;
     c.s = s;
     c.r = r;
     c.os = nullptr;
@@ -8332,7 +8346,7 @@ comm tiramisu::computation::create_xfer(std::string send_iter_domain, std::strin
     return c;
 }
 
-comm tiramisu::computation::create_xfer(std::string iter_domain_str, communication_prop chan, tiramisu::expr expr,
+xfer tiramisu::computation::create_xfer(std::string iter_domain_str, communication_prop chan, tiramisu::expr expr,
                  tiramisu::function *fct) {
     assert(expr.get_op_type() == tiramisu::o_access);
     tiramisu::computation *producer = fct->get_computation_by_name(expr.get_name())[0];
@@ -8344,7 +8358,7 @@ comm tiramisu::computation::create_xfer(std::string iter_domain_str, communicati
 
     os->set_schedule(sched);
 
-    tiramisu::comm c;
+    tiramisu::xfer c;
     c.s = nullptr;
     c.r = nullptr;
     c.os = os;
