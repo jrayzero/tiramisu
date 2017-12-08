@@ -14,7 +14,6 @@
 #define PRINT_ITER_0
 #define ITERS 20
 
-#define DISTRIBUTE
 #define CHECK_RESULTS
 
 #define NODES 4
@@ -27,8 +26,8 @@
 #define T_LOOP_ITER_TYPE tiramisu::p_int32
 #define C_LOOP_ITER_TYPE int32_t
 #endif
-#define T_DATA_TYPE tiramisu::p_uint64
-#define C_DATA_TYPE uint64_t
+#define T_DATA_TYPE tiramisu::p_float32
+#define C_DATA_TYPE float
 
 
 
