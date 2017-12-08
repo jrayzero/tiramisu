@@ -8166,6 +8166,20 @@ bool tiramisu::recv::is_recv() const {
 }
 
 /*
+ * one sided
+ */
+
+tiramisu::one_sided::one_sided(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs,
+                               communication_prop chan, bool schedule_this_computation, tiramisu::function *fct,
+                               std::vector<expr> dims) : communicator(iteration_domain_str, rhs, schedule_this_computation, chan.get_dtype(),
+                                                                      chan, fct), producer(producer) {
+    _is_library_call = true;
+    library_call_name = create_send_func_name(chan);
+    expr mod_rhs(tiramisu::o_address_of, rhs.get_name(), rhs.get_access(), rhs.get_data_type());
+    set_expression(mod_rhs);
+}
+
+/*
  * Wait
  */
 
@@ -8356,34 +8370,20 @@ void tiramisu::function::lift_mpi_comp(tiramisu::computation *comp) {
 // So you still need an access function for the recv
 void tiramisu::function::lift_cuda_comp(tiramisu::computation *comp) {
     // Processed as one sided communication, so do together.
-    if (comp->is_send()) {
-//        // Combine the send and recv together
-//        send *s = static_cast<send *>(comp);
-//        recv *r = s->get_matching_recv();
-//        s->set_schedule_this_comp(false);
-//        r->set_schedule_this_comp(false);
-//        one_sided_send_recv *ossr = new one_sided_send_recv(s, r);
-//        ossr->after(*this->get_computation_by_name("by_2")[0], computation::root);
-////        ossr->set_schedule(ossr->gen_identity_schedule_for_iteration_domain());
-////        s->set_low_level_schedule(NULL);
-////        r->set_low_level_schedule(NULL);
-//
-//        // update the sched graph to put this new operation in the place of the original send
-//
-//        ossr->set_schedule_this_comp(false);
-////        ossr->set_remove_this_comp(true);
-//        //        s->set_remove_this_comp(true);
-//        //        r->set_remove_this_comp(true);
-//        tiramisu::expr num_elements(s->get_num_elements());
-//        bool is_async = s->get_channel().contains_attr(ASYNC);
-//        ossr->lhs_argument_idx = 0; // dest
-//        ossr->rhs_argument_idx = 1; // src
-//        ossr->library_call_args.resize(is_async ? 4 : 3);
-//        ossr->library_call_args[2] = tiramisu::expr(tiramisu::o_cast, p_int32, num_elements);
-//        if (is_async) {
-//            // The stream which we model like an MPI wait
-//            ossr->req_argument_idx = 3;
-//        }
+    if (comp->is_one_sided()) {
+        one_sided *os = static_cast<one_sided *>(comp);
+        tiramisu::expr num_elements(os->get_num_elements());
+        tiramisu::expr xfer_type(os->get_channel().get_dtype());
+        bool is_async = os->get_channel().contains_attr(ASYNC); // async CUDA is like nonblocking MPI
+        os->lhs_argument_idx = 0;
+        os->rhs_argument_idx = 1;
+        os->lhs_access_type = tiramisu::o_address_of;
+        os->library_call_args.resize(is_async ? 4 : 3);
+        os->library_call_args[2] = tiramisu::expr(tiramisu::o_cast, p_int32, num_elements);
+        if (is_async) {
+            // This additional RHS argument is to the request buffer. It is really more of a side effect.
+            os->req_argument_idx = 3;
+        }
     } else if (comp->is_wait()) { // stream synchronize
         wait *w = static_cast<wait *>(comp);
         w->rhs_argument_idx = 0;
@@ -8393,7 +8393,7 @@ void tiramisu::function::lift_cuda_comp(tiramisu::computation *comp) {
 
 void tiramisu::function::lift_dist_comps() {
     for (std::vector<tiramisu::computation *>::iterator comp = body.begin(); comp != body.end(); comp++) {
-        if ((*comp)->is_send() || (*comp)->is_recv() || (*comp)->is_wait()) {
+        if ((*comp)->is_send() || (*comp)->is_recv() || (*comp)->is_wait() || (*comp)->is_one_sided()) {
             communication_prop chan = static_cast<tiramisu::communicator *>(*comp)->get_channel();
             if (chan.contains_attr(MPI)) {
                 lift_mpi_comp(*comp);
@@ -8422,6 +8422,10 @@ bool tiramisu::computation::is_wait() const {
     return false;
 }
 
+bool tiramisu::computation::is_one_sided() const {
+    return false;
+}
+
 bool tiramisu::send::is_send() const {
     return true;
 }
@@ -8434,12 +8438,16 @@ bool tiramisu::wait::is_wait() const {
     return true;
 }
 
+bool tiramisu::one_sided::is_one_sided() const {
+    return true;
+}
+
 comm tiramisu::computation::create_xfer(std::string send_iter_domain, std::string recv_iter_domain,
-                                             tiramisu::expr send_src,
-                                             tiramisu::expr send_dest, tiramisu::expr recv_src,
-                                             tiramisu::expr recv_dest,
-                                             communication_prop send_chan, communication_prop recv_chan,
-                                             tiramisu::expr send_expr, tiramisu::function *fct) {
+                                        tiramisu::expr send_src,
+                                        tiramisu::expr send_dest, tiramisu::expr recv_src,
+                                        tiramisu::expr recv_dest,
+                                        communication_prop send_chan, communication_prop recv_chan,
+                                        tiramisu::expr send_expr, tiramisu::function *fct) {
     if (send_chan.contains_attr(MPI)) {
         assert(recv_chan.contains_attr(MPI));
     } else if (send_chan.contains_attr(CUDA)) {
@@ -8470,6 +8478,27 @@ comm tiramisu::computation::create_xfer(std::string send_iter_domain, std::strin
     tiramisu::comm c;
     c.s = s;
     c.r = r;
+    c.os = nullptr;
+
+    return c;
+}
+
+comm tiramisu::computation::create_xfer(std::string iter_domain_str, communication_prop chan, tiramisu::expr expr,
+                 tiramisu::function *fct) {
+    assert(expr.get_op_type() == tiramisu::o_access);
+    tiramisu::computation *producer = fct->get_computation_by_name(expr.get_name())[0];
+
+    isl_set *iter_domain = isl_set_read_from_str(producer->get_ctx(), iter_domain_str.c_str());
+    tiramisu::one_sided *os = new tiramisu::one_sided(isl_set_to_str(iter_domain), producer, expr, chan, true,
+                                                      producer->get_function(), {1});
+    isl_map *sched = os->gen_identity_schedule_for_iteration_domain();
+
+    os->set_schedule(sched);
+
+    tiramisu::comm c;
+    c.s = nullptr;
+    c.r = nullptr;
+    c.os = os;
 
     return c;
 }

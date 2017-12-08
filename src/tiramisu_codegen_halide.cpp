@@ -1165,7 +1165,7 @@ tiramisu::expr replace_original_indices_with_transformed_indices(tiramisu::expr 
             output_expr = exp;
         }
     }
-    else if ((exp.get_expr_type() == tiramisu::e_op) && (exp.get_op_type() == tiramisu::o_access))
+    else if ((exp.get_expr_type() == tiramisu::e_op) && (exp.get_op_type() == tiramisu::o_access || exp.get_op_type() == tiramisu::o_address_of))
     {
         DEBUG(10, tiramisu::str_dump("Replacing the occurrences of original iterators in an o_access."));
 
@@ -3502,6 +3502,8 @@ Halide::Expr make_comm_call(Halide::Type type, std::string func_name, std::vecto
     } else if (func_name == "wait") {
         return Halide::Internal::Call::make(type, Halide::Internal::Call::mwait, args,
                                             Halide::Internal::Call::CallType::Intrinsic);
+    } else if (func_name == "send_CUDA_sync_block") {
+        return Halide::Internal::Call::make(type, "tiramisu_cuda_memcpy_h2d", args, Halide::Internal::Call::CallType::Extern);
     } else { // default is an extern
         return Halide::Internal::Call::make(type, func_name, args, Halide::Internal::Call::CallType::Extern);
     }

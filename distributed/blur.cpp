@@ -91,39 +91,33 @@ int main() {
 #ifdef CPU_ONLY
     communication_prop sync_block("sync_block_MPI", p_uint64, {SYNC, BLOCK, MPI});
     communication_prop async_block("async_block_MPI", p_uint64, {ASYNC, BLOCK, MPI});
-#elif defined(GPU_ONLY)
-    communication_prop sync_block("sync_block_CUDA", p_uint64, {SYNC, BLOCK, CUDA});
-#endif
-
-
-    // transfer the computed rows from bx
+     // transfer the computed rows from bx
     comm bx_exchange = computation::create_xfer("[nodes, cols]->{bx_exchange_s[q,y,x]: 1<=q<nodes-1 and 0<=y<2 and 0<=x<cols-2 and nodes>1}",
                                                 "[nodes, cols]->{bx_exchange_r[q,y,x]: 0<=q<nodes-2 and 0<=y<2 and 0<=x<cols-2 and nodes>1}",
-                                                q, q-(C_LOOP_ITER_TYPE)1, q+(C_LOOP_ITER_TYPE)1, q,
-#ifdef CPU_ONLY
-            async_block, sync_block,
-#elif defined(GPU_ONLY)
-                                                sync_block, sync_block,
-#endif
+                                                q, q-(C_LOOP_ITER_TYPE)1, q+(C_LOOP_ITER_TYPE)1, q, async_block, sync_block,
                                                 bx.get_update(1)(y,x), &blur_dist);
-
     comm bx_exchange_last_node = computation::create_xfer("[nodes, cols]->{bx_exchange_last_node_s[q,y,x]: nodes-1<=q<nodes and 0<=y<2 and 0<=x<cols-2 and nodes>1}",
                                                           "[cols, nodes]->{bx_exchange_last_node_r[q,y,x]: nodes-2<=q<nodes-1 and 0<=y<2 and 0<=x<cols-2 and nodes>1}",
                                                           q, q-(C_LOOP_ITER_TYPE)1, q+(C_LOOP_ITER_TYPE)1, q,
-#ifdef CPU_ONLY
             async_block, sync_block,
-#elif defined(GPU_ONLY)
-                                                          sync_block, sync_block,
-#endif
                                                           bx.get_update(2)(y,x), &blur_dist);
+#elif defined(GPU_ONLY)
+    communication_prop sync_block("sync_block_CUDA", p_uint64, {SYNC, BLOCK, CUDA});
+    // transfer the computed rows from bx
+    comm bx_exchange = computation::create_xfer("[nodes, cols]->{bx_exchange_os[q,y,x]: 1<=q<nodes-1 and 0<=y<2 and 0<=x<cols-2 and nodes>1}",
+                                                sync_block, bx.get_update(1)(y,x), &blur_dist);
+    comm bx_exchange_last_node = computation::create_xfer("[nodes, cols]->{bx_exchange_last_node_os[q,y,x]: nodes-1<=q<nodes and 0<=y<2 and 0<=x<cols-2 and nodes>1}",
+                                                          sync_block, bx.get_update(2)(y,x), &blur_dist);
 #endif
+#endif
+
     /*
      * Ordering
      */
 
 #ifdef DISTRIBUTE
 
-//#ifdef CPU_ONLY
+#ifdef CPU_ONLY
     bx.get_update(0).before(bx.get_update(1), computation::root);
     bx.get_update(1).before(bx.get_update(2), computation::root);
     bx.get_update(2).before(*bx_exchange.s, computation::root);
@@ -133,13 +127,15 @@ int main() {
     bx_exchange_last_node.r->before(by.get_update(0), computation::root);
     by.get_update(0).before(by.get_update(1), computation::root);
     by.get_update(1).before(by.get_update(2), computation::root);
-//#elif defined(GPU_ONLY)
-//    bx.get_update(0).before(bx.get_update(1), computation::root);
-//    bx.get_update(1).before(bx.get_update(2), computation::root);
-//    bx.get_update(2).before(by.get_update(0), computation::root);
-//    by.get_update(0).before(by.get_update(1), computation::root);
-//    by.get_update(1).before(by.get_update(2), computation::root);
-//#endif
+#elif defined(GPU_ONLY)
+    bx.get_update(0).before(bx.get_update(1), computation::root);
+    bx.get_update(1).before(bx.get_update(2), computation::root);
+    bx.get_update(2).before(*bx_exchange.os, computation::root);
+    bx_exchange.os->before(*bx_exchange_last_node.os, computation::root);
+    bx_exchange_last_node.os->before(by.get_update(0), computation::root);
+    by.get_update(0).before(by.get_update(1), computation::root);
+    by.get_update(1).before(by.get_update(2), computation::root);
+#endif
 
     /*
      * Tag distribute level
@@ -153,10 +149,15 @@ int main() {
     by.get_update(1).tag_distribute_level(y1);
     by.get_update(2).tag_distribute_level(y1);
 
+#ifdef CPU_ONLY
     bx_exchange.s->tag_distribute_level(q, false);
     bx_exchange.r->tag_distribute_level(q, false);
     bx_exchange_last_node.s->tag_distribute_level(q, false);
     bx_exchange_last_node.r->tag_distribute_level(q, false);
+#elif defined(GPU_ONLY)
+    bx_exchange.os->tag_distribute_level(q, false);
+    bx_exchange_last_node.os->tag_distribute_level(q, false);
+#endif
 #else
     bx.before(by, computation::root);
 #endif
@@ -220,8 +221,13 @@ int main() {
     by.get_update(0).set_access("{by_0[y, x]->buff_by[y, x]}");
     by.get_update(1).set_access("{by_1[y, x]->buff_by[y, x]}");
     by.get_update(2).set_access("{by_2[y, x]->buff_by[y, x]}");
+#ifdef CPU_ONLY
     bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_bx[" + std::to_string(rows_per_node) + " + y, x]}");
     bx_exchange_last_node.r->set_access("{bx_exchange_last_node_r[q,y,x]->buff_bx[" + std::to_string(rows_per_node) + " + y, x]}");
+#elif defined(GPU_ONLY)
+    bx_exchange.os->set_access("{bx_exchange_os[q,y,x]->buff_bx[" + std::to_string(rows_per_node) + " + y, x]}");
+    bx_exchange_last_node.os->set_access("{bx_exchange_last_node_os[q,y,x]->buff_bx[" + std::to_string(rows_per_node) + " + y, x]}");
+#endif
 #else
     bx.get_update(0).set_access("{bx[y, x]->buff_bx[y, x]}");
     by.get_update(0).set_access("{by[y, x]->buff_by[y, x]}");

@@ -36,6 +36,7 @@ class communicator;
 class send;
 class recv;
 class wait;
+class one_sided;
 class communication_prop;
 struct transfer;
 struct comm;
@@ -2559,6 +2560,8 @@ protected:
 
     virtual bool is_send() const;
 
+    virtual bool is_one_sided() const;
+
     virtual bool is_recv() const;
 
     virtual bool is_reader() const;
@@ -3681,11 +3684,14 @@ public:
     }
 
     static comm create_xfer(std::string send_iter_domain, std::string recv_iter_domain,
-                                 tiramisu::expr send_src,
-                                 tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
-                                 communication_prop send_chan, communication_prop recv_chan,
-                                 tiramisu::expr send_expr,
-                                 tiramisu::function *fct);
+                            tiramisu::expr send_src,
+                            tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
+                            communication_prop send_chan, communication_prop recv_chan,
+                            tiramisu::expr send_expr,
+                            tiramisu::function *fct);
+
+    static comm create_xfer(std::string iter_domain, communication_prop chan, tiramisu::expr expr,
+                            tiramisu::function *fct);
 
 };
 
@@ -4019,6 +4025,7 @@ struct transfer {
 struct comm {
     tiramisu::send *s;
     tiramisu::recv *r;
+    tiramisu::one_sided *os;
 };
 
 enum wait_type {
@@ -4094,6 +4101,21 @@ public:
 
 };
 
+class one_sided : public communicator {
+private:
+
+    tiramisu::computation *producer;
+
+public:
+
+    one_sided(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs,
+              communication_prop chan, bool schedule_this_computation, tiramisu::function *fct, std::vector<expr> dims);
+
+    virtual bool is_one_sided() const override;
+
+};
+
+// TODO should this be called an MPI send instead?
 class send : public communicator {
 private:
 
