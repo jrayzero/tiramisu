@@ -7956,6 +7956,8 @@ std::string create_send_func_name(const communication_prop chan) {
         }
         return name;
     }
+    assert(false && "Communication must be either MPI or CUDA!");
+    return "";
 }
 
 int send::next_msg_tag = 0;
