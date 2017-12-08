@@ -89,8 +89,8 @@ int main() {
     generator::update_producer_expr_name(&(by.get_update(2)), "bx", "bx_2");
 
 #ifdef CPU_ONLY
-    communication_prop sync_block("sync_block_MPI", p_uint64, {SYNC, BLOCK, MPI});
-    communication_prop async_block("async_block_MPI", p_uint64, {ASYNC, BLOCK, MPI});
+    communication_prop sync_block("sync_block_MPI", p_uint64, {SYNC, BLOCK, MPI, CPU2CPU});
+    communication_prop async_block("async_block_MPI", p_uint64, {ASYNC, BLOCK, MPI, CPU2CPU});
      // transfer the computed rows from bx
     comm bx_exchange = computation::create_xfer("[nodes, cols]->{bx_exchange_s[q,y,x]: 1<=q<nodes-1 and 0<=y<2 and 0<=x<cols-2 and nodes>1}",
                                                 "[nodes, cols]->{bx_exchange_r[q,y,x]: 0<=q<nodes-2 and 0<=y<2 and 0<=x<cols-2 and nodes>1}",
@@ -102,12 +102,30 @@ int main() {
             async_block, sync_block,
                                                           bx.get_update(2)(y,x), &blur_dist);
 #elif defined(GPU_ONLY)
-    communication_prop sync_block("sync_block_CUDA", p_uint64, {SYNC, BLOCK, CUDA});
+
+    constant rows_per_node_const("rows_per_node", expr(rows_per_node), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
+
+    communication_prop h2d("h2d", p_uint64, {SYNC, CUDA, CPU2GPU});
+
+    // Need an initial CPU-GPU transfer for each input
+    comm input_cpu_to_gpu = computation::create_xfer("[nodes, rows_per_node, cols]->{input_cpu_to_gpu_os[q,y,x]: 0<=q<nodes and 0<=y<rows_per_node and 0<=x<cols}", h2d, blur_input(y,x), &blur_dist);
+
+    // True because we need to insert a dummy access since the transfer has 3 dims and blur_input only has 2
+    generator::update_producer_expr_name(&(bx.get_update(0)), "blur_input", "input_cpu_to_gpu_os", true);
+    generator::update_producer_expr_name(&(bx.get_update(1)), "blur_input", "input_cpu_to_gpu_os", true);
+    generator::update_producer_expr_name(&(bx.get_update(2)), "blur_input", "input_cpu_to_gpu_os", true);
+
+    // We can't do GPU-GPU transfers right now, so we have to go back to the CPU first to do the exchange
+    communication_prop d2d("d2d", p_uint64, {SYNC, CUDA, GPU2GPU});
     // transfer the computed rows from bx
-    comm bx_exchange = computation::create_xfer("[nodes, cols]->{bx_exchange_os[q,y,x]: 1<=q<nodes-1 and 0<=y<2 and 0<=x<cols-2 and nodes>1}",
-                                                sync_block, bx.get_update(1)(y,x), &blur_dist);
-    comm bx_exchange_last_node = computation::create_xfer("[nodes, cols]->{bx_exchange_last_node_os[q,y,x]: nodes-1<=q<nodes and 0<=y<2 and 0<=x<cols-2 and nodes>1}",
-                                                          sync_block, bx.get_update(2)(y,x), &blur_dist);
+    comm bx_exchange =
+            computation::create_xfer("[nodes, cols]->{bx_exchange_os[q,y,x]: 1<=q<nodes-1 and 0<=y<2 and 0<=x<cols-2 and nodes>1}",
+                                     d2d, bx.get_update(1)(y,x), &blur_dist);
+    comm bx_exchange_last_node =
+            computation::create_xfer("[nodes, cols]->{bx_exchange_last_node_os[q,y,x]: nodes-1<=q<nodes and 0<=y<2 and 0<=x<cols-2 and nodes>1}",
+                                     d2d, bx.get_update(2)(y,x), &blur_dist);
+
+
 #endif
 #endif
 
@@ -128,6 +146,7 @@ int main() {
     by.get_update(0).before(by.get_update(1), computation::root);
     by.get_update(1).before(by.get_update(2), computation::root);
 #elif defined(GPU_ONLY)
+    input_cpu_to_gpu.os->before(bx.get_update(0), computation::root);
     bx.get_update(0).before(bx.get_update(1), computation::root);
     bx.get_update(1).before(bx.get_update(2), computation::root);
     bx.get_update(2).before(*bx_exchange.os, computation::root);
@@ -155,6 +174,7 @@ int main() {
     bx_exchange_last_node.s->tag_distribute_level(q, false);
     bx_exchange_last_node.r->tag_distribute_level(q, false);
 #elif defined(GPU_ONLY)
+    input_cpu_to_gpu.os->tag_distribute_level(q, false);
     bx_exchange.os->tag_distribute_level(q, false);
     bx_exchange_last_node.os->tag_distribute_level(q, false);
 #endif
@@ -181,6 +201,7 @@ int main() {
     // -------------------------------------------------------
 
 #ifdef DISTRIBUTE
+
     /*
      * Collapsing
      */
@@ -208,7 +229,7 @@ int main() {
                                 tiramisu::a_input, &blur_dist);
 
     tiramisu::buffer buff_bx("buff_bx", {bx_select_dim0, tiramisu::expr(cols - 2)},
-                             T_DATA_TYPE, tiramisu::a_temporary, &blur_dist);
+                             T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
     tiramisu::buffer buff_by("buff_by", {by_select_dim0, tiramisu::expr(cols - 2)},
                              T_DATA_TYPE, tiramisu::a_output, &blur_dist);
@@ -225,15 +246,19 @@ int main() {
     bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_bx[" + std::to_string(rows_per_node) + " + y, x]}");
     bx_exchange_last_node.r->set_access("{bx_exchange_last_node_r[q,y,x]->buff_bx[" + std::to_string(rows_per_node) + " + y, x]}");
 #elif defined(GPU_ONLY)
+    // TODO change this to a temporary one an allocate ourselves
+    tiramisu::buffer buff_input_gpu("buff_input_gpu", {tiramisu::expr(rows_per_node), tiramisu::expr(cols)}, T_DATA_TYPE,
+                                    tiramisu::a_output, &blur_dist);
     bx_exchange.os->set_access("{bx_exchange_os[q,y,x]->buff_bx[" + std::to_string(rows_per_node) + " + y, x]}");
     bx_exchange_last_node.os->set_access("{bx_exchange_last_node_os[q,y,x]->buff_bx[" + std::to_string(rows_per_node) + " + y, x]}");
+    input_cpu_to_gpu.os->set_access("{input_cpu_to_gpu_os[q,y,x]->buff_input_gpu[y,x]}");
 #endif
 #else
     bx.get_update(0).set_access("{bx[y, x]->buff_bx[y, x]}");
     by.get_update(0).set_access("{by[y, x]->buff_by[y, x]}");
 #endif
 
-    blur_dist.set_arguments({&buff_input, &buff_by});
+    blur_dist.set_arguments({&buff_input, &buff_bx, &buff_input_gpu, &buff_by});
 
     // Generate code
     blur_dist.lift_dist_comps();
