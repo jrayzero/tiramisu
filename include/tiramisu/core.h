@@ -3647,12 +3647,9 @@ public:
         }
     }
 
-    static xfer create_xfer(std::string send_iter_domain, std::string recv_iter_domain,
-                            tiramisu::expr send_src,
-                            tiramisu::expr send_dest, tiramisu::expr recv_src, tiramisu::expr recv_dest,
-                            communication_prop send_chan, communication_prop recv_chan,
-                            tiramisu::expr send_expr,
-                            tiramisu::function *fct);
+    static xfer create_xfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_dest,
+                               tiramisu::expr recv_src, communication_prop send_chan, communication_prop recv_chan,
+                               tiramisu::expr send_expr, tiramisu::function *fct);
 
     static xfer create_xfer(std::string iter_domain, communication_prop chan, tiramisu::expr expr,
                             tiramisu::function *fct);

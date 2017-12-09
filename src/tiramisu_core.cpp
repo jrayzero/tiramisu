@@ -5766,7 +5766,7 @@ std::string tiramisu::function::get_gpu_thread_iterator(const std::string &comp,
                 } else {
                     tiramisu::error("Level not mapped to GPU.", true);
                 }
-            } else if (std::get<2>(pd.second) == -1) {
+            } else if (std::get<1>(pd.second) != -1) {
                 // z level isn't used, so there are two levels
                 if (lev0 == std::get<0>(pd.second)) {
                     res = ".__thread_id_y";
@@ -5822,7 +5822,7 @@ std::string tiramisu::function::get_gpu_block_iterator(const std::string &comp, 
                 } else {
                     tiramisu::error("Level not mapped to GPU.", true);
                 }
-            } else if (std::get<2>(pd.second) == -1) {
+            } else if (std::get<1>(pd.second) != -1) {
                 // z level isn't used, so there are two levels
                 if (lev0 == std::get<0>(pd.second)) {
                     res = ".__block_id_y";
@@ -8307,12 +8307,9 @@ bool tiramisu::one_sided::is_one_sided() const {
     return true;
 }
 
-xfer tiramisu::computation::create_xfer(std::string send_iter_domain, std::string recv_iter_domain,
-                                        tiramisu::expr send_src,
-                                        tiramisu::expr send_dest, tiramisu::expr recv_src,
-                                        tiramisu::expr recv_dest,
-                                        communication_prop send_chan, communication_prop recv_chan,
-                                        tiramisu::expr send_expr, tiramisu::function *fct) {
+xfer tiramisu::computation::create_xfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_dest,
+                                       tiramisu::expr recv_src, communication_prop send_chan, communication_prop recv_chan,
+                                       tiramisu::expr send_expr, tiramisu::function *fct) {
     if (send_chan.contains_attr(MPI)) {
         assert(recv_chan.contains_attr(MPI));
     } else if (send_chan.contains_attr(CUDA)) {
@@ -8330,10 +8327,10 @@ xfer tiramisu::computation::create_xfer(std::string send_iter_domain, std::strin
     isl_map *send_sched = s->gen_identity_schedule_for_iteration_domain();
     isl_map *recv_sched = r->gen_identity_schedule_for_iteration_domain();
 
-    s->set_src(send_src);
+    s->set_src(expr());
     s->set_dest(send_dest);
     r->set_src(recv_src);
-    r->set_dest(recv_dest);
+    r->set_dest(expr());
 
     s->set_schedule(send_sched);
     r->set_schedule(recv_sched);
