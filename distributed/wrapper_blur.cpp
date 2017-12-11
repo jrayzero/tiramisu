@@ -43,6 +43,8 @@ int main() {
 #endif
 #ifdef CPU_ONLY
     blur_dist(buff_input.raw_buffer(), buff_output.raw_buffer());
+#elif defined(GPU_ONLY)
+    //    blur_dist_gpu(buff_input.raw_buffer(), buff_output.raw_buffer());
 #endif
     
 #ifdef DISTRIBUTE
@@ -58,6 +60,8 @@ int main() {
         auto start = std::chrono::high_resolution_clock::now();
 #ifdef CPU_ONLY
         blur_dist(buff_input.raw_buffer(), buff_output.raw_buffer());
+#elif defined(GPU_ONLY)
+        //        blur_dist_gpu(buff_input.raw_buffer(), buff_output.raw_buffer());
 #endif
 #ifdef DISTRIBUTE
         MPI_Barrier(MPI_COMM_WORLD);

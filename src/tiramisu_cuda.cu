@@ -5,6 +5,8 @@
 #include <cassert>
 #include "tiramisu/tiramisu_cuda.h"
 
+extern "C" {
+
 void tiramisu_cuda_malloc(void *device_ptr, size_t bytes) {
     assert(cudaMalloc(&device_ptr, bytes) == 0 && "tiramisu_cuda_malloc failed");
 }
@@ -47,4 +49,6 @@ void tiramisu_cuda_memcpy_d2h_async(void *dst, const void *src, size_t count, cu
 void tiramisu_cuda_memcpy_d2d_async(void *dst, const void *src, size_t count, cudaStream_t stream) {
     assert(false && "Not implemented yet");
     assert(cudaMemcpyAsync(dst, src, count, cudaMemcpyDeviceToDevice, stream) == 0 && "tiramisu_cuda_memcpy_d2d_async failed");
+}
+
 }

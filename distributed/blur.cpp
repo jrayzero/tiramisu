@@ -29,7 +29,11 @@ int main() {
     global::set_default_tiramisu_options();
     global::set_loop_iterator_type(T_LOOP_ITER_TYPE);
 
+#ifdef CPU_ONLY
     function blur_dist("blur_dist");
+#elif defined(GPU_ONLY)
+    function blur_dist("blur_dist_gpu");
+#endif
 
     C_LOOP_ITER_TYPE rows = ROWS;
     C_LOOP_ITER_TYPE cols = COLS;
