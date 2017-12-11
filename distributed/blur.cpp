@@ -76,10 +76,10 @@ int main() {
 #ifdef CPU_ONLY
     communication_prop sync_block("sync_block_MPI", T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
     communication_prop async_block("async_block_MPI", T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
-     // transfer the computed rows from bx
+    // transfer the computed rows from bx
     xfer bx_exchange = computation::create_xfer("[procs, cols]->{bx_exchange_s[q,y,x]: 1<=q<procs and 0<=y<2 and 0<=x<cols-2 and procs>1}",
                                                 "[procs, cols]->{bx_exchange_r[q,y,x]: 0<=q<procs-1 and 0<=y<2 and 0<=x<cols-2 and procs>1}",
-                                                q, q-(C_LOOP_ITER_TYPE)1, q+(C_LOOP_ITER_TYPE)1, q, async_block, sync_block,
+                                                q-(C_LOOP_ITER_TYPE)1, q+(C_LOOP_ITER_TYPE)1, async_block, sync_block,
                                                 bx(y,x), &blur_dist);
 
 
@@ -103,10 +103,10 @@ int main() {
                                 tiramisu::a_input, &blur_dist);
 
     tiramisu::buffer buff_bx_gpu("buff_bx_gpu", {bx_select_dim0, tiramisu::expr(cols - 2)},
-                             T_DATA_TYPE, tiramisu::a_temporary, &blur_dist);
+                                 T_DATA_TYPE, tiramisu::a_temporary, &blur_dist);
 
     tiramisu::buffer buff_by_gpu("buff_by_gpu", {by_select_dim0, tiramisu::expr(cols - 2)},
-                             T_DATA_TYPE, tiramisu::a_output, &blur_dist);
+                                 T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
 
