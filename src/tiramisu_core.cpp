@@ -40,6 +40,8 @@ tiramisu::expr traverse_expr_and_replace_non_affine_accesses(tiramisu::computati
 
 tiramisu::expr tiramisu_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, bool convert_to_loop_type = false);
 
+int get_num_bytes(primitive_t t);
+
 /**
   * Add a dimension to the range of a map in the specified position.
   * Assume that the name of the new dimension is equal to the name of the corresponding
@@ -8244,7 +8246,7 @@ void tiramisu::function::lift_cuda_comp(tiramisu::computation *comp) {
         os->rhs_argument_idx = 1;
         os->lhs_access_type = tiramisu::o_address_of;
         os->library_call_args.resize(is_async ? 4 : 3);
-        os->library_call_args[2] = tiramisu::expr(tiramisu::o_cast, p_int32, num_elements);
+        os->library_call_args[2] = tiramisu::expr(tiramisu::o_cast, p_int32, num_elements * get_num_bytes(comp->get_data_type()));
         if (is_async) {
             // This additional RHS argument is to the request buffer. It is really more of a side effect.
             os->req_argument_idx = 3;
@@ -8432,5 +8434,21 @@ void tiramisu::recv::override_msg_tag(tiramisu::expr msg_tag) {
 tiramisu::expr tiramisu::recv::get_msg_tag() const {
     return this->msg_tag;
 }
+
+  int get_num_bytes(primitive_t t) {
+    switch (t) {
+    case p_uint8: return 1;
+    case p_uint16: return 2;
+    case p_uint32: return 4;
+    case p_uint64: return 8;
+    case p_int8: return 1;
+    case p_int16: return 2;
+    case p_int32: return 4;
+    case p_int64: return 8;
+    case p_float32: return 4;
+    case p_float64: return 8;
+    case p_boolean: return 1;
+    }
+  }
 
 }

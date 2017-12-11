@@ -8,7 +8,7 @@
 #include "cuda_runtime_api.h"
 
 extern "C" {
-void tiramisu_cuda_malloc(void *device_ptr, size_t bytes);
+void tiramisu_cuda_malloc(void **device_ptr, size_t bytes);
 
 void tiramisu_cuda_free(void *device_ptr);
 

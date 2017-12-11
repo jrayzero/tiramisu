@@ -195,7 +195,7 @@ int main() {
                                 tiramisu::a_input, &blur_dist);
 
     // TODO change this to a temporary one an allocate ourselves
-    tiramisu::buffer buff_input_gpu("buff_input_gpu", {tiramisu::expr(rows_per_proc), tiramisu::expr(cols)}, T_DATA_TYPE,
+    tiramisu::buffer buff_input_gpu("buff_input_gpu", {tiramisu::expr(rows_per_proc+2), tiramisu::expr(cols)}, T_DATA_TYPE,
                                     tiramisu::a_output, &blur_dist);
 
     tiramisu::buffer buff_bx_gpu("buff_bx_gpu", {bx_select_dim0, tiramisu::expr(cols - 2)},
@@ -217,7 +217,7 @@ int main() {
     bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_bx_gpu[" + std::to_string(rows_per_proc) + " + y, x]}");
     input_cpu_to_gpu.os->set_access("{input_cpu_to_gpu_os[q,y,x]->buff_input_gpu[y,x]}");
     gpu_to_cpu.os->set_access("{gpu_to_cpu[q,y,x]->buff_by[y,x]}");
-    blur_dist.set_arguments({&buff_input, &buff_bx_gpu, &buff_input_gpu, &buff_by_gpu, &buff_by});
+    blur_dist.set_arguments({&buff_input, &buff_input_gpu, &buff_bx_gpu, &buff_by_gpu, &buff_by});
     blur_dist.lift_dist_comps();
     blur_dist.gen_time_space_domain();
     blur_dist.gen_isl_ast();

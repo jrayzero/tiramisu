@@ -4,11 +4,11 @@
 
 #include <cassert>
 #include "tiramisu/tiramisu_cuda.h"
-
+#include <stdio.h>
 extern "C" {
 
-void tiramisu_cuda_malloc(void *device_ptr, size_t bytes) {
-    assert(cudaMalloc(&device_ptr, bytes) == 0 && "tiramisu_cuda_malloc failed");
+void tiramisu_cuda_malloc(void **device_ptr, size_t bytes) {
+    assert(cudaMalloc(device_ptr, bytes) == 0 && "tiramisu_cuda_malloc failed");
 }
 
 void tiramisu_cuda_free(void *device_ptr) {
@@ -16,7 +16,7 @@ void tiramisu_cuda_free(void *device_ptr) {
 }
 
 void tiramisu_cuda_memcpy_h2d(void *dst, const void *src, size_t count) {
-    assert(cudaMemcpy(dst, src, count, cudaMemcpyHostToDevice) == 0 && "tiramisu_cuda_memcpy_h2d failed");
+  assert(cudaMemcpy(dst, src, count, cudaMemcpyHostToDevice) == 0 && "tiramisu_cuda_memcpy_h2d failed");
 }
 
 void tiramisu_cuda_memcpy_h2h(void *dst, const void *src, size_t count) {
