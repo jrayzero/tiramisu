@@ -9,7 +9,7 @@ NVCC = nvcc
 CXXFLAGS = -g -std=c++11 -O3 -Wall -Wno-sign-compare -fno-rtti -fvisibility=hidden -march=corei7-avx -mtune=corei7-avx -fopenmp -DNODES=${MPI_NODES}
 NVCCFLAGS = -ccbin ${NVCC_CLANG} -g -std=c++11 -O3 -Xcompiler -Wall -Xcompiler -fPIC -Xcompiler -Wno-sign-compare -Xcompiler -fno-rtti -Xcompiler -fvisibility=hidden -Xcompiler -march=corei7-avx -Xcompiler -mtune=corei7-avx
 INCLUDES = -Iinclude/ -I${ISL_INCLUDE_DIRECTORY} -I${HALIDE_SOURCE_DIRECTORY}/include -I${HALIDE_SOURCE_DIRECTORY}/tools -Ibuild/ -I3rdParty/isl/include -I/data/scratch/jray/anaconda2/include/
-LIBRARIES = -Lbuild/ -L${ISL_LIB_DIRECTORY} -L3rdParty/isl/.libs -lisl -lgmp -L${HALIDE_LIB_DIRECTORY} -lHalide -lmpi_cxx -ldl -lpthread -lz `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
+LIBRARIES = -Lbuild/ -L${ISL_LIB_DIRECTORY} -L3rdParty/isl/.libs -lisl -lgmp -L${HALIDE_LIB_DIRECTORY} -L/usr/local/cuda-7.5/targets/x86_64-linux/lib/ -lHalide -lmpi_cxx -ldl -lpthread -lz -lcudart `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
 HEADER_FILES = \
 	include/tiramisu/core.h \
 	include/tiramisu/debug.h \

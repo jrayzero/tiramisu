@@ -5,8 +5,8 @@
 #ifndef TIRAMISU_BLUR_PARAMS_H
 #define TIRAMISU_BLUR_PARAMS_H
 
-//#define CPU_ONLY
-#define GPU_ONLY
+#define CPU_ONLY
+//#define GPU_ONLY
 //#define HYBRID
 //#define GPU_LOAD_FACTOR 80 // put 80% of the data onto the GPU
 
@@ -14,10 +14,11 @@
 #define PRINT_ITER_0
 #define ITERS 20
 
+#define DISTRIBUTE
 #define CHECK_RESULTS
 
-#define NODES 4
-#define ROWS 1000
+#define PROCS 3
+#define ROWS 3333
 #define COLS 100
 #if defined(CPU_ONLY) || defined(HYBRID)
 #define T_LOOP_ITER_TYPE tiramisu::p_int64

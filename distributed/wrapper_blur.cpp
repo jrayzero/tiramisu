@@ -41,8 +41,9 @@ int main() {
 #else
     Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS - 2, rows_per_node - 2);
 #endif
-
+#ifdef CPU_ONLY
     blur_dist(buff_input.raw_buffer(), buff_output.raw_buffer());
+#endif
     
 #ifdef DISTRIBUTE
     MPI_Barrier(MPI_COMM_WORLD);
@@ -55,7 +56,9 @@ int main() {
         MPI_Barrier(MPI_COMM_WORLD);
 #endif
         auto start = std::chrono::high_resolution_clock::now();
+#ifdef CPU_ONLY
         blur_dist(buff_input.raw_buffer(), buff_output.raw_buffer());
+#endif
 #ifdef DISTRIBUTE
         MPI_Barrier(MPI_COMM_WORLD);
 #endif
