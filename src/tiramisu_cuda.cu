@@ -56,19 +56,19 @@ void tiramisu_cuda_malloc(void **device_ptr, size_t bytes) {
 }
 
 void htiramisu_cuda_memcpy_h2d(halide_buffer_t *dst, const void *src, size_t count, size_t dst_offset) {
-  tiramisu_cuda_memcpy_h2d(&(((float*)(dst->device))[dst_offset]), src, count);
+    tiramisu_cuda_memcpy_h2d(&(((float*)(dst->device))[dst_offset]), src, count);
 }
-  
+
 void htiramisu_cuda_memcpy_d2h(void *dst, halide_buffer_t *src, size_t count, size_t src_offset) {
-  tiramisu_cuda_memcpy_d2h(dst, &(((float*)(src->device))[src_offset]), count);
+    tiramisu_cuda_memcpy_d2h(dst, &(((float*)(src->device))[src_offset]), count);
 }
-  
+
 void tiramisu_cuda_free(void *device_ptr) {
     assert(cudaFree(device_ptr) == 0 && "tiramisu_cuda_free failed");
 }
 
 void tiramisu_cuda_memcpy_h2d(void *dst, const void *src, size_t count) {
-  assert(cudaMemcpy(dst, src, count, cudaMemcpyHostToDevice) == 0 && "tiramisu_cuda_memcpy_h2d failed");
+    assert(cudaMemcpy(dst, src, count, cudaMemcpyHostToDevice) == 0 && "tiramisu_cuda_memcpy_h2d failed");
 }
 
 void tiramisu_cuda_memcpy_h2h(void *dst, const void *src, size_t count) {
@@ -76,12 +76,7 @@ void tiramisu_cuda_memcpy_h2h(void *dst, const void *src, size_t count) {
 }
 
 void tiramisu_cuda_memcpy_d2h(void *dst, const void *src, size_t count) {
-  int res = cudaMemcpy(dst, src, count, cudaMemcpyDeviceToHost);
-  fprintf(stderr, "res = %d, dst = %d, src = %d, count = %d\n", res, dst, src, count);
-  if (res != 0) {
-    assert(false);
-  }
-  //    assert(cudaMemcpy(dst, src, count, cudaMemcpyDeviceToHost) == 0 && "tiramisu_cuda_memcpy_d2h failed");
+    assert(cudaMemcpy(dst, src, count, cudaMemcpyDeviceToHost) == 0 && "tiramisu_cuda_memcpy_d2h failed");
 }
 
 void tiramisu_cuda_memcpy_d2d(void *dst, const void *src, size_t count) {
