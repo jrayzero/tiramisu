@@ -51,6 +51,7 @@ enum primitive_t
   */
 enum op_t
 {
+  o_buffer, // just pass in the buffer
     // Unary operators
     // The argument of the following operators is a tiramisu::expr.
     o_minus,

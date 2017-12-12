@@ -7941,7 +7941,7 @@ std::string create_send_func_name(const communication_prop chan) {
         }
         return name;
     } else if (chan.contains_attr(CUDA)) {
-        std::string name = "tiramisu_cuda_memcpy";
+        std::string name = "htiramisu_cuda_memcpy";
         if (chan.contains_attr(CPU2CPU)) {
             name += "_h2h";
         } else if (chan.contains_attr(CPU2GPU)) {
@@ -8042,8 +8042,14 @@ tiramisu::one_sided::one_sided(std::string iteration_domain_str, tiramisu::compu
                                                                       chan, fct), producer(producer) {
     _is_library_call = true;
     library_call_name = create_send_func_name(chan);
-    expr mod_rhs(tiramisu::o_address_of, rhs.get_name(), rhs.get_access(), rhs.get_data_type());
-    set_expression(mod_rhs);
+    if (chan.contains_attr(CPU2GPU)) {
+      expr mod_rhs(tiramisu::o_address_of, rhs.get_name(), rhs.get_access(), rhs.get_data_type());
+      set_expression(mod_rhs);
+    } else if (chan.contains_attr(GPU2CPU)) {
+      // we will modify this again later
+      expr mod_rhs(tiramisu::o_buffer, rhs.get_name(), rhs.get_access(), rhs.get_data_type());
+      set_expression(mod_rhs);
+    }
 }
 
 /*
@@ -8242,10 +8248,19 @@ void tiramisu::function::lift_cuda_comp(tiramisu::computation *comp) {
         tiramisu::expr num_elements(os->get_num_elements());
         tiramisu::expr xfer_type(os->get_channel().get_dtype());
         bool is_async = os->get_channel().contains_attr(ASYNC); // async CUDA is like nonblocking MPI
-        os->lhs_argument_idx = 0;
-        os->rhs_argument_idx = 1;
-        os->lhs_access_type = tiramisu::o_address_of;
-        os->library_call_args.resize(is_async ? 4 : 3);
+        if (os->get_channel().contains_attr(CPU2GPU)) {
+          os->lhs_argument_idx = 0; // dest is a device buffer
+          os->rhs_argument_idx = 1; // src is a host buffer
+          os->lhs_access_type = tiramisu::o_buffer;//tiramisu::o_address_of;
+          os->rhs_access_type = tiramisu::o_address_of;
+        } else if (os->get_channel().contains_attr(GPU2CPU)) {
+          os->lhs_argument_idx = 0; // dest is a host buffer
+          os->rhs_argument_idx = 1; // src is a device buffer
+          os->lhs_access_type = tiramisu::o_address_of;
+          os->rhs_access_type = tiramisu::o_buffer;
+        }
+
+        os->library_call_args.resize(is_async ? 5 : 4);
         os->library_call_args[2] = tiramisu::expr(tiramisu::o_cast, p_int32, num_elements * get_num_bytes(comp->get_data_type()));
         if (is_async) {
             // This additional RHS argument is to the request buffer. It is really more of a side effect.

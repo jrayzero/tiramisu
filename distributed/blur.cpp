@@ -55,13 +55,13 @@ int main() {
                            T_DATA_TYPE, &blur_dist);
 
     computation bx("[rows, cols]->{bx[y, x]: 0<=y<rows and 0<=x<cols-2}",
-                   (((blur_input(y, x) + blur_input(y, (x + expr((C_LOOP_ITER_TYPE)1)))) +
-                     blur_input(y, (x + expr((C_LOOP_ITER_TYPE)2)))) / expr((C_DATA_TYPE)3)),
+                           (((blur_input(y, x) + blur_input(y, (x + expr((C_LOOP_ITER_TYPE)1)))) +
+                                                           blur_input(y, (x + expr((C_LOOP_ITER_TYPE)2)))) / expr((C_DATA_TYPE)3)),
                    true, T_DATA_TYPE, &blur_dist);
 
     computation by("[rows, cols]->{by[y, x]: 0<=y<rows-2 and 0<=x<cols-2}",
-                   (((bx(y, x) + bx((y + expr((C_LOOP_ITER_TYPE)1)), x)) +
-                     bx((y + expr((C_LOOP_ITER_TYPE)2)), x)) / expr((C_DATA_TYPE)3)),
+                                      (((bx(y, x) + bx((y + expr((C_LOOP_ITER_TYPE)1)), x)) +
+                                        bx((y + expr((C_LOOP_ITER_TYPE)2)), x)) / expr((C_DATA_TYPE)3)),
                    true, T_DATA_TYPE, &blur_dist);
 
     // -------------------------------------------------------
@@ -162,7 +162,7 @@ int main() {
                                      d2h_cuda, by(y,x), &blur_dist);
     // We want to insert a new computation here that computes bx of the two extra rows. This gives us recomputation
     // instead of communication, which is cheaper for us. The last proc doesn't need to do anything though.
-    computation bx_recompute("[rows_per_node, cols, procs]->{bx_recompute[q, y, x]: 0<=q<procs-1 and rows_per_node<=y<rows_per_node+2 and 0<=x<cols-2}",
+    computation bx_recompute("[rows_per_node, cols, procs]->{bx_recompute[q, y, x]: 0<=q<procs-1 and rows_per_node<=y<rows_per_node+2 and 0<=x<cols-2}", 
                              (((blur_input(y, x) + blur_input(y, (x + expr((C_LOOP_ITER_TYPE)1)))) +
                                blur_input(y, (x + expr((C_LOOP_ITER_TYPE)2)))) / expr((C_DATA_TYPE)3)),
                              true, T_DATA_TYPE, &blur_dist);

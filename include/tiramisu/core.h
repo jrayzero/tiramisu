@@ -2255,6 +2255,7 @@ protected:
       * want to get a pointer to the store location.
       */
     tiramisu::op_t lhs_access_type;
+    tiramisu::op_t rhs_access_type;
 
     /**
       * Dummy constructor for derived classes.

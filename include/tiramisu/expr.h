@@ -108,6 +108,7 @@ class expr
 {
     friend var;
     friend generator;
+  friend computation;
 
     /**
       * The type of the operator.
@@ -282,8 +283,8 @@ public:
          tiramisu::primitive_t type)
     {
         assert((o == tiramisu::o_access || o == tiramisu::o_call || o == tiramisu::o_address_of ||
-                o == tiramisu::o_lin_index) &&
-               "The operator is not an access, call, address of, or linear index operator.");
+                o == tiramisu::o_lin_index || o == tiramisu::o_buffer) &&
+               "The operator is not an access, call, address of, buffer, or linear index operator.");
 
         assert(vec.size() > 0);
         assert(name.size() > 0);
@@ -293,7 +294,7 @@ public:
         this->dtype = type;
         this->defined = true;
 
-        if (o == tiramisu::o_access || o == tiramisu::o_address_of || o == tiramisu::o_lin_index)
+        if (o == tiramisu::o_access || o == tiramisu::o_address_of || o == tiramisu::o_lin_index || o == tiramisu::o_buffer)
         {
             this->set_access(vec);
         }
@@ -303,7 +304,7 @@ public:
         }
         else
         {
-            tiramisu::error("Type of operator is not o_access, o_call, o_address_of, or o_lin_index.", true);
+            tiramisu::error("Type of operator is not o_access, o_call, o_address_of, o_buffer, or o_lin_index.", true);
         }
 
         this->name = name;
@@ -764,6 +765,7 @@ public:
                (this->get_op_type() == tiramisu::o_free) ||
                (this->get_op_type() == tiramisu::o_address_of) ||
                (this->get_op_type() == tiramisu::o_lin_index) ||
+               (this->get_op_type() == tiramisu::o_buffer) ||
                (this->get_op_type() == tiramisu::o_dummy));
 
         return name;
@@ -814,7 +816,7 @@ public:
     {
         assert(this->get_expr_type() == tiramisu::e_op);
         assert(this->get_op_type() == tiramisu::o_access || this->get_op_type() == tiramisu::o_lin_index ||
-               this->get_op_type() == tiramisu::o_address_of || this->get_op_type() == tiramisu::o_dummy);
+               this->get_op_type() == tiramisu::o_address_of || this->get_op_type() == tiramisu::o_dummy || this->get_op_type() == tiramisu::o_buffer);
 
         return access_vector;
     }
@@ -1653,6 +1655,7 @@ public:
                     case tiramisu::o_access:
 		    case tiramisu::o_address_of:
 		    case tiramisu::o_lin_index:
+		    case tiramisu::o_buffer:
 		      str +=  this->get_name() + "(";
 		      for (int k = 0; k < this->get_access().size(); k++)
                         {

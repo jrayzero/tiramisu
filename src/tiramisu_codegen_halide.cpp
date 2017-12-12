@@ -253,6 +253,7 @@ bool access_has_id(const tiramisu::expr &exp)
             case tiramisu::o_type:
             case tiramisu::o_address_of:
             case tiramisu::o_lin_index:
+            case tiramisu::o_buffer:
                 has_id = false;
                 break;
             case tiramisu::o_minus:
@@ -343,6 +344,7 @@ bool access_is_affine(const tiramisu::expr &exp)
             case tiramisu::o_type:
             case tiramisu::o_address_of:
             case tiramisu::o_lin_index:
+            case tiramisu::o_buffer:
                 affine = false;
                 break;
             case tiramisu::o_minus:
@@ -614,6 +616,7 @@ void generator::traverse_expr_and_extract_accesses(const tiramisu::function *fct
 
     if ((exp.get_expr_type() == tiramisu::e_op) && ((exp.get_op_type() == tiramisu::o_access) ||
                                                     (exp.get_op_type() == tiramisu::o_lin_index) ||
+                                                    (exp.get_op_type() == tiramisu::o_buffer) ||
                                                     (exp.get_op_type() == tiramisu::o_address_of)))
     {
         DEBUG(3, tiramisu::str_dump("Extracting access from o_access."));
@@ -838,7 +841,7 @@ tiramisu::expr traverse_expr_and_replace_non_affine_accesses(tiramisu::computati
         output_expr = exp;
     }
     else if ((exp.get_expr_type() == tiramisu::e_op) && ((exp.get_op_type() == tiramisu::o_access) ||
-                                                         (exp.get_op_type() == tiramisu::o_address_of) || (exp.get_op_type() == tiramisu::o_lin_index)))
+                                                         (exp.get_op_type() == tiramisu::o_address_of) || (exp.get_op_type() == tiramisu::o_lin_index) || (exp.get_op_type() == tiramisu::o_buffer)))
     {
         tiramisu::expr exp2 = exp;
 
@@ -2605,23 +2608,30 @@ void tiramisu::computation::create_halide_assignment()
                         generator::halide_expr_from_tiramisu_expr(this->get_function(), this->index_expr, tiramisu_rhs,
                                                                   this),
                         lhs_index, param, Halide::Internal::const_true(type.lanes()));
-            } else if (this->lhs_access_type == tiramisu::o_address_of || this->lhs_access_type == tiramisu::o_lin_index) {
+            } else if (this->lhs_access_type == tiramisu::o_address_of || this->lhs_access_type == tiramisu::o_lin_index || this->lhs_access_type == tiramisu::o_buffer) {
                 assert(this->is_library_call() && "LHS o_address_of only allowed for operations that are library calls!");
                 // Process the non-LHS and non-RHS parameters of the function call
 
                 for (int i = 0; i < this->library_call_args.size(); i++) {
                     if (i != this->rhs_argument_idx && i != this->lhs_argument_idx && i != this->req_argument_idx) {
                         std::vector<isl_ast_expr *> dummy;
-                        halide_call_args[i] = generator::halide_expr_from_tiramisu_expr(this->fct, dummy,
-                                                                                        this->library_call_args[i],
-                                                                                        this);
+                        if (this->library_call_args[i].defined) {
+                          halide_call_args[i] = generator::halide_expr_from_tiramisu_expr(this->fct, dummy,
+                                                                                          this->library_call_args[i],
+                                                                                          this);
+                        }
                     }
                 }
                 if (this->lhs_argument_idx != -1) {
                     // The LHS is a parameter of the function call. We need to take the address of buffer at lhs_index
                     Halide::Expr result;
+                    Halide::Expr result2;
                     if (this->lhs_access_type == tiramisu::o_lin_index) {
                         result = lhs_index;
+                    } else if (this->lhs_access_type == tiramisu::o_buffer) { // want to just pass in the raw buffer
+                      result = Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), lhs_tiramisu_buffer->get_name() + ".buffer");
+                      result2 = lhs_index;
+                      halide_call_args[halide_call_args.size() - 1] = result2;
                     } else if (lhs_tiramisu_buffer->get_argument_type() != tiramisu::a_temporary) {
                         Halide::Buffer<> buffer = Halide::Buffer<>(
                                 type,
@@ -2652,9 +2662,28 @@ void tiramisu::computation::create_halide_assignment()
                 }
                 // Process the RHS side if this library call needs it
                 if (this->rhs_argument_idx != -1) {
+                  if (this->get_expr().get_op_type() == tiramisu::o_buffer) {
+                    // in this case, we assume the last call arg gets the linear index and the rhs_argument_idx gets the buffer
+                    expr old = this->get_expr();
+                    expr mod_rhs(tiramisu::o_address, this->get_expr());//, this->get_expr().get_access(), this->get_expr().get_data_type());
+                    this->set_expression(mod_rhs);
+                    assert(this->get_expr().get_op_type() != o_buffer);
+                    mod_rhs.dump(true);
+                    halide_call_args[rhs_argument_idx] = // the buffer
+                            generator::halide_expr_from_tiramisu_expr(this->fct, this->get_index_expr(),
+                                                                      mod_rhs, this);
+
+                    expr mod_rhs2(tiramisu::o_lin_index, old.get_name(), old.get_access(), old.get_data_type());
+                    this->set_expression(mod_rhs2);
+                    halide_call_args[halide_call_args.size() - 1] = // just the index
+                            generator::halide_expr_from_tiramisu_expr(this->fct, this->get_index_expr(),
+                                                                      this->get_expr(), this);
+
+                  } else {
                     halide_call_args[rhs_argument_idx] =
                             generator::halide_expr_from_tiramisu_expr(this->fct, this->get_index_expr(),
                                                                       this->get_expr(), this);
+                  }
                 }
             } else {
                 assert(false && "Unsupported LHS operation type.");
@@ -2872,7 +2901,7 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
             tiramisu::expr expr2 = tiramisu_expr.get_operand(2);
             op2 = generator::halide_expr_from_tiramisu_expr(fct, index_expr, expr2, comp);
         }
-
+        assert(tiramisu_expr.get_op_type() != tiramisu::o_buffer && "o_buffer shouldn't survive til here!");
         switch (tiramisu_expr.get_op_type())
         {
             case tiramisu::o_logical_and:
@@ -3353,6 +3382,7 @@ void function::gen_halide_obj(const std::string &obj_file_name, Halide::Target::
 
     m.compile(Halide::Outputs().object(obj_file_name));
     m.compile(Halide::Outputs().c_header(obj_file_name + ".h"));
+    m.compile(Halide::Outputs().c_source(obj_file_name + ".c"));
     m.compile(Halide::Outputs().llvm_assembly(obj_file_name + ".ll"));
 }
 
