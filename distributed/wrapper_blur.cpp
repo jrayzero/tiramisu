@@ -14,7 +14,6 @@
 #include "HalideRuntimeCuda.h"
 
 int main() {
-
 #ifdef DISTRIBUTE
     int provided = -1;
     MPI_Init_thread(NULL, NULL, REQ, &provided);
@@ -24,12 +23,11 @@ int main() {
 #else
     int rank = 0;
 #endif
-    
-#ifdef GPU
+
+#ifdef GPU_ONLY
     std::cerr << "My rank is " << rank << std::endl;
-    assert(rank <= 1);
+    halide_set_gpu_device(rank);
     // TODO build a tiramisu wrapper for this
-    halide_set_gpu_device(rank); 
 #endif
     
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
@@ -44,6 +42,14 @@ int main() {
         for (int x = 0; x < COLS; x++) {
           buff_input(x,y) = rank * rows_per_proc * COLS + next++;
         }
+    }
+    if (rank % PROCS != 1) { // need to fill up the last two rows with the first two rows of next rank on the machine. We'll just assume we can algorithmically generate it here
+      next = 0;
+      for (int y = rows_per_proc; y < rows_per_proc + 2; y++) {
+        for (int x = 0; x < COLS; x++) {
+          buff_input(x,y) = (rank+1) * rows_per_proc * COLS + next++;
+        }
+      }      
     }
 
 #ifdef DISTRIBUTE
