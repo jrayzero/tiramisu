@@ -2665,16 +2665,15 @@ void tiramisu::computation::create_halide_assignment()
                   if (this->get_expr().get_op_type() == tiramisu::o_buffer) {
                     // in this case, we assume the last call arg gets the linear index and the rhs_argument_idx gets the buffer
                     expr old = this->get_expr();
-                    expr mod_rhs(tiramisu::o_address, this->get_expr());//, this->get_expr().get_access(), this->get_expr().get_data_type());
-                    this->set_expression(mod_rhs);
+                    expr mod_rhs(tiramisu::o_address, this->get_expr().get_name());//, this->get_expr().get_access(), this->get_expr().get_data_type());
+                    this->expression = mod_rhs;
                     assert(this->get_expr().get_op_type() != o_buffer);
-                    mod_rhs.dump(true);
                     halide_call_args[rhs_argument_idx] = // the buffer
                             generator::halide_expr_from_tiramisu_expr(this->fct, this->get_index_expr(),
                                                                       mod_rhs, this);
 
                     expr mod_rhs2(tiramisu::o_lin_index, old.get_name(), old.get_access(), old.get_data_type());
-                    this->set_expression(mod_rhs2);
+                    this->expression = mod_rhs2;
                     halide_call_args[halide_call_args.size() - 1] = // just the index
                             generator::halide_expr_from_tiramisu_expr(this->fct, this->get_index_expr(),
                                                                       this->get_expr(), this);
@@ -3033,7 +3032,7 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
                 }
                 else if (tiramisu_expr.get_op_type() == tiramisu::o_address)
                 {
-                    access_comp_name = tiramisu_expr.get_operand(0).get_name().c_str();
+                    access_comp_name = tiramisu_expr.get_name().c_str();//.get_operand(0).get_name().c_str();
                 }
                 else
                 {
