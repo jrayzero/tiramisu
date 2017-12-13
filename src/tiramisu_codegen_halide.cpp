@@ -3506,34 +3506,34 @@ void tiramisu::generator::_update_producer_expr_name(tiramisu::expr &current_exp
 // Handle any special function calls in here where the call type isn't extern, or the tiramisu name and halide name
 // differ
 Halide::Expr make_comm_call(Halide::Type type, std::string func_name, std::vector<Halide::Expr> args) {
-    // TODO if I move MPI xfer to tiramisu, I don't need all of this
-    if (func_name == "send_MPI_sync_block") {
-        return Halide::Internal::Call::make(type, Halide::Internal::Call::mssend, args,
-                                            Halide::Internal::Call::CallType::Intrinsic);
-    } else if (func_name == "send_MPI_async_block") { // actual MPI call may or may not be asynchronous depending on implementation
-        return Halide::Internal::Call::make(type, Halide::Internal::Call::msend, args,
-                                            Halide::Internal::Call::CallType::Intrinsic);
-    } else if (func_name == "send_MPI_sync_nonblock") {
-        return Halide::Internal::Call::make(type, Halide::Internal::Call::missend, args,
-                                            Halide::Internal::Call::CallType::Intrinsic);
-    } else if (func_name == "send_MPI_async_nonblock") { // actual MPI call may or may not be asynchronous depending on implementation
-        return Halide::Internal::Call::make(type, Halide::Internal::Call::misend, args,
-                                            Halide::Internal::Call::CallType::Intrinsic);
-    } else if (func_name == "recv_MPI_block") {
-        return Halide::Internal::Call::make(type, Halide::Internal::Call::mrecv, args,
-                                            Halide::Internal::Call::CallType::Intrinsic);
-    } else if (func_name == "recv_MPI_nonblock") {
-        return Halide::Internal::Call::make(type, Halide::Internal::Call::mirecv, args,
-                                            Halide::Internal::Call::CallType::Intrinsic);
-    } else if (func_name == "read_binary_data") {
-        return Halide::Internal::Call::make(type, Halide::Internal::Call::read_binary, args,
-                                            Halide::Internal::Call::CallType::Intrinsic);
-    } else if (func_name == "wait") {
-        return Halide::Internal::Call::make(type, Halide::Internal::Call::mwait, args,
-                                            Halide::Internal::Call::CallType::Intrinsic);
-    } else { // default is an extern
+//    // TODO if I move MPI xfer to tiramisu, I don't need all of this
+//    if (func_name == "send_MPI_sync_block") {
+//        return Halide::Internal::Call::make(type, Halide::Internal::Call::mssend, args,
+//                                            Halide::Internal::Call::CallType::Intrinsic);
+//    } else if (func_name == "send_MPI_async_block") { // actual MPI call may or may not be asynchronous depending on implementation
+//        return Halide::Internal::Call::make(type, Halide::Internal::Call::msend, args,
+//                                            Halide::Internal::Call::CallType::Intrinsic);
+//    } else if (func_name == "send_MPI_sync_nonblock") {
+//        return Halide::Internal::Call::make(type, Halide::Internal::Call::missend, args,
+//                                            Halide::Internal::Call::CallType::Intrinsic);
+//    } else if (func_name == "send_MPI_async_nonblock") { // actual MPI call may or may not be asynchronous depending on implementation
+//        return Halide::Internal::Call::make(type, Halide::Internal::Call::misend, args,
+//                                            Halide::Internal::Call::CallType::Intrinsic);
+//    } else if (func_name == "recv_MPI_block") {
+//        return Halide::Internal::Call::make(type, Halide::Internal::Call::mrecv, args,
+//                                            Halide::Internal::Call::CallType::Intrinsic);
+//    } else if (func_name == "recv_MPI_nonblock") {
+//        return Halide::Internal::Call::make(type, Halide::Internal::Call::mirecv, args,
+//                                            Halide::Internal::Call::CallType::Intrinsic);
+//    } else if (func_name == "read_binary_data") {
+//        return Halide::Internal::Call::make(type, Halide::Internal::Call::read_binary, args,
+//                                            Halide::Internal::Call::CallType::Intrinsic);
+//    } else if (func_name == "wait") {
+//        return Halide::Internal::Call::make(type, Halide::Internal::Call::mwait, args,
+//                                            Halide::Internal::Call::CallType::Intrinsic);
+//    } else { // default is an extern
         return Halide::Internal::Call::make(type, func_name, args, Halide::Internal::Call::CallType::Extern);
-    }
+//    }
 }
 
 Halide::Expr halide_expr_from_tiramisu_type(tiramisu::primitive_t ptype) {

@@ -7926,18 +7926,47 @@ std::vector<communicator *> tiramisu::communicator::collapse(int level, tiramisu
 
 std::string create_send_func_name(const communication_prop chan) {
     if (chan.contains_attr(MPI)) {
-        std::string name = "send_MPI";
-        if (chan.contains_attr(SYNC)) {
-            name += "_sync";
+        std::string name = "tiramisu_MPI";
+        if (chan.contains_attr(SYNC) && chan.contains_attr(BLOCK)) {
+            name += "_Ssend";
+        } else if (chan.contains_attr(SYNC) && chan.contains_attr(NONBLOCK)) {
+            name += "_Send";
+        } else if (chan.contains_attr(ASYNC) && chan.contains_attr(BLOCK)) {
+            name += "_Issend";
+        } else if (chan.contains_attr(ASYNC) && chan.contains_attr(NONBLOCK)) {
+            name += "_Isend";
         }
-        if (chan.contains_attr(ASYNC)) {
-            name += "_async";
-        }
-        if (chan.contains_attr(BLOCK)) {
-            name += "_block";
-        }
-        if (chan.contains_attr(NONBLOCK)) {
-            name += "_nonblock";
+        switch (chan.get_dtype()) {
+            case p_uint8:
+                name += "_uint8";
+                break;
+            case p_uint16:
+                name += "_uint16";
+                break;
+            case p_uint32:
+                name += "_uint32";
+                break;
+            case p_uint64:
+                name += "_uint64";
+                break;
+            case p_int8:
+                name += "_int8";
+                break;
+            case p_int16:
+                name += "_int16";
+                break;
+            case p_int32:
+                name += "_int32";
+                break;
+            case p_int64:
+                name += "_int64";
+                break;
+            case p_float32:
+                name += "_f32";
+                break;
+            case p_float64:
+                name += "_f64";
+                break;
         }
         return name;
     } else if (chan.contains_attr(CUDA)) {
@@ -7996,21 +8025,51 @@ void tiramisu::send::set_matching_recv(tiramisu::recv *matching_recv) {
  */
 
 std::string create_recv_func_name(const communication_prop chan) {
-    std::string name = "recv";
-    if (chan.contains_attr(CUDA)) {
-        return name; // won't actually be using this
-    }
+
     if (chan.contains_attr(MPI)) {
-        name += "_MPI";
+        std::string name = "tiramisu_MPI";
+        if (chan.contains_attr(BLOCK)) {
+            name += "_Recv";
+        } else if (chan.contains_attr(NONBLOCK)) {
+            name += "_Irecv";
+        }
+        switch (chan.get_dtype()) {
+            case p_uint8:
+                name += "_uint8";
+                break;
+            case p_uint16:
+                name += "_uint16";
+                break;
+            case p_uint32:
+                name += "_uint32";
+                break;
+            case p_uint64:
+                name += "_uint64";
+                break;
+            case p_int8:
+                name += "_int8";
+                break;
+            case p_int16:
+                name += "_int16";
+                break;
+            case p_int32:
+                name += "_int32";
+                break;
+            case p_int64:
+                name += "_int64";
+                break;
+            case p_float32:
+                name += "_f32";
+                break;
+            case p_float64:
+                name += "_f64";
+                break;
+        }
+        return name;
+    } else {
+        assert(false);
+        return "";
     }
-    if (chan.contains_attr(BLOCK)) {
-        name += "_block";
-    }
-    if (chan.contains_attr(NONBLOCK)) {
-        name += "_nonblock";
-    }
-    // synchronous and asynchronous receives don't make sense because they aren't waiting for a response from anything
-    return name;
 }
 
 tiramisu::recv::recv(std::string iteration_domain_str, bool schedule_this, tiramisu::communication_prop chan, tiramisu::function *fct)
