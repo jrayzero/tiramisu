@@ -7930,9 +7930,9 @@ std::string create_send_func_name(const communication_prop chan) {
         if (chan.contains_attr(SYNC) && chan.contains_attr(BLOCK)) {
             name += "_Ssend";
         } else if (chan.contains_attr(SYNC) && chan.contains_attr(NONBLOCK)) {
-            name += "_Send";
-        } else if (chan.contains_attr(ASYNC) && chan.contains_attr(BLOCK)) {
             name += "_Issend";
+        } else if (chan.contains_attr(ASYNC) && chan.contains_attr(BLOCK)) {
+            name += "_Send";
         } else if (chan.contains_attr(ASYNC) && chan.contains_attr(NONBLOCK)) {
             name += "_Isend";
         }
