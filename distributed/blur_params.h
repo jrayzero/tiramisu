@@ -17,8 +17,8 @@
 #define DISTRIBUTE
 #define CHECK_RESULTS
 
-#define ROWS 100
-#define COLS 100
+#define ROWS 60000
+#define COLS 10
 #if defined(CPU_ONLY) || defined(HYBRID)
 #define T_LOOP_ITER_TYPE tiramisu::p_int64
 #define C_LOOP_ITER_TYPE int64_t

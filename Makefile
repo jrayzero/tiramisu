@@ -4,19 +4,20 @@ include configure_paths.sh
 
 ISL_INCLUDE_DIRECTORY=3rdParty/isl/build/include
 ISL_LIB_DIRECTORY=3rdParty/isl/build/lib
-CXX = mpicxx
+CXX = mpicxx -m64
 NVCC = nvcc
-CXXFLAGS = -g -std=c++11 -O3 -Wall -Wno-sign-compare -fno-rtti -fvisibility=hidden -march=corei7-avx -mtune=corei7-avx -fopenmp -DNODES=${MPI_NODES} -DPROCS=${MPI_PROCS}
-NVCCFLAGS = -ccbin ${NVCC_CLANG} -g -std=c++11 -O3 -Xcompiler -Wall -Xcompiler -fPIC -Xcompiler -Wno-sign-compare -Xcompiler -fno-rtti -Xcompiler -fvisibility=hidden -Xcompiler -march=corei7-avx -Xcompiler -mtune=corei7-avx
+CXXFLAGS = -g -std=c++11 -O3 -Wall -Wno-sign-compare -fno-rtti -fvisibility=hidden -march=corei7-avx -mtune=corei7-avx -fopenmp -DNODES=${MPI_NODES} -DPROCS=${MPI_PROCS} #-DUSE_HALIDE_DEV_COPIES
+NVCCFLAGS = -ccbin ${NVCC_CLANG} -g -std=c++11 -Xcompiler -Wall -Xcompiler -fPIC -Xcompiler -Wno-sign-compare -Xcompiler -fno-rtti -Xcompiler -fvisibility=hidden -Xcompiler -march=corei7-avx -Xcompiler -mtune=corei7-avx
 INCLUDES = -Iinclude/ -I${ISL_INCLUDE_DIRECTORY} -I${HALIDE_SOURCE_DIRECTORY}/include -I${HALIDE_SOURCE_DIRECTORY}/tools -Ibuild/ -I3rdParty/isl/include -I/data/scratch/jray/anaconda2/include/ -I/usr/local/cuda-7.5/targets/x86_64-linux/include/
-LIBRARIES = -Lbuild/ -L${ISL_LIB_DIRECTORY} -L3rdParty/isl/.libs -lisl -lgmp -L${HALIDE_LIB_DIRECTORY} -L/usr/local/cuda-7.5/targets/x86_64-linux/lib/ -lHalide -lmpi_cxx -ldl -lpthread -lz -lcudart `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
+LIBRARIES = -Lbuild/ -L${ISL_LIB_DIRECTORY} -L3rdParty/isl/.libs -lisl -lgmp -L${HALIDE_LIB_DIRECTORY} -L/usr/local/cuda-7.5/targets/x86_64-linux/lib/ -lHalide -lmpi_cxx -ldl -lpthread -lz -lcuda -lcudart `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
 HEADER_FILES = \
 	include/tiramisu/core.h \
 	include/tiramisu/debug.h \
 	include/tiramisu/utils.h \
 	include/tiramisu/expr.h \
 	include/tiramisu/type.h \
-	include/tiramisu/tiramisu_cuda.h
+	include/tiramisu/tiramisu_cuda.h \
+	include/tiramisu/tiramisu_mpi.h
 
 OBJ = \
 	build/tiramisu_expr.o \
@@ -27,7 +28,8 @@ OBJ = \
 	build/tiramisu_utils.o \
 	build/tiramisu_codegen_halide_lowering.o \
 	build/tiramisu_codegen_from_halide.o \
-	build/tiramisu_cuda.o
+	build/tiramisu_cuda.o \
+	build/tiramisu_mpi.o
 
 TUTO_GEN = \
 	build/tutorial_01_fct_generator \
@@ -411,6 +413,23 @@ build/blur_generator: distributed/blur.cpp
 build/generated_blur_dist.o: build/blur_generator
 build/blur: distributed/wrapper_blur.cpp build/blur_generator build/generated_blur_dist.o distributed/wrapper_blur.h ${OBJ} ${HEADER_FILES} distributed/blur_params.h
 	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
+dsimple: $(OBJ) build/simple_generator build/simple
+build/simple_generator: distributed/simple.cpp 
+	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $@
+build/generated_simple_dist.o: build/simple_generator
+build/simple: distributed/wrapper_simple.cpp build/simple_generator build/generated_simple_dist.o distributed/wrapper_simple.h ${OBJ} ${HEADER_FILES} distributed/simple_params.h
+	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
+ddirt_simple: $(OBJ) build/dirt_simple_generator build/dirt_simple
+build/dirt_simple_generator: distributed/dirt_simple.cpp 
+	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $@
+build/generated_dirt_simple_dist.o: build/dirt_simple_generator
+build/dirt_simple: distributed/wrapper_dirt_simple.cpp build/dirt_simple_generator build/generated_dirt_simple_dist.o distributed/wrapper_dirt_simple.h ${OBJ} ${HEADER_FILES} distributed/dirt_simple_params.h
+	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
 
 # dblurxy
 dblurxy: $(OBJ) build/dblurxy_fct_generator build/dblurxy

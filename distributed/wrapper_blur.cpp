@@ -26,7 +26,11 @@ int main() {
 
 #ifdef GPU_ONLY
     std::cerr << "My rank is " << rank << std::endl;
-    halide_set_gpu_device(rank);
+    if (rank < NODES) {
+      halide_set_gpu_device(0);
+    } else {
+      halide_set_gpu_device(1);
+    }
     // TODO build a tiramisu wrapper for this
 #endif
     
@@ -37,23 +41,29 @@ int main() {
 #else
 #endif
     Halide::Buffer<C_DATA_TYPE> buff_input = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc + 2);
+#ifdef DISTRIBUTE
+    Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS - 2, (rank == PROCS - 1) ? rows_per_proc - 2 : rows_per_proc);
+    Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS - 2, (rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2);   
+    buff_input.device_malloc(halide_cuda_device_interface());
+    buff_bx.device_malloc(halide_cuda_device_interface());
+    buff_output.device_malloc(halide_cuda_device_interface());
+#endif
     C_DATA_TYPE next = 0;
     for (int y = 0; y < rows_per_proc; y++) {
         for (int x = 0; x < COLS; x++) {
-          buff_input(x,y) = rank * rows_per_proc * COLS + next++;
+          buff_input(x,y) = next++;
         }
     }
-    if (rank % PROCS != 1) { // need to fill up the last two rows with the first two rows of next rank on the machine. We'll just assume we can algorithmically generate it here
+    if (rank < NODES) { // need to fill up the last two rows with the first two rows of next rank on the machine. We'll just assume we can algorithmically generate it here
       next = 0;
       for (int y = rows_per_proc; y < rows_per_proc + 2; y++) {
         for (int x = 0; x < COLS; x++) {
-          buff_input(x,y) = (rank+1) * rows_per_proc * COLS + next++;
+          buff_input(x,y) = next++;
         }
       }      
     }
 
 #ifdef DISTRIBUTE
-    Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS - 2, (rank == PROCS - 1) ? rows_per_proc - 2 : rows_per_proc);
 #else
 
     Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS - 2, rows_per_proc - 2);
@@ -61,44 +71,15 @@ int main() {
 #ifdef CPU_ONLY
     blur_dist(buff_input.raw_buffer(), buff_output.raw_buffer());
 #elif defined(GPU_ONLY)
-    // make a temporary gpu buffer for input, bx, and by
-    /*    C_DATA_TYPE *dinput, *dbx, *dby;
-    int dinput_dim_0 = rows_per_proc + 2;
-    int dinput_dim_1 = COLS;
-    int dbx_dim_0 = rank == PROCS - 1 ? rows_per_proc : rows_per_proc + 2;
-    int dbx_dim_1 = COLS - 2;
-    int dby_dim_0 = rank == PROCS - 1 ? rows_per_proc - 2 : rows_per_proc;
-    int dby_dim_1 = COLS - 2;
-    tiramisu_cuda_malloc((void**)&dinput, dinput_dim_0 * dinput_dim_1 * sizeof(C_DATA_TYPE));
-    tiramisu_cuda_malloc((void**)&dbx, dbx_dim_0 * dbx_dim_1 * sizeof(C_DATA_TYPE));
-    tiramisu_cuda_malloc((void**)&dby, dby_dim_0 * dby_dim_1 * sizeof(C_DATA_TYPE));*/
-    /*    Halide::Buffer<C_DATA_TYPE> buff_dinput = Halide::Buffer<C_DATA_TYPE>(dinput, {dinput_dim_1, dinput_dim_0});
-    Halide::Buffer<C_DATA_TYPE> buff_dbx = Halide::Buffer<C_DATA_TYPE>(dbx, {dbx_dim_1, dbx_dim_0});
-    Halide::Buffer<C_DATA_TYPE> buff_dby = Halide::Buffer<C_DATA_TYPE>(dby, {dby_dim_1, dby_dim_0});
-    halide_buffer_t *raw_buff_input = buff_input.raw_buffer();
-    halide_buffer_t *raw_buff_dinput = buff_dinput.raw_buffer();
-    halide_buffer_t *raw_buff_dbx = buff_dbx.raw_buffer();
-    halide_buffer_t *raw_buff_dby = buff_dby.raw_buffer();
-    halide_buffer_t *raw_buff_output = buff_output.raw_buffer();
-    // set the GPU buffer here
-    raw_buff_dinput->device = (uint64_t)dinput;
-    raw_buff_dbx->device = (uint64_t)dbx;
-    raw_buff_dby->device = (uint64_t)dby;
-    raw_buff_dinput->device_interface = halide_cuda_device_interface();
-    raw_buff_dbx->device_interface = halide_cuda_device_interface();
-    raw_buff_dby->device_interface = halide_cuda_device_interface();
-    //    raw_buff_dinput->device_interface->impl->use_module();
-    //    raw_buff_dbx->device_interface->impl->use_module();
-    //    raw_buff_dby->device_interface->impl->user_module();
-    */
-    Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS - 2, (rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2);   
-    buff_input.device_malloc(halide_cuda_device_interface());
-    buff_bx.device_malloc(halide_cuda_device_interface());
-    buff_output.device_malloc(halide_cuda_device_interface());
+
     blur_dist_gpu(buff_input.raw_buffer(), buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());
     buff_output.raw_buffer()->set_device_dirty(false);
 #endif
     
+    std::cerr << "buff_input size in bytes for rank " << rank << " is " << buff_input.size_in_bytes() << std::endl;
+    std::cerr << "buff_output size in bytes for rank " << rank << " is " << buff_output.size_in_bytes() << std::endl;
+    std::cerr << "buff_bx size in bytes for rank " << rank << " is " << buff_bx.size_in_bytes() << std::endl;
+
 #ifdef DISTRIBUTE
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
@@ -115,7 +96,6 @@ int main() {
 #elif defined(GPU_ONLY)        
         blur_dist_gpu(buff_input.raw_buffer(), buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());
         buff_output.raw_buffer()->set_device_dirty(false);
-        //        blur_dist_gpu(buff_input.raw_buffer(), buff_dinput.raw_buffer(), buff_dbx.raw_buffer(), buff_dby.raw_buffer(), buff_output.raw_buffer());
 #endif
 #ifdef DISTRIBUTE
         MPI_Barrier(MPI_COMM_WORLD);
@@ -159,11 +139,6 @@ int main() {
     if (rank == 0) {
       print_time("performance_CPU.csv", "blur_dist", {"Tiramisu_dist"}, {median(duration_vector)});
         std::cout.flush();
-#ifdef GPU_ONLY
-        //        tiramisu_cuda_free(dinput);
-        //        tiramisu_cuda_free(dbx);
-        //        tiramisu_cuda_free(dby);
-#endif
         
 #if defined(CHECK_RESULTS) && defined(DISTRIBUTE)
  // combine the rank files together
@@ -181,6 +156,9 @@ int main() {
         next = 0;
         Halide::Buffer<C_DATA_TYPE> full_input = Halide::Buffer<C_DATA_TYPE>(COLS, ROWS);
         for (int y = 0; y < ROWS; y++) {
+            if (y % rows_per_proc == 0) {
+              next = 0;
+            }
             for (int x = 0; x < COLS; x++) {
                 full_input(x, y) = next++;
             }
@@ -189,11 +167,11 @@ int main() {
 	std::cerr << "Comparing" << std::endl;
         for (int r = 0; r < ROWS - 2; r++) {
             for (int c = 0; c < COLS - 2; c++) {
-              C_DATA_TYPE should_be = (C_DATA_TYPE)((full_input(c,r) + full_input(c+1, r) + full_input(c+2, r) + full_input(c, r+1) +
+              C_DATA_TYPE should_be = std::floor((C_DATA_TYPE)((full_input(c,r) + full_input(c+1, r) + full_input(c+2, r) + full_input(c, r+1) +
                                                       full_input(c, r+2) + full_input(c+1, r+1) + full_input(c+1, r+2) + full_input(c+2, r+1) +
-                                        full_input(c+2, r+2)) / (C_DATA_TYPE)9);
-              C_DATA_TYPE is = got[idx++];
-              if (should_be != is) {
+                                                                full_input(c+2, r+2)) / (C_DATA_TYPE)9));
+              C_DATA_TYPE is = std::floor(got[idx++]);
+              if (std::fabs(should_be - is) > 0.0f) {
                 std::cerr << "Mismatch at row " << r << " column " << c << ". Should be " << should_be << ", but is " << is << std::endl;
                 assert(false);
               }

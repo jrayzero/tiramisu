@@ -146,7 +146,7 @@ int main() {
                     "[cols, nodes]->{bx_exchange_s[q,y,x]: 1<=q<nodes and 0<=y<2 and 0<=x<cols and nodes>1}",
                     "[cols, nodes]->{bx_exchange_r[q,y,x]: nodes<=q<nodes*2-1 and 0<=y<2 and 0<=x<cols and nodes>1}",
                     q + nodes - (C_LOOP_ITER_TYPE)1, q - nodes + (C_LOOP_ITER_TYPE)1, h2h_mpi_async, h2h_mpi_sync,
-                    bx(y, x), &blur_dist);
+                    blur_input(y, x), &blur_dist);
 
     // Need an  CPU-GPU transfer for each input
     xfer input_cpu_to_gpu =
@@ -214,7 +214,7 @@ int main() {
     by.set_access("{by[y, x]->buff_by_gpu[y, x]}");
 
 
-    bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_bx_gpu[" + std::to_string(rows_per_proc) + " + y, x]}");
+    bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_input[" + std::to_string(rows_per_proc) + " + y, x]}");
     input_cpu_to_gpu.os->set_access("{input_cpu_to_gpu_os[q,y,x]->buff_input_gpu[y,x]}");
     gpu_to_cpu.os->set_access("{gpu_to_cpu[q,y,x]->buff_by[y,x]}");
     blur_dist.set_arguments({&buff_input, &buff_input_gpu, &buff_bx_gpu, &buff_by_gpu, &buff_by});
