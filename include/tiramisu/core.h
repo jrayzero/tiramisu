@@ -4064,6 +4064,8 @@ public:
 
     tiramisu::expr get_num_elements() const;
 
+    void set_req_access(std::string req_access_map_str);
+
 };
 
 class one_sided : public communicator {
@@ -4190,10 +4192,6 @@ public:
                                  tiramisu::function *fct) override;
 
     virtual bool is_wait() const override;
-
-    virtual void set_access(std::string access_str) override;
-
-    virtual void set_access(isl_map *access) override;
 
 };
 
