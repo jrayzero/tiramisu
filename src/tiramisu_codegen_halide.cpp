@@ -2280,10 +2280,10 @@ void function::gen_halide_stmt()
         Halide::Expr mpi_rank_var =
                 Halide::Internal::Variable::make(halide_type_from_tiramisu_type(tiramisu::p_int32), "rank");
         Halide::Expr mpi_rank = Halide::cast(halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()),
-                                             Halide::Internal::Call::make(Halide::Int(32), Halide::Internal::Call::mrank,
+                                             Halide::Internal::Call::make(Halide::Int(32), "tiramisu_MPI_Comm_rank",
                                                                           std::vector<Halide::Expr>(),
-                                                                          Halide::Internal::Call::Intrinsic));
-        stmt = Halide::Internal::LetStmt::make("rank", mpi_rank, stmt, true);
+                                                                          Halide::Internal::Call::Extern));
+        stmt = Halide::Internal::LetStmt::make("rank", mpi_rank, stmt);
     }
 
     // Add producer tag

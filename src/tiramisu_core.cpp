@@ -8102,12 +8102,12 @@ tiramisu::one_sided::one_sided(std::string iteration_domain_str, tiramisu::compu
     _is_library_call = true;
     library_call_name = create_send_func_name(chan);
     if (chan.contains_attr(CPU2GPU)) {
-      expr mod_rhs(tiramisu::o_address_of, rhs.get_name(), rhs.get_access(), rhs.get_data_type());
-      set_expression(mod_rhs);
+        expr mod_rhs(tiramisu::o_address_of, rhs.get_name(), rhs.get_access(), rhs.get_data_type());
+        set_expression(mod_rhs);
     } else if (chan.contains_attr(GPU2CPU)) {
-      // we will modify this again later
-      expr mod_rhs(tiramisu::o_buffer, rhs.get_name(), rhs.get_access(), rhs.get_data_type());
-      set_expression(mod_rhs);
+        // we will modify this again later
+        expr mod_rhs(tiramisu::o_buffer, rhs.get_name(), rhs.get_access(), rhs.get_data_type());
+        set_expression(mod_rhs);
     }
 }
 
@@ -8308,15 +8308,15 @@ void tiramisu::function::lift_cuda_comp(tiramisu::computation *comp) {
         tiramisu::expr xfer_type(os->get_channel().get_dtype());
         bool is_async = os->get_channel().contains_attr(ASYNC); // async CUDA is like nonblocking MPI
         if (os->get_channel().contains_attr(CPU2GPU)) {
-          os->lhs_argument_idx = 0; // dest is a device buffer
-          os->rhs_argument_idx = 1; // src is a host buffer
-          os->lhs_access_type = tiramisu::o_buffer;//tiramisu::o_address_of;
-          os->rhs_access_type = tiramisu::o_address_of;
+            os->lhs_argument_idx = 0; // dest is a device buffer
+            os->rhs_argument_idx = 1; // src is a host buffer
+            os->lhs_access_type = tiramisu::o_buffer;//tiramisu::o_address_of;
+            os->rhs_access_type = tiramisu::o_address_of;
         } else if (os->get_channel().contains_attr(GPU2CPU)) {
-          os->lhs_argument_idx = 0; // dest is a host buffer
-          os->rhs_argument_idx = 1; // src is a device buffer
-          os->lhs_access_type = tiramisu::o_address_of;
-          os->rhs_access_type = tiramisu::o_buffer;
+            os->lhs_argument_idx = 0; // dest is a host buffer
+            os->rhs_argument_idx = 1; // src is a device buffer
+            os->lhs_access_type = tiramisu::o_address_of;
+            os->rhs_access_type = tiramisu::o_buffer;
         }
 
         os->library_call_args.resize(is_async ? 5 : 4);
@@ -8384,8 +8384,8 @@ bool tiramisu::one_sided::is_one_sided() const {
 }
 
 xfer tiramisu::computation::create_xfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_dest,
-                                       tiramisu::expr recv_src, communication_prop send_chan, communication_prop recv_chan,
-                                       tiramisu::expr send_expr, tiramisu::function *fct) {
+                                        tiramisu::expr recv_src, communication_prop send_chan, communication_prop recv_chan,
+                                        tiramisu::expr send_expr, tiramisu::function *fct) {
     if (send_chan.contains_attr(MPI)) {
         assert(recv_chan.contains_attr(MPI));
     } else if (send_chan.contains_attr(CUDA)) {
@@ -8422,7 +8422,7 @@ xfer tiramisu::computation::create_xfer(std::string send_iter_domain, std::strin
 }
 
 xfer tiramisu::computation::create_xfer(std::string iter_domain_str, communication_prop chan, tiramisu::expr expr,
-                 tiramisu::function *fct) {
+                                        tiramisu::function *fct) {
     assert(expr.get_op_type() == tiramisu::o_access);
     tiramisu::computation *producer = fct->get_computation_by_name(expr.get_name())[0];
 
@@ -8509,20 +8509,20 @@ tiramisu::expr tiramisu::recv::get_msg_tag() const {
     return this->msg_tag;
 }
 
-  int get_num_bytes(primitive_t t) {
+int get_num_bytes(primitive_t t) {
     switch (t) {
-    case p_uint8: return 1;
-    case p_uint16: return 2;
-    case p_uint32: return 4;
-    case p_uint64: return 8;
-    case p_int8: return 1;
-    case p_int16: return 2;
-    case p_int32: return 4;
-    case p_int64: return 8;
-    case p_float32: return 4;
-    case p_float64: return 8;
-    case p_boolean: return 1;
+        case p_uint8: return 1;
+        case p_uint16: return 2;
+        case p_uint32: return 4;
+        case p_uint64: return 8;
+        case p_int8: return 1;
+        case p_int16: return 2;
+        case p_int32: return 4;
+        case p_int64: return 8;
+        case p_float32: return 4;
+        case p_float64: return 8;
+        case p_boolean: return 1;
     }
-  }
+}
 
 }
