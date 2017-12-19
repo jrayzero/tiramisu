@@ -597,8 +597,7 @@ void tiramisu::wait::add_definitions(std::string iteration_domain_str,
                                      bool schedule_this_computation, tiramisu::primitive_t t,
                                      tiramisu::function *fct)
 {
-    tiramisu::computation *new_c = new tiramisu::wait(iteration_domain_str, e,
-                                                      schedule_this_computation, fct);
+    tiramisu::computation *new_c = new tiramisu::wait(iteration_domain_str, e, MPI, schedule_this_computation, fct);
     new_c->is_first = false;
     new_c->first_definition = this;
     this->updates.push_back(new_c);
@@ -7813,8 +7812,8 @@ void tiramisu::computation::storage_fold(tiramisu::var L0_var, int factor)
  * Channel
  */
 
-tiramisu::communication_prop::communication_prop(std::string name, tiramisu::primitive_t dtype,
-                                                 std::initializer_list<tiramisu::channel_attr> attrs) : name(name), dtype(dtype) {
+tiramisu::communication_prop::communication_prop(tiramisu::primitive_t dtype, std::initializer_list<tiramisu::channel_attr> attrs)
+        : dtype(dtype) {
     this->attrs.insert(this->attrs.begin(), attrs);
 }
 
@@ -7835,10 +7834,6 @@ bool tiramisu::communication_prop::contains_attrs(std::vector<tiramisu::channel_
         }
     }
     return true;
-}
-
-const std::string &tiramisu::communication_prop::get_name() const {
-    return this->name;
 }
 
 tiramisu::primitive_t tiramisu::communication_prop::get_dtype() const {
@@ -8115,7 +8110,8 @@ tiramisu::one_sided::one_sided(std::string iteration_domain_str, tiramisu::compu
  * Wait
  */
 
-tiramisu::wait::wait(tiramisu::expr rhs, tiramisu::function *fct) : communicator(), rhs(rhs) {
+tiramisu::wait::wait(tiramisu::expr rhs, tiramisu::function *fct, tiramisu::channel_attr paradigm)
+        : communicator(), rhs(rhs) {
     assert(rhs.get_op_type() == tiramisu::o_access && "The RHS expression for a wait should be an access!");
     tiramisu::computation *op = fct->get_computation_by_name(rhs.get_name())[0];
     isl_set *dom = isl_set_copy(op->get_iteration_domain());
@@ -8124,11 +8120,16 @@ tiramisu::wait::wait(tiramisu::expr rhs, tiramisu::function *fct) : communicator
     init_computation(isl_set_to_str(dom), fct, rhs, true, tiramisu::p_async);
     _is_library_call = true;
     library_call_name = "wait";
+    communication_prop cp(tiramisu::p_async, {paradigm});
+    this->chan = cp;
 }
 
-tiramisu::wait::wait(std::string iteration_domain_str, tiramisu::expr rhs, bool schedule_this, tiramisu::function *fct) : communicator(iteration_domain_str, rhs, schedule_this, tiramisu::p_async, fct), rhs(rhs) {
+tiramisu::wait::wait(std::string iteration_domain_str, tiramisu::expr rhs, tiramisu::channel_attr paradigm, bool schedule_this,
+                     tiramisu::function *fct) : communicator(iteration_domain_str, rhs, schedule_this, tiramisu::p_async, fct), rhs(rhs) {
     _is_library_call = true;
     library_call_name = "wait";
+    communication_prop cp(tiramisu::p_async, {paradigm});
+    this->chan = cp;
 }
 
 wait_type tiramisu::wait::get_wait_type() const {
@@ -8326,6 +8327,7 @@ void tiramisu::function::lift_cuda_comp(tiramisu::computation *comp) {
             os->req_argument_idx = 3;
         }
     } else if (comp->is_wait()) { // stream synchronize
+        assert(false);
         wait *w = static_cast<wait *>(comp);
         w->rhs_argument_idx = 0;
         w->library_call_args.resize(1);

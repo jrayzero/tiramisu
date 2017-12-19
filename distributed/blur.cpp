@@ -133,10 +133,11 @@ int main() {
     constant rows_per_node_const("rows_per_node", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     constant procs_per_node_const("procs_per_node", expr(procs_per_node), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
-    communication_prop h2h_mpi_sync("h2h_mpi_sync", T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
-    communication_prop h2h_mpi_async("h2h_mpi_async", T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
-    communication_prop h2d_cuda("h2d_cuda", T_DATA_TYPE, {SYNC, CUDA, CPU2GPU});
-    communication_prop d2h_cuda("d2h_cuda", T_DATA_TYPE, {SYNC, CUDA, GPU2CPU});
+    communication_prop h2h_mpi_sync(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
+    communication_prop h2h_mpi_async(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
+    communication_prop h2h_mpi_async_nonblock(T_DATA_TYPE, {ASYNC, NONBLOCK, MPI, CPU2CPU});
+    communication_prop h2d_cuda(T_DATA_TYPE, {SYNC, CUDA, CPU2GPU});
+    communication_prop d2h_cuda(T_DATA_TYPE, {SYNC, CUDA, GPU2CPU});
 
     // Minimal communication scheme
 
@@ -145,7 +146,7 @@ int main() {
             computation::create_xfer(
                     "[cols, nodes]->{bx_exchange_s[q,y,x]: 1<=q<nodes and 0<=y<2 and 0<=x<cols and nodes>1}",
                     "[cols, nodes]->{bx_exchange_r[q,y,x]: nodes<=q<nodes*2-1 and 0<=y<2 and 0<=x<cols and nodes>1}",
-                    q + nodes - (C_LOOP_ITER_TYPE)1, q - nodes + (C_LOOP_ITER_TYPE)1, h2h_mpi_async, h2h_mpi_sync,
+                    q + nodes - (C_LOOP_ITER_TYPE)1, q - nodes + (C_LOOP_ITER_TYPE)1, h2h_mpi_async_nonblock, h2h_mpi_sync,
                     blur_input(y, x), &blur_dist);
 
     // Need an  CPU-GPU transfer for each input
@@ -167,7 +168,10 @@ int main() {
                                blur_input(y, (x + expr((C_LOOP_ITER_TYPE)2)))) / expr((C_DATA_TYPE)3)),
                              true, T_DATA_TYPE, &blur_dist);
 
-    bx_exchange.s->before(*bx_exchange.r, computation::root);
+    tiramisu::wait bx_exchange_wait(bx_exchange.s->operator()(q, y, x), &blur_dist, MPI);
+
+    bx_exchange.s->before(bx_exchange_wait, computation::root);
+    bx_exchange_wait.before(*bx_exchange.r, computation::root);
     bx_exchange.r->before(*input_cpu_to_gpu.os, computation::root);
     input_cpu_to_gpu.os->before(bx, computation::root);
     bx.before(bx_recompute, computation::root);
@@ -181,6 +185,7 @@ int main() {
     bx_recompute.tag_distribute_level(q);
     by.tag_distribute_level(y1);
     gpu_to_cpu.os->tag_distribute_level(q, false);
+    bx_exchange_wait.tag_distribute_level(q, false);
 
     bx.tag_gpu_level(y2, x);
     bx_recompute.tag_gpu_level(y, x);
@@ -207,16 +212,25 @@ int main() {
     tiramisu::buffer buff_by("buff_by", {by_select_dim0, tiramisu::expr(cols - 2)},
                                  T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
+    tiramisu::buffer buff_bx_exchange_wait("buff_bx_exchange_wait", {2, cols}, tiramisu::p_req_ptr,
+                                           tiramisu::a_temporary, &blur_dist);
+
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
 
     bx.set_access("{bx[y, x]->buff_bx_gpu[y, x]}");
+
     bx_recompute.set_access("{bx_recompute[q,y,x]->buff_bx_gpu[y,x]}");
+
     by.set_access("{by[y, x]->buff_by_gpu[y, x]}");
 
-
     bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_input[" + std::to_string(rows_per_proc) + " + y, x]}");
+
+    bx_exchange.s->set_req_access("{bx_exchange_s[q,y,x]->buff_bx_exchange_wait[y,x]}");
+
     input_cpu_to_gpu.os->set_access("{input_cpu_to_gpu_os[q,y,x]->buff_input_gpu[y,x]}");
+
     gpu_to_cpu.os->set_access("{gpu_to_cpu[q,y,x]->buff_by[y,x]}");
+
     blur_dist.set_arguments({&buff_input, &buff_input_gpu, &buff_bx_gpu, &buff_by_gpu, &buff_by});
     blur_dist.lift_dist_comps();
     blur_dist.gen_time_space_domain();

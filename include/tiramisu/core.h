@@ -4004,8 +4004,6 @@ class communication_prop {
     friend communicator;
 private:
 
-    std::string name;
-
     tiramisu::primitive_t dtype;
 
     std::vector<tiramisu::channel_attr> attrs;
@@ -4014,15 +4012,13 @@ private:
 
 public:
 
-    communication_prop(std::string name, tiramisu::primitive_t dtype, std::initializer_list<tiramisu::channel_attr> attrs);
+    communication_prop(tiramisu::primitive_t dtype, std::initializer_list<tiramisu::channel_attr> attrs);
 
     void add_attr(tiramisu::channel_attr attr);
 
     bool contains_attr(tiramisu::channel_attr attr) const;
 
     bool contains_attrs(std::vector<tiramisu::channel_attr> attrs) const;
-
-    const std::string &get_name() const;
 
     tiramisu::primitive_t get_dtype() const;
 
@@ -4179,9 +4175,10 @@ private:
 
 public:
 
-    wait(tiramisu::expr rhs, tiramisu::function *fct);
+    wait(tiramisu::expr rhs, tiramisu::function *fct, tiramisu::channel_attr paradigm);
 
-    wait(std::string iteration_domain_str, tiramisu::expr rhs, bool schedule_this, tiramisu::function *fct);
+    wait(std::string iteration_domain_str, tiramisu::expr rhs, tiramisu::channel_attr paradigm, bool schedule_this,
+             tiramisu::function *fct);
 
     tiramisu::wait_type get_wait_type() const;
 
