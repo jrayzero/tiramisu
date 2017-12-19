@@ -2244,10 +2244,10 @@ protected:
     int rhs_argument_idx;
 
     // TODO(Jess) document
-    int req_argument_idx;
+    int wait_argument_idx;
 
     // TODO(Jess) document
-    isl_map *req_access_map = nullptr;
+    isl_map *wait_access_map = nullptr;
 
     /**
       * By default, this becomes an o_access to signify that we are writing into a location. However, it can be changed
@@ -2456,7 +2456,7 @@ protected:
     /**
       * An index expression just for the request buffer.
       */
-    isl_ast_expr *req_index_expr = nullptr;
+    isl_ast_expr *wait_index_expr = nullptr;
 
     /**
      * Collapse all the iterations of a loop into one single iteration.
@@ -3649,8 +3649,8 @@ public:
     }
 
     static xfer create_xfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_dest,
-                               tiramisu::expr recv_src, communication_prop send_chan, communication_prop recv_chan,
-                               tiramisu::expr send_expr, tiramisu::function *fct);
+                            tiramisu::expr recv_src, communication_prop send_chan, communication_prop recv_chan,
+                            tiramisu::expr send_expr, tiramisu::function *fct);
 
     static xfer create_xfer(std::string iter_domain, communication_prop chan, tiramisu::expr expr,
                             tiramisu::function *fct);
@@ -3975,7 +3975,7 @@ enum channel_attr {
             MPI,
     CUDA,
     // Direction
-    CPU2CPU,
+            CPU2CPU,
     CPU2GPU,
     GPU2CPU,
     GPU2GPU
@@ -4010,9 +4010,18 @@ private:
 
     communication_prop();
 
+    int comm_prop_id;
+
 public:
 
     communication_prop(tiramisu::primitive_t dtype, std::initializer_list<tiramisu::channel_attr> attrs);
+
+    communication_prop(tiramisu::primitive_t dtype, std::initializer_list<tiramisu::channel_attr> attrs,
+                       int comm_prop_id);
+
+    static std::set<int> comm_prop_ids;
+
+    int get_comm_prop_id() const;
 
     void add_attr(tiramisu::channel_attr attr);
 
@@ -4030,6 +4039,8 @@ class communicator : public computation {
 private:
 
     std::vector<tiramisu::expr> dims;
+
+//    void *extra = nullptr; // for storing anything else, such as a cuda stream
 
 protected:
 
@@ -4060,7 +4071,18 @@ public:
 
     tiramisu::expr get_num_elements() const;
 
-    void set_req_access(std::string req_access_map_str);
+    void set_wait_access(std::string req_access_map_str);
+
+//    template <typename T>
+//    T *get_extra() {
+//        assert(extra && "extra == nullptr");
+//        return static_cast<T*>(extra);
+//    }
+//
+//    template <typename T>
+//    void set_extra(T *extra) {
+//        this->extra = (void*)extra;
+//    }
 
 };
 
@@ -4175,10 +4197,10 @@ private:
 
 public:
 
-    wait(tiramisu::expr rhs, tiramisu::function *fct, tiramisu::channel_attr paradigm);
+    wait(tiramisu::expr rhs, communication_prop channel, tiramisu::function *fct);
 
-    wait(std::string iteration_domain_str, tiramisu::expr rhs, tiramisu::channel_attr paradigm, bool schedule_this,
-             tiramisu::function *fct);
+    wait(std::string iteration_domain_str, tiramisu::expr rhs, communication_prop channel, bool schedule_this,
+         tiramisu::function *fct);
 
     tiramisu::wait_type get_wait_type() const;
 

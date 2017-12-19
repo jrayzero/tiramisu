@@ -39,7 +39,7 @@ enum primitive_t
     p_string,
     p_none,
     p_async,
-    p_req_ptr
+    p_wait_ptr
 };
 
 /**

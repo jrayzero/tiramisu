@@ -136,8 +136,9 @@ int main() {
     communication_prop h2h_mpi_sync(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
     communication_prop h2h_mpi_async(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
     communication_prop h2h_mpi_async_nonblock(T_DATA_TYPE, {ASYNC, NONBLOCK, MPI, CPU2CPU});
-    communication_prop h2d_cuda(T_DATA_TYPE, {SYNC, CUDA, CPU2GPU});
-    communication_prop d2h_cuda(T_DATA_TYPE, {SYNC, CUDA, GPU2CPU});
+    communication_prop h2d_cuda_sync(T_DATA_TYPE, {SYNC, CUDA, CPU2GPU});
+    communication_prop h2d_cuda_async(T_DATA_TYPE, {ASYNC, CUDA, CPU2GPU});
+    communication_prop d2h_cuda_sync(T_DATA_TYPE, {SYNC, CUDA, GPU2CPU});
 
     // Minimal communication scheme
 
@@ -152,7 +153,7 @@ int main() {
     // Need an  CPU-GPU transfer for each input
     xfer input_cpu_to_gpu =
             computation::create_xfer("[procs, rows_per_proc, cols]->{input_cpu_to_gpu_os[q,y,x]: 0<=q<procs and 0<=y<rows_per_proc+2 and 0<=x<cols}",
-                                     h2d_cuda, blur_input(y,x), &blur_dist);
+                                     h2d_cuda_async, blur_input(y,x), &blur_dist);
 
     // True because we need to insert a dummy access since the transfer has 3 dims and blur_input only has 2
     generator::update_producer_expr_name(&bx, "blur_input", "input_cpu_to_gpu_os", true);
@@ -160,7 +161,7 @@ int main() {
     // Transfer the computed data back to the CPU
     xfer gpu_to_cpu =
             computation::create_xfer("[procs, rows_per_proc_after, cols]->{gpu_to_cpu[q,y,x]: 0<=q<procs and 0<=y<rows_per_proc_after and 0<=x<cols-2}",
-                                     d2h_cuda, by(y,x), &blur_dist);
+                                     d2h_cuda_sync, by(y,x), &blur_dist);
     // We want to insert a new computation here that computes bx of the two extra rows. This gives us recomputation
     // instead of communication, which is cheaper for us. The last proc doesn't need to do anything though.
     computation bx_recompute("[rows_per_node, cols, procs]->{bx_recompute[q, y, x]: 0<=q<procs-1 and rows_per_node<=y<rows_per_node+2 and 0<=x<cols-2}", 
@@ -168,12 +169,14 @@ int main() {
                                blur_input(y, (x + expr((C_LOOP_ITER_TYPE)2)))) / expr((C_DATA_TYPE)3)),
                              true, T_DATA_TYPE, &blur_dist);
 
-    tiramisu::wait bx_exchange_wait(bx_exchange.s->operator()(q, y, x), &blur_dist, MPI);
+    tiramisu::wait bx_exchange_wait(bx_exchange.s->operator()(q, y, x), bx_exchange.s->get_channel(), &blur_dist);
+    tiramisu::wait cpu_to_gpu_wait(input_cpu_to_gpu.os->operator()(q, y, x), input_cpu_to_gpu.os->get_channel(), &blur_dist);
 
     bx_exchange.s->before(bx_exchange_wait, computation::root);
     bx_exchange_wait.before(*bx_exchange.r, computation::root);
     bx_exchange.r->before(*input_cpu_to_gpu.os, computation::root);
-    input_cpu_to_gpu.os->before(bx, computation::root);
+    input_cpu_to_gpu.os->before(cpu_to_gpu_wait, computation::root);
+    cpu_to_gpu_wait.before(bx, computation::root);
     bx.before(bx_recompute, computation::root);
     bx_recompute.before(by, computation::root);
     by.before(*gpu_to_cpu.os, computation::root);
@@ -212,7 +215,10 @@ int main() {
     tiramisu::buffer buff_by("buff_by", {by_select_dim0, tiramisu::expr(cols - 2)},
                                  T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
-    tiramisu::buffer buff_bx_exchange_wait("buff_bx_exchange_wait", {2, cols}, tiramisu::p_req_ptr,
+    tiramisu::buffer buff_bx_exchange_wait("buff_bx_exchange_wait", {2, cols}, tiramisu::p_wait_ptr,
+                                           tiramisu::a_temporary, &blur_dist);
+
+    tiramisu::buffer buff_cpu_to_gpu_wait("buff_cpu_to_gpu_wait", {rows_per_proc+2, cols}, tiramisu::p_wait_ptr,
                                            tiramisu::a_temporary, &blur_dist);
 
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
@@ -225,9 +231,11 @@ int main() {
 
     bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_input[" + std::to_string(rows_per_proc) + " + y, x]}");
 
-    bx_exchange.s->set_req_access("{bx_exchange_s[q,y,x]->buff_bx_exchange_wait[y,x]}");
+    bx_exchange.s->set_wait_access("{bx_exchange_s[q,y,x]->buff_bx_exchange_wait[y,x]}");
 
     input_cpu_to_gpu.os->set_access("{input_cpu_to_gpu_os[q,y,x]->buff_input_gpu[y,x]}");
+
+    input_cpu_to_gpu.os->set_wait_access("{input_cpu_to_gpu_os[q,y,x]->buff_cpu_to_gpu_wait[y,x]}");
 
     gpu_to_cpu.os->set_access("{gpu_to_cpu[q,y,x]->buff_by[y,x]}");
 

@@ -597,7 +597,7 @@ void tiramisu::wait::add_definitions(std::string iteration_domain_str,
                                      bool schedule_this_computation, tiramisu::primitive_t t,
                                      tiramisu::function *fct)
 {
-    tiramisu::computation *new_c = new tiramisu::wait(iteration_domain_str, e, MPI, schedule_this_computation, fct);
+    tiramisu::computation *new_c = new tiramisu::wait(iteration_domain_str, e, this->chan, schedule_this_computation, fct);
     new_c->is_first = false;
     new_c->first_definition = this;
     this->updates.push_back(new_c);
@@ -6735,7 +6735,7 @@ Halide::Type halide_type_from_tiramisu_type(tiramisu::primitive_t type)
         case tiramisu::p_boolean:
             t = Halide::Bool();
             break;
-        case tiramisu::p_req_ptr:
+        case tiramisu::p_wait_ptr:
             t = Halide::Handle();
             break;
         default:
@@ -6798,10 +6798,10 @@ void tiramisu::computation::init_computation(std::string iteration_space_str,
     this->lhs_access_type = tiramisu::o_access;
     this->lhs_argument_idx = -1;
     this->rhs_argument_idx = -1;
-    this->req_argument_idx = -1;
+    this->wait_argument_idx = -1;
     this->_is_library_call = false;
-    this->req_access_map = nullptr;
-    this->req_index_expr = nullptr;
+    this->wait_access_map = nullptr;
+    this->wait_index_expr = nullptr;
 
     // In the constructor of computations, we assume that every created
     // computation is the first computation, then, if this computation
@@ -6898,10 +6898,10 @@ tiramisu::computation::computation()
     this->lhs_access_type = tiramisu::o_access;
     this->lhs_argument_idx = -1;
     this->rhs_argument_idx = -1;
-    this->req_argument_idx = -1;
+    this->wait_argument_idx = -1;
     this->_is_library_call = false;
-    this->req_access_map = nullptr;
-    this->req_index_expr = nullptr;
+    this->wait_access_map = nullptr;
+    this->wait_index_expr = nullptr;
     predicate = tiramisu::expr();
 }
 
@@ -7812,12 +7812,27 @@ void tiramisu::computation::storage_fold(tiramisu::var L0_var, int factor)
  * Channel
  */
 
-tiramisu::communication_prop::communication_prop(tiramisu::primitive_t dtype, std::initializer_list<tiramisu::channel_attr> attrs)
-        : dtype(dtype) {
+std::set<int> tiramisu::communication_prop::comm_prop_ids;
+
+tiramisu::communication_prop::communication_prop(tiramisu::primitive_t dtype,
+                                                 std::initializer_list<tiramisu::channel_attr> attrs)
+        : dtype(dtype), comm_prop_id(0) {
     this->attrs.insert(this->attrs.begin(), attrs);
+    comm_prop_ids.insert(0);
 }
 
-communication_prop::communication_prop() { }
+tiramisu::communication_prop::communication_prop(tiramisu::primitive_t dtype,
+                                                 std::initializer_list<tiramisu::channel_attr> attrs,
+                                                 int comm_prop_id) : dtype(dtype), comm_prop_id(comm_prop_id) {
+    this->attrs.insert(this->attrs.begin(), attrs);
+    comm_prop_ids.insert(comm_prop_id);
+}
+
+tiramisu::communication_prop::communication_prop() { }
+
+int tiramisu::communication_prop::get_comm_prop_id() const {
+    return comm_prop_id;
+}
 
 void tiramisu::communication_prop::add_attr(tiramisu::channel_attr attr) {
     attrs.push_back(attr);
@@ -7965,7 +7980,7 @@ std::string create_send_func_name(const communication_prop chan) {
         }
         return name;
     } else if (chan.contains_attr(CUDA)) {
-        std::string name = "htiramisu_cuda_memcpy";
+        std::string name = "tiramisu_cuda_memcpy";
         if (chan.contains_attr(CPU2CPU)) {
             name += "_h2h";
         } else if (chan.contains_attr(CPU2GPU)) {
@@ -8110,7 +8125,7 @@ tiramisu::one_sided::one_sided(std::string iteration_domain_str, tiramisu::compu
  * Wait
  */
 
-tiramisu::wait::wait(tiramisu::expr rhs, tiramisu::function *fct, tiramisu::channel_attr paradigm)
+tiramisu::wait::wait(tiramisu::expr rhs, communication_prop channel, tiramisu::function *fct)
         : communicator(), rhs(rhs) {
     assert(rhs.get_op_type() == tiramisu::o_access && "The RHS expression for a wait should be an access!");
     tiramisu::computation *op = fct->get_computation_by_name(rhs.get_name())[0];
@@ -8119,17 +8134,14 @@ tiramisu::wait::wait(tiramisu::expr rhs, tiramisu::function *fct, tiramisu::chan
     dom = isl_set_set_tuple_name(dom, new_name.c_str());
     init_computation(isl_set_to_str(dom), fct, rhs, true, tiramisu::p_async);
     _is_library_call = true;
-    library_call_name = "wait";
-    communication_prop cp(tiramisu::p_async, {paradigm});
-    this->chan = cp;
+    this->chan = channel;
 }
 
-tiramisu::wait::wait(std::string iteration_domain_str, tiramisu::expr rhs, tiramisu::channel_attr paradigm, bool schedule_this,
+tiramisu::wait::wait(std::string iteration_domain_str, tiramisu::expr rhs, communication_prop channel,
+                     bool schedule_this,
                      tiramisu::function *fct) : communicator(iteration_domain_str, rhs, schedule_this, tiramisu::p_async, fct), rhs(rhs) {
     _is_library_call = true;
-    library_call_name = "wait";
-    communication_prop cp(tiramisu::p_async, {paradigm});
-    this->chan = cp;
+    this->chan = channel;
 }
 
 wait_type tiramisu::wait::get_wait_type() const {
@@ -8273,7 +8285,7 @@ void tiramisu::function::lift_mpi_comp(tiramisu::computation *comp) {
         s->library_call_args[4] = send_type;
         if (isnonblock) {
             // This additional RHS argument is to the request buffer. It is really more of a side effect.
-            s->req_argument_idx = 5;
+            s->wait_argument_idx = 5;
         }
     } else if (comp->is_recv()) {
         recv *r = static_cast<recv *>(comp);
@@ -8291,12 +8303,13 @@ void tiramisu::function::lift_mpi_comp(tiramisu::computation *comp) {
         r->lhs_access_type = tiramisu::o_address_of;
         if (isnonblock) {
             // This RHS argument is to the request buffer. It is really more of a side effect.
-            r->req_argument_idx = 5;
+            r->wait_argument_idx = 5;
         }
     } else if (comp->is_wait()) {
         wait *w = static_cast<wait *>(comp);
         w->rhs_argument_idx = 0;
         w->library_call_args.resize(1);
+        w->library_call_name = "tiramisu_MPI_Wait";
     }
 }
 
@@ -8320,17 +8333,19 @@ void tiramisu::function::lift_cuda_comp(tiramisu::computation *comp) {
             os->rhs_access_type = tiramisu::o_buffer;
         }
 
-        os->library_call_args.resize(is_async ? 5 : 4);
+        os->library_call_args.resize(is_async ? 6 : 4);
         os->library_call_args[2] = tiramisu::expr(tiramisu::o_cast, p_int32, num_elements * get_num_bytes(comp->get_data_type()));
         if (is_async) {
-            // This additional RHS argument is to the request buffer. It is really more of a side effect.
-            os->req_argument_idx = 3;
+            // This additional RHS argument is for the stream
+            os->wait_argument_idx = 5;
+            os->library_call_args[4] = os->get_channel().get_comm_prop_id();
         }
     } else if (comp->is_wait()) { // stream synchronize
-        assert(false);
         wait *w = static_cast<wait *>(comp);
-        w->rhs_argument_idx = 0;
-        w->library_call_args.resize(1);
+        w->rhs_argument_idx = 0; // this argument becomes the wait buffer
+        w->library_call_args.resize(2);
+        w->library_call_args[1] = w->get_channel().get_comm_prop_id();
+        w->library_call_name = "tiramisu_cuda_stream_wait_event";
     }
 }
 
@@ -8491,8 +8506,8 @@ bool tiramisu::computation::should_drop_rank_iter() const {
     return this->drop_rank_iter_from_index;
 }
 
-void tiramisu::communicator::set_req_access(std::string req_access_map_str) {
-    this->req_access_map = isl_map_read_from_str(this->get_ctx(), req_access_map_str.c_str());
+void tiramisu::communicator::set_wait_access(std::string req_access_map_str) {
+    this->wait_access_map = isl_map_read_from_str(this->get_ctx(), req_access_map_str.c_str());
 }
 
 void tiramisu::computation::set_schedule_this_comp(bool should_schedule) {
