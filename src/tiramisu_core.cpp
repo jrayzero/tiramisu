@@ -8489,8 +8489,12 @@ bool tiramisu::computation::should_drop_rank_iter() const {
     return this->drop_rank_iter_from_index;
 }
 
-void tiramisu::communicator::set_req_access(std::string req_access_map_str) {
-    this->req_access_map = isl_map_read_from_str(this->get_ctx(), req_access_map_str.c_str());
+void tiramisu::wait::set_access(std::string access_str) {
+    this->set_access(isl_map_read_from_str(this->get_ctx(), access_str.c_str()));
+}
+
+void tiramisu::wait::set_access(isl_map *access) {
+    this->req_access_map = isl_map_copy(access);
 }
 
 void tiramisu::computation::set_schedule_this_comp(bool should_schedule) {
