@@ -73,9 +73,10 @@ int main() {
     constant nodes_const("nodes", expr(nodes), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
     var y1("y1"), y2("y2"), q("q");
-
+#ifdef DISTRIBUTE
     bx.split(y, rows_per_proc, y1, y2);
     by.split(y, rows_per_proc, y1, y2);
+#endif
 
 #ifdef CPU_ONLY
 #ifdef DISTRIBUTE
