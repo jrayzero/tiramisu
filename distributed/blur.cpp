@@ -78,8 +78,9 @@ int main() {
     by.split(y, rows_per_proc, y1, y2);
 
 #ifdef CPU_ONLY
-    communication_prop sync_block("sync_block_MPI", T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
-    communication_prop async_block("async_block_MPI", T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
+#ifdef DISTRIBUTE
+    communication_prop sync_block(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
+    communication_prop async_block(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
     // transfer the computed rows from bx
     xfer bx_exchange = computation::create_xfer("[procs, cols]->{bx_exchange_s[q,y,x]: 1<=q<procs and 0<=y<2 and 0<=x<cols-2 and procs>1}",
                                                 "[procs, cols]->{bx_exchange_r[q,y,x]: 0<=q<procs-1 and 0<=y<2 and 0<=x<cols-2 and procs>1}",
@@ -119,8 +120,25 @@ int main() {
 
     bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_bx[" + std::to_string(rows_per_proc) + " + y, x]}");
 
-    blur_dist.set_arguments({&buff_input, &buff_by});
     blur_dist.lift_dist_comps();
+#else
+    bx.before(by, computation::root);
+    tiramisu::buffer buff_input("buff_input", {tiramisu::expr(rows_per_proc), tiramisu::expr(cols)}, T_DATA_TYPE,
+                                tiramisu::a_input, &blur_dist);
+
+    tiramisu::buffer buff_bx("buff_bx", {rows, tiramisu::expr(cols - 2)},
+                             T_DATA_TYPE, tiramisu::a_temporary, &blur_dist);
+
+    tiramisu::buffer buff_by("buff_by", {rows, tiramisu::expr(cols - 2)},
+                             T_DATA_TYPE, tiramisu::a_output, &blur_dist);
+
+    blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
+
+    bx.set_access("{bx[y, x]->buff_bx[y, x]}");
+    by.set_access("{by[y, x]->buff_by[y, x]}");
+
+#endif
+    blur_dist.set_arguments({&buff_input, &buff_by});
     blur_dist.gen_time_space_domain();
     blur_dist.gen_isl_ast();
     blur_dist.gen_halide_stmt();

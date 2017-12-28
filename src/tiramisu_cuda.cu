@@ -136,8 +136,8 @@ void tiramisu_cuda_stream_destroy(cudaStream_t stream) {
     assert(cudaStreamDestroy(stream) == 0 && "tiramisu_cuda_stream_destroy failed");
 }
 
-void tiramisu_cuda_stream_wait_event(cudaStream_t stream, cudaEvent_t event) {
-    assert(cudaStreamWaitEvent(stream, event, 0) == 0 "tiramisu_cuda_stream_wait_event");
+void _tiramisu_cuda_stream_wait_event(cudaStream_t stream, cudaEvent_t event) {
+    assert(cudaStreamWaitEvent(stream, event, 0) == 0 && "tiramisu_cuda_stream_wait_event");
 }
 
 cudaEvent_t tiramisu_cuda_event_create() {
