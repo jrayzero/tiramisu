@@ -5273,17 +5273,17 @@ tiramisu::expr utility::extract_bound_expression(isl_ast_node *node, int dim, bo
                     isl_val *one = isl_val_one(isl_ast_node_get_ctx(node));
                     // Add 1 to the ISL ast upper bound to transform it into a strinct bound.
                     result = tiramisu_expr_from_isl_ast_expr(isl_ast_expr_sub(isl_ast_expr_get_op_arg(cond, 1),
-                                                                              isl_ast_expr_from_val(one)));
+                                                                              isl_ast_expr_from_val(one)), true);
                 }
                 else if (isl_ast_expr_get_op_type(cond) == isl_ast_op_le)
                 {
-                    result = tiramisu_expr_from_isl_ast_expr(isl_ast_expr_get_op_arg(cond, 1));
+                  result = tiramisu_expr_from_isl_ast_expr(isl_ast_expr_get_op_arg(cond, 1), true);
                 }
             }
             else
             {
                 isl_ast_expr *init = isl_ast_node_for_get_init(node);
-                result = tiramisu_expr_from_isl_ast_expr(init);
+                result = tiramisu_expr_from_isl_ast_expr(init, true);
             }
         }
         else
@@ -5505,14 +5505,18 @@ bool computation::separateAndSplit(tiramisu::var L0_var, int v,
     int original_depth = this->compute_maximal_AST_depth();
 
     tiramisu::expr loop_upper_bound =
-            tiramisu::utility::get_bound(this->get_trimmed_time_processor_domain(),
-                                         L0, true);
+tiramisu::utility::get_bound(this->get_trimmed_time_processor_domain(),
+                                                                                                           L0, true);
 
     tiramisu::expr loop_lower_bound =
-            tiramisu::utility::get_bound(this->get_trimmed_time_processor_domain(),
-                                         L0, false);
+      tiramisu::utility::get_bound(this->get_trimmed_time_processor_domain(),
+                                                                                                           L0, false);
 
-    tiramisu::expr loop_bound = loop_upper_bound - loop_lower_bound + tiramisu::expr((int32_t) 1);
+    tiramisu::expr loop_bound;
+    if (global::get_loop_iterator_data_type() == tiramisu::p_int32) 
+      loop_bound = loop_upper_bound - loop_lower_bound + tiramisu::expr((int32_t) 1);
+    else 
+      loop_bound = loop_upper_bound - loop_lower_bound + tiramisu::expr((int64_t) 1);
     loop_bound = loop_bound.simplify();
 
     DEBUG(3, tiramisu::str_dump("Loop bound for the loop to be separated and split: "); loop_bound.dump(false));
@@ -5709,7 +5713,7 @@ void computation::split(int L0, int sizeX)
             map = map + ",";
         }
     }
-
+    if (global::get_loop_iterator_data_type() == p_int64)
     map = map + "] : " + dimensions_str[0] + " = " + std::to_string(duplicate_ID) + " and " +
           outDim0_str + " = floor(" + inDim0_str + "/" +
           std::to_string(sizeX) + ") and " + outDim1_str + " = (" +

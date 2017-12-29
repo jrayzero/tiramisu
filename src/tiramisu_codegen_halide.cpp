@@ -1552,7 +1552,7 @@ Halide::Expr halide_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, bool convert_
                 result = Halide::Internal::Min::make(op0, op1);
                 break;
             case isl_ast_op_minus:
-                result = Halide::Internal::Sub::make(Halide::Expr(0), op0);
+              result = Halide::Internal::Sub::make(Halide::cast(op0.type(), Halide::Expr(0)), op0);
                 break;
             case isl_ast_op_add:
                 result = Halide::Internal::Add::make(op0, op1);
@@ -1912,7 +1912,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
 
                     // Currently we assume that when vectorization is used,
                     // then the original loop extent is > vector_length.
-                    cond_upper_bound_halide_format = Halide::Expr(vector_length);
+                    cond_upper_bound_halide_format = Halide::cast(halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()), Halide::Expr(vector_length));
                     fortype = Halide::Internal::ForType::Vectorized;
                     DEBUG(3, tiramisu::str_dump("Loop vectorized"));
 
