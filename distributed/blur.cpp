@@ -47,19 +47,19 @@ int main() {
     // Layer I
     // -------------------------------------------------------
 
-    var y("y"), x("x");
+    var y(T_LOOP_ITER_TYPE, "y"), x(T_LOOP_ITER_TYPE, "x");
     constant rows_const("rows", expr(rows), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     constant cols_const("cols", expr(cols), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
     computation blur_input("[rows, cols]->{blur_input[i1, i0]: 0<=i1<rows and 0<=i0<cols}", expr(), false,
                            T_DATA_TYPE, &blur_dist);
-
-    computation bx("[rows, cols]->{bx[y, x]: 0<=y<rows and 0<=x<cols-2}",
+    // compute more than is needed, just to make the comp a little easier
+    computation bx("[rows, cols]->{bx[y, x]: 0<=y<rows and 0<=x<cols}",
                            (((blur_input(y, x) + blur_input(y, (x + expr((C_LOOP_ITER_TYPE)1)))) +
                                                            blur_input(y, (x + expr((C_LOOP_ITER_TYPE)2)))) / expr((C_DATA_TYPE)3)),
                    true, T_DATA_TYPE, &blur_dist);
 
-    computation by("[rows, cols]->{by[y, x]: 0<=y<rows-2 and 0<=x<cols-2}",
+    computation by("[rows, cols]->{by[y, x]: 0<=y<rows and 0<=x<cols}",
                                       (((bx(y, x) + bx((y + expr((C_LOOP_ITER_TYPE)1)), x)) +
                                         bx((y + expr((C_LOOP_ITER_TYPE)2)), x)) / expr((C_DATA_TYPE)3)),
                    true, T_DATA_TYPE, &blur_dist);
@@ -72,8 +72,8 @@ int main() {
     constant procs_const("procs", expr(procs), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     constant nodes_const("nodes", expr(nodes), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
-    var y1("y1"), y2("y2"), q("q");
 #ifdef DISTRIBUTE
+    var y1("y1"), y2("y2"), q("q");
     bx.split(y, rows_per_proc, y1, y2);
     by.split(y, rows_per_proc, y1, y2);
 #endif
@@ -103,15 +103,15 @@ int main() {
     bx_exchange.r->collapse_many({collapser(2, 0, (C_LOOP_ITER_TYPE)cols), collapser(1, 0, (C_LOOP_ITER_TYPE)2)});
 
     tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1, tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc+2));
-    tiramisu::expr by_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1, tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc-2));
+    tiramisu::expr by_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1, tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc));//-2));
 
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(rows_per_proc), tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);
 
-    tiramisu::buffer buff_bx("buff_bx", {bx_select_dim0, tiramisu::expr(cols - 2)},
+    tiramisu::buffer buff_bx("buff_bx", {bx_select_dim0, tiramisu::expr(cols)},// - 2)},
                                  T_DATA_TYPE, tiramisu::a_temporary, &blur_dist);
 
-    tiramisu::buffer buff_by("buff_by", {by_select_dim0, tiramisu::expr(cols - 2)},
+    tiramisu::buffer buff_by("buff_by", {by_select_dim0, tiramisu::expr(cols)},// - 2)},
                                  T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
@@ -123,14 +123,22 @@ int main() {
 
     blur_dist.lift_dist_comps();
 #else
+    var y1(T_LOOP_ITER_TYPE, "y1"), y2(T_LOOP_ITER_TYPE, "y2"), x1(T_LOOP_ITER_TYPE, "x1"), x2(T_LOOP_ITER_TYPE, "x2");
+    var y1_2(T_LOOP_ITER_TYPE, "y1_2"), y2_2(T_LOOP_ITER_TYPE, "y2_2"), x1_2(T_LOOP_ITER_TYPE, "x1_2"), x2_2(T_LOOP_ITER_TYPE, "x2_2");
+    bx.tile(y, x, (C_LOOP_ITER_TYPE)8, (C_LOOP_ITER_TYPE)8, y1, x1, y2, x2);
+    by.tile(y, x, (C_LOOP_ITER_TYPE)8, (C_LOOP_ITER_TYPE)8, y1_2, x1_2, y2_2, x2_2);
+    by.vectorize(x2_2, 8);
+    bx.vectorize(x2, 8);
+
     bx.before(by, computation::root);
+
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(rows_per_proc), tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);
 
-    tiramisu::buffer buff_bx("buff_bx", {rows, tiramisu::expr(cols - 2)},
-                             T_DATA_TYPE, tiramisu::a_temporary, &blur_dist);
+    tiramisu::buffer buff_bx("buff_bx", {rows, tiramisu::expr(cols)},// - 2)},
+                             T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
-    tiramisu::buffer buff_by("buff_by", {rows, tiramisu::expr(cols - 2)},
+    tiramisu::buffer buff_by("buff_by", {rows, tiramisu::expr(cols )}, // both were -2 here
                              T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
@@ -139,7 +147,7 @@ int main() {
     by.set_access("{by[y, x]->buff_by[y, x]}");
 
 #endif
-    blur_dist.set_arguments({&buff_input, &buff_by});
+    blur_dist.set_arguments({&buff_input, &buff_bx, &buff_by});
     blur_dist.gen_time_space_domain();
     blur_dist.gen_isl_ast();
     blur_dist.gen_halide_stmt();

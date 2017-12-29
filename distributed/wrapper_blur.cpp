@@ -39,14 +39,22 @@ int main() {
 #ifdef DISTRIBUTE
     C_LOOP_ITER_TYPE rows_per_proc = (C_LOOP_ITER_TYPE)ceil(ROWS/PROCS);
 #else
+    C_LOOP_ITER_TYPE rows_per_proc = (C_LOOP_ITER_TYPE)ROWS;
 #endif
+
     Halide::Buffer<C_DATA_TYPE> buff_input = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc + 2);
+
 #ifdef DISTRIBUTE
     Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS - 2, (rank == PROCS - 1) ? rows_per_proc - 2 : rows_per_proc);
     Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS - 2, (rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2);   
+#ifdef GPU_ONLY
     buff_input.device_malloc(halide_cuda_device_interface());
     buff_bx.device_malloc(halide_cuda_device_interface());
     buff_output.device_malloc(halide_cuda_device_interface());
+#endif
+#else
+    //    Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS - 2, rows_per_proc);   
+    Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc);   
 #endif
     C_DATA_TYPE next = 0;
     for (int y = 0; y < rows_per_proc; y++) {
@@ -66,20 +74,17 @@ int main() {
 #ifdef DISTRIBUTE
 #else
 
-    Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS - 2, rows_per_proc - 2);
+    //    Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS - 2, rows_per_proc - 2);
+    Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc);
 #endif
 #ifdef CPU_ONLY
-    blur_dist(buff_input.raw_buffer(), buff_output.raw_buffer());
+    blur_dist(buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer());
 #elif defined(GPU_ONLY)
 
     blur_dist_gpu(buff_input.raw_buffer(), buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());
     buff_output.raw_buffer()->set_device_dirty(false);
 #endif
     
-    std::cerr << "buff_input size in bytes for rank " << rank << " is " << buff_input.size_in_bytes() << std::endl;
-    std::cerr << "buff_output size in bytes for rank " << rank << " is " << buff_output.size_in_bytes() << std::endl;
-    std::cerr << "buff_bx size in bytes for rank " << rank << " is " << buff_bx.size_in_bytes() << std::endl;
-
 #ifdef DISTRIBUTE
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
@@ -92,7 +97,7 @@ int main() {
 #endif
         auto start = std::chrono::high_resolution_clock::now();
 #ifdef CPU_ONLY
-        blur_dist(buff_input.raw_buffer(), buff_output.raw_buffer());
+        blur_dist(buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer());
 #elif defined(GPU_ONLY)        
         blur_dist_gpu(buff_input.raw_buffer(), buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());
         buff_output.raw_buffer()->set_device_dirty(false);
@@ -180,6 +185,7 @@ int main() {
         free(got);
 
 #elif defined(CHECK_RESULTS) // not distributed
+	std::cerr << "Comparing" << std::endl;
         next = 0;
         Halide::Buffer<C_DATA_TYPE> full_input = Halide::Buffer<C_DATA_TYPE>(COLS, ROWS);
         for (int y = 0; y < ROWS; y++) {
