@@ -124,13 +124,12 @@ int main() {
     blur_dist.lift_dist_comps();
 #else
     var y1(T_LOOP_ITER_TYPE, "y1"), y2(T_LOOP_ITER_TYPE, "y2"), x1(T_LOOP_ITER_TYPE, "x1"), x2(T_LOOP_ITER_TYPE, "x2");
-    var y1_2(T_LOOP_ITER_TYPE, "y1_2"), y2_2(T_LOOP_ITER_TYPE, "y2_2"), x1_2(T_LOOP_ITER_TYPE, "x1_2"), x2_2(T_LOOP_ITER_TYPE, "x2_2");
     bx.tile(y, x, (C_LOOP_ITER_TYPE)8, (C_LOOP_ITER_TYPE)8, y1, x1, y2, x2);
-    by.tile(y, x, (C_LOOP_ITER_TYPE)8, (C_LOOP_ITER_TYPE)8, y1_2, x1_2, y2_2, x2_2);
-    by.vectorize(x2_2, 8);
-    bx.vectorize(x2, 8);
+    by.tile(y, x, (C_LOOP_ITER_TYPE)8, (C_LOOP_ITER_TYPE)8, y1, x1, y2, x2);
+    bx.tag_vector_level(x2, 8);
+    by.tag_vector_level(x2, 8);
 
-    bx.before(by, computation::root);
+    bx.before(by, x1);
 
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(rows_per_proc), tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);

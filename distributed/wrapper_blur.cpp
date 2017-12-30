@@ -112,24 +112,24 @@ int main() {
             std::cerr << "Iteration " << i << " done in " << duration.count() << "ms." << std::endl;
         }
 #if defined(CHECK_RESULTS) && !defined(DISTRIBUTE)
-        if (i == 0) {
+/*        if (i == 0) {
             std::string output_fn = "./build/blur_dist_rank_" + std::to_string(rank) + ".txt";
             std::ofstream myfile;
             myfile.open(output_fn);
             for (int y = 0; y < rows_per_proc - 2; y++) {
-                for (int x = 0; x < COLS - 2; x++) {
+              for (int x = 0; x < COLS - 2; x++) {
                   myfile << buff_output(x, y) << std::endl;
                 }
             }
             myfile.close();
-        }
+            }*/
 #elif defined(CHECK_RESULTS)
         if (i == 0) {
             std::string output_fn = "./build/blur_dist_rank_" + std::to_string(rank) + ".txt";
             std::ofstream myfile;
             myfile.open(output_fn);
             for (int y = 0; y < ((rank == PROCS - 1) ? (rows_per_proc - 2) : rows_per_proc); y++) {
-                for (int x = 0; x < COLS - 2; x++) {
+              for (int x = 0; x < COLS - 2; x++) {
                   myfile << buff_output(x, y) << std::endl;
                 }
             }
@@ -195,6 +195,7 @@ int main() {
         }
         for (int r = 0; r < ROWS - 2; r++) {
             for (int c = 0; c < COLS - 2; c++) {
+              std::cerr << buff_output(c,r) << std::endl;
                 assert(((full_input(c,r) + full_input(c+1, r) + full_input(c+2, r) + full_input(c, r+1) +
                          full_input(c, r+2) + full_input(c+1, r+1) + full_input(c+1, r+2) + full_input(c+2, r+1) +
                          full_input(c+2, r+2)) / 9) == buff_output(c,r));
