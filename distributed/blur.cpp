@@ -125,12 +125,25 @@ int main() {
     blur_dist.set_arguments({&buff_input, &buff_bx, &buff_by});
 #else
     var y1(T_LOOP_ITER_TYPE, "y1"), y2(T_LOOP_ITER_TYPE, "y2"), x1(T_LOOP_ITER_TYPE, "x1"), x2(T_LOOP_ITER_TYPE, "x2");
-    bx.tile(y, x, (C_LOOP_ITER_TYPE)8, (C_LOOP_ITER_TYPE)8, y1, x1, y2, x2);
-    by.tile(y, x, (C_LOOP_ITER_TYPE)8, (C_LOOP_ITER_TYPE)8, y1, x1, y2, x2);
+    var y3(T_LOOP_ITER_TYPE, "y3"), y4(T_LOOP_ITER_TYPE, "y4");
+    //    bx.split(y, 200, y3, y4);
+    //    by.split(y, 200, y3, y4);
+    bx.split(y, 13500, y3, y4);
+    by.split(y, 13500, y3, y4);
+    bx.tile(y4, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y1, x1, y2, x2);
+    by.tile(y4, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y1, x1, y2, x2);
     bx.tag_vector_level(x2, 8);
     by.tag_vector_level(x2, 8);
+    
 
-    bx.before(by, x1);
+
+    //bx.tag_parallel_level(y3);
+    //    by.tag_parallel_level(y3);
+
+    bx.tag_parallel_level(y3);
+    by.tag_parallel_level(y3);
+
+    bx.before(by, x1);//computation::root);
 
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(rows_per_proc), tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);

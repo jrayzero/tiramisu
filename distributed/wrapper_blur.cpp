@@ -56,21 +56,27 @@ int main() {
 #else
     Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc);   
 #endif
-    C_DATA_TYPE next = 0;
+#ifdef DISTRIBUTE
+    assert(false0 && "Need to verify that my inputs match the check result for distributed now!");
+#endif
+#ifdef CHECK_RESULTS
+    std::cerr << "Filling buff_input"  << std::endl;
+    int next = 0;
     for (int y = 0; y < rows_per_proc; y++) {
         for (int x = 0; x < COLS; x++) {
-          buff_input(x,y) = next++;
+          buff_input(x,y) = (C_DATA_TYPE)(next++ % 1000);
         }
     }
     if (rank < NODES) { // need to fill up the last two rows with the first two rows of next rank on the machine. We'll just assume we can algorithmically generate it here
       next = 0;
       for (int y = rows_per_proc; y < rows_per_proc + 2; y++) {
         for (int x = 0; x < COLS; x++) {
-          buff_input(x,y) = next++;
+          //          buff_input(x,y) = next++;
+          buff_input(x,y) = (C_DATA_TYPE)(next++ % 1000);
         }
       }      
     }
-
+#endif // otherwise, don't really care about the actual values b/c we aren't concerned with the filling time
 #ifdef DISTRIBUTE
 #else
 
@@ -78,8 +84,10 @@ int main() {
     Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc);
 #endif
 #ifdef CPU_ONLY
+    std::cerr << "Running once for warm up"  << std::endl;
     blur_dist(buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer());
 #elif defined(GPU_ONLY)
+    std::cerr << "Running once for warm up"  << std::endl;
     blur_dist_gpu(buff_input.raw_buffer(), buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());
     buff_output.raw_buffer()->set_device_dirty(false);
 #endif
@@ -189,7 +197,8 @@ int main() {
         Halide::Buffer<C_DATA_TYPE> full_input = Halide::Buffer<C_DATA_TYPE>(COLS, ROWS);
         for (int y = 0; y < ROWS; y++) {
             for (int x = 0; x < COLS; x++) {
-                full_input(x, y) = next++;
+              //                full_input(x, y) = next++;
+              full_input(x,y) = (C_DATA_TYPE)(next++ % 1000);
             }
         }
         for (int r = 0; r < ROWS - 2; r++) {
@@ -198,7 +207,7 @@ int main() {
                                                   full_input(c, r+2) + full_input(c+1, r+1) + full_input(c+1, r+2) + full_input(c+2, r+1) +
                                                                            full_input(c+2, r+2)) / (C_DATA_TYPE)9));
             C_DATA_TYPE is = (C_DATA_TYPE)std::floor(buff_output(c,r));
-            if(std::fabs(should_be - is) > (C_DATA_TYPE)1) {
+            if(std::fabs(should_be - is) > (C_DATA_TYPE)0) {
               //              fprintf(stderr, "%g, %g\n", should_be, buff_output(c,r));
               //              std::cerr << std::fabs(should_be - is) << std::endl;
               std::cerr << "is: " << is << std::endl;
