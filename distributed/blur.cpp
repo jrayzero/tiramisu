@@ -109,7 +109,7 @@ int main() {
                                 tiramisu::a_input, &blur_dist);
 
     tiramisu::buffer buff_bx("buff_bx", {bx_select_dim0, tiramisu::expr(cols)},// - 2)},
-                                 T_DATA_TYPE, tiramisu::a_temporary, &blur_dist);
+                                 T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
     tiramisu::buffer buff_by("buff_by", {by_select_dim0, tiramisu::expr(cols)},// - 2)},
                                  T_DATA_TYPE, tiramisu::a_output, &blur_dist);
@@ -122,6 +122,7 @@ int main() {
     bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_bx[" + std::to_string(rows_per_proc) + " + y, x]}");
 
     blur_dist.lift_dist_comps();
+    blur_dist.set_arguments({&buff_input, &buff_bx, &buff_by});
 #else
     var y1(T_LOOP_ITER_TYPE, "y1"), y2(T_LOOP_ITER_TYPE, "y2"), x1(T_LOOP_ITER_TYPE, "x1"), x2(T_LOOP_ITER_TYPE, "x2");
     bx.tile(y, x, (C_LOOP_ITER_TYPE)8, (C_LOOP_ITER_TYPE)8, y1, x1, y2, x2);
@@ -144,9 +145,8 @@ int main() {
 
     bx.set_access("{bx[y, x]->buff_bx[y, x]}");
     by.set_access("{by[y, x]->buff_by[y, x]}");
-
-#endif
     blur_dist.set_arguments({&buff_input, &buff_bx, &buff_by});
+#endif
     blur_dist.gen_time_space_domain();
     blur_dist.gen_isl_ast();
     blur_dist.gen_halide_stmt();

@@ -12,6 +12,7 @@
 #include "cuda.h"
 #include "Halide.h"
 #include "HalideRuntimeCuda.h"
+#include <math.h>
 
 int main() {
 #ifdef DISTRIBUTE
@@ -53,7 +54,6 @@ int main() {
     buff_output.device_malloc(halide_cuda_device_interface());
 #endif
 #else
-    //    Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS - 2, rows_per_proc);   
     Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc);   
 #endif
     C_DATA_TYPE next = 0;
@@ -80,7 +80,6 @@ int main() {
 #ifdef CPU_ONLY
     blur_dist(buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer());
 #elif defined(GPU_ONLY)
-
     blur_dist_gpu(buff_input.raw_buffer(), buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());
     buff_output.raw_buffer()->set_device_dirty(false);
 #endif
@@ -194,12 +193,20 @@ int main() {
             }
         }
         for (int r = 0; r < ROWS - 2; r++) {
-            for (int c = 0; c < COLS - 2; c++) {
-              std::cerr << buff_output(c,r) << std::endl;
-                assert(((full_input(c,r) + full_input(c+1, r) + full_input(c+2, r) + full_input(c, r+1) +
-                         full_input(c, r+2) + full_input(c+1, r+1) + full_input(c+1, r+2) + full_input(c+2, r+1) +
-                         full_input(c+2, r+2)) / 9) == buff_output(c,r));
+          for (int c = 0; c < COLS - 2; c++) {
+            C_DATA_TYPE should_be = (C_DATA_TYPE)std::floor((C_DATA_TYPE)((full_input(c,r) + full_input(c+1, r) + full_input(c+2, r) + full_input(c, r+1) +
+                                                  full_input(c, r+2) + full_input(c+1, r+1) + full_input(c+1, r+2) + full_input(c+2, r+1) +
+                                                                           full_input(c+2, r+2)) / (C_DATA_TYPE)9));
+            C_DATA_TYPE is = (C_DATA_TYPE)std::floor(buff_output(c,r));
+            if(std::fabs(should_be - is) > (C_DATA_TYPE)1) {
+              //              fprintf(stderr, "%g, %g\n", should_be, buff_output(c,r));
+              //              std::cerr << std::fabs(should_be - is) << std::endl;
+              std::cerr << "is: " << is << std::endl;
+              std::cerr << "should be : " << should_be << std::endl;
+              std::cerr << "At halide point: (" << c << ", " << r << ")" << std::endl;
+              assert(false);
             }
+          }
         }
 #endif
 }
