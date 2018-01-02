@@ -54,9 +54,15 @@ extern "C" {
 void tiramisu_init_stream_tracker(int max_streams) {
     assert(!st.initialized);
     st.streams = (cudaStream_t *)malloc(sizeof(cudaStream_t) * max_streams);
-    //    st.events = (cudaEvent_t *)malloc(sizeof(cudaEvent_t) * max_streams);
     st.init_streams = (bool *)calloc(max_streams, sizeof(bool)); // initialize to false
     st.initialized = true;
+}
+
+void tiramisu_cleanup_stream_tracker() {
+    assert(st.initialized);
+    free(st.streams);
+    free(st.init_streams);
+    st.initialized = false;
 }
 
 void tiramisu_cuda_malloc(void **device_ptr, size_t bytes) {

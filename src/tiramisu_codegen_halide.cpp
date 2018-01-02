@@ -2288,6 +2288,8 @@ void function::gen_halide_stmt()
         // First, need to initialize the stream tracker
         stmt = Halide::Internal::Block::make(Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_init_stream_tracker",
                                                                {(int)(tiramisu::communication_prop::comm_prop_ids.size())})), stmt);
+        // then clen it up
+        stmt = Halide::Internal::Block::make(stmt, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cleanup_stream_tracker", {})));
     }
 
     // Add producer tag

@@ -51,6 +51,8 @@ static stream_tracker st;
 
 void tiramisu_init_stream_tracker(int max_streams);
 
+void tiramisu_cleanup_stream_tracker();
+
 void tiramisu_cuda_memcpy_h2d(halide_buffer_t *dst, const void *src, size_t count, size_t dst_offset);
 
 void tiramisu_cuda_memcpy_d2h(void *dst, halide_buffer_t *src, size_t count, size_t src_offset);

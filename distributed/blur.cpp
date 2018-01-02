@@ -285,7 +285,7 @@ int main() {
     blur_dist.gen_time_space_domain();
     blur_dist.gen_isl_ast();
     blur_dist.gen_halide_stmt();
-    blur_dist.gen_halide_obj("./build/generated_blur_dist.o", {Halide::Target::CUDA});
+    blur_dist.gen_halide_obj("./build/generated_blur_dist.o", {Halide::Target::CUDA, Halide::Target::Debug});
 #endif
 
     blur_dist.dump_halide_stmt();
