@@ -56,20 +56,20 @@ void tiramisu_cuda_memcpy_h2d(halide_buffer_t *dst, const void *src, size_t coun
 void tiramisu_cuda_memcpy_d2h(void *dst, halide_buffer_t *src, size_t count, size_t src_offset);
 
 void tiramisu_cuda_memcpy_h2d_async(halide_buffer_t *dst, const void *src, size_t count, size_t dst_offset, int stream_id,
-                                    long *buff);
+                                    void *buff);
 
 void tiramisu_cuda_memcpy_d2h_async(void *dst, halide_buffer_t *src, size_t count, size_t src_offset, int stream_id,
-                                    long *buff);
+                                    void *buff);
 
-void tiramisu_cuda_stream_wait_event(long *buff, int stream_id);
+void tiramisu_cuda_stream_wait_event(void *buff, int stream_id);
 
 void _tiramisu_cuda_memcpy_h2d(void *dst, const void *src, size_t count);
 
 void _tiramisu_cuda_memcpy_d2h(void *dst, const void *src, size_t count);
 
-void _tiramisu_cuda_memcpy_h2d_async(void *dst, const void *src, size_t count, int stream_id, long *buff);
+void _tiramisu_cuda_memcpy_h2d_async(void *dst, const void *src, size_t count, int stream_id, void *buff);
 
-void _tiramisu_cuda_memcpy_d2h_async(void *dst, const void *src, size_t count, int stream_id, long *buff);
+void _tiramisu_cuda_memcpy_d2h_async(void *dst, const void *src, size_t count, int stream_id, void *buff);
 
 void tiramisu_cuda_malloc(void **device_ptr, size_t bytes);
 

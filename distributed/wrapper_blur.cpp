@@ -46,18 +46,19 @@ int main() {
     Halide::Buffer<C_DATA_TYPE> buff_input = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc + 2);
 
 #ifdef DISTRIBUTE
-    Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS - 2, (rank == PROCS - 1) ? rows_per_proc - 2 : rows_per_proc);
-    Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS - 2, (rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2);   
+    Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS, (rank == PROCS - 1) ? rows_per_proc : rows_per_proc);
+    Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS, (rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2);   
+    //    Halide::Buffer<C_DATA_TYPE> buff_wait = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc + 2);
 #ifdef GPU_ONLY
+    std::cerr << "Allocating buff_input on GPU" << std::endl;
     buff_input.device_malloc(halide_cuda_device_interface());
+    std::cerr << "Allocating buff_bx on GPU" << std::endl;
     buff_bx.device_malloc(halide_cuda_device_interface());
+    std::cerr << "Allocating input on GPU" << std::endl;
     buff_output.device_malloc(halide_cuda_device_interface());
 #endif
 #else
     Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc);   
-#endif
-#ifdef DISTRIBUTE
-    assert(false0 && "Need to verify that my inputs match the check result for distributed now!");
 #endif
 #ifdef CHECK_RESULTS
     std::cerr << "Filling buff_input"  << std::endl;
@@ -88,7 +89,7 @@ int main() {
     blur_dist(buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer());
 #elif defined(GPU_ONLY)
     std::cerr << "Running once for warm up"  << std::endl;
-    blur_dist_gpu(buff_input.raw_buffer(), buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());
+    blur_dist_gpu(buff_input.raw_buffer(), buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());//, buff_wait.raw_buffer());
     buff_output.raw_buffer()->set_device_dirty(false);
 #endif
     
@@ -106,7 +107,7 @@ int main() {
 #ifdef CPU_ONLY
         blur_dist(buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer());
 #elif defined(GPU_ONLY)        
-        blur_dist_gpu(buff_input.raw_buffer(), buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());
+        blur_dist_gpu(buff_input.raw_buffer(), buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());//, buff_wait.raw_buffer());
         buff_output.raw_buffer()->set_device_dirty(false);
 #endif
 #ifdef DISTRIBUTE
@@ -118,19 +119,7 @@ int main() {
             duration_vector.push_back(duration);
             std::cerr << "Iteration " << i << " done in " << duration.count() << "ms." << std::endl;
         }
-#if defined(CHECK_RESULTS) && !defined(DISTRIBUTE)
-/*        if (i == 0) {
-            std::string output_fn = "./build/blur_dist_rank_" + std::to_string(rank) + ".txt";
-            std::ofstream myfile;
-            myfile.open(output_fn);
-            for (int y = 0; y < rows_per_proc - 2; y++) {
-              for (int x = 0; x < COLS - 2; x++) {
-                  myfile << buff_output(x, y) << std::endl;
-                }
-            }
-            myfile.close();
-            }*/
-#elif defined(CHECK_RESULTS)
+#if defined(CHECK_RESULTS) && defined(DISTRIBUTE)
         if (i == 0) {
             std::string output_fn = "./build/blur_dist_rank_" + std::to_string(rank) + ".txt";
             std::ofstream myfile;
@@ -168,11 +157,11 @@ int main() {
         next = 0;
         Halide::Buffer<C_DATA_TYPE> full_input = Halide::Buffer<C_DATA_TYPE>(COLS, ROWS);
         for (int y = 0; y < ROWS; y++) {
-            if (y % rows_per_proc == 0) {
-              next = 0;
-            }
+          //            if (y % rows_per_proc == 0) {
+          //              next = 0;
+          //            }
             for (int x = 0; x < COLS; x++) {
-                full_input(x, y) = next++;
+              full_input(x, y) = (next++ % 1000);
             }
         }
         idx = 0;

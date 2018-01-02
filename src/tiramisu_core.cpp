@@ -8227,9 +8227,14 @@ isl_map *isl_map_add_free_var(const std::string &free_var_name, isl_map *map, is
 static int next_dim_name = 0;
 
 void tiramisu::computation::full_loop_level_collapse(int level, tiramisu::expr collapse_from_iter) {
-    std::string collapse_from_iter_repr =
-            collapse_from_iter.get_expr_type() == tiramisu::e_val ?
+  std::string collapse_from_iter_repr = "";
+  if (global::get_loop_iterator_data_type() == p_int32) {
+    collapse_from_iter_repr = collapse_from_iter.get_expr_type() == tiramisu::e_val ?
             std::to_string(collapse_from_iter.get_int32_value()) : collapse_from_iter.get_name();
+  } else {
+    collapse_from_iter_repr = collapse_from_iter.get_expr_type() == tiramisu::e_val ?
+            std::to_string(collapse_from_iter.get_int64_value()) : collapse_from_iter.get_name();
+  }
     isl_map *sched = this->get_schedule();
     isl_map *sched_copy = isl_map_copy(sched);
     int dim = loop_level_into_dynamic_dimension(level);
@@ -8322,7 +8327,7 @@ void tiramisu::function::lift_cuda_comp(tiramisu::computation *comp) {
     // Processed as one sided communication, so do together.
     if (comp->is_one_sided()) {
         one_sided *os = static_cast<one_sided *>(comp);
-        tiramisu::expr num_elements(os->get_num_elements());
+        tiramisu::expr num_elements(tiramisu::o_cast, global::get_loop_iterator_data_type(), os->get_num_elements());
         tiramisu::expr xfer_type(os->get_channel().get_dtype());
         bool is_async = os->get_channel().contains_attr(ASYNC); // async CUDA is like nonblocking MPI
         if (os->get_channel().contains_attr(CPU2GPU)) {
@@ -8338,7 +8343,7 @@ void tiramisu::function::lift_cuda_comp(tiramisu::computation *comp) {
         }
 
         os->library_call_args.resize(is_async ? 6 : 4);
-        os->library_call_args[2] = tiramisu::expr(tiramisu::o_cast, p_int32, num_elements * get_num_bytes(comp->get_data_type()));
+        os->library_call_args[2] = num_elements * tiramisu::expr(tiramisu::o_cast, global::get_loop_iterator_data_type(), get_num_bytes(comp->get_data_type()));
         if (is_async) {
             // This additional RHS argument is for the stream
             os->wait_argument_idx = 5;

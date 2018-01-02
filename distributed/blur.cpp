@@ -126,22 +126,19 @@ int main() {
 #else
     var y1(T_LOOP_ITER_TYPE, "y1"), y2(T_LOOP_ITER_TYPE, "y2"), x1(T_LOOP_ITER_TYPE, "x1"), x2(T_LOOP_ITER_TYPE, "x2");
     var y3(T_LOOP_ITER_TYPE, "y3"), y4(T_LOOP_ITER_TYPE, "y4");
-    //    bx.split(y, 200, y3, y4);
-    //    by.split(y, 200, y3, y4);
+#ifdef PARALLEL
     bx.split(y, 13500, y3, y4);
     by.split(y, 13500, y3, y4);
     bx.tile(y4, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y1, x1, y2, x2);
     by.tile(y4, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y1, x1, y2, x2);
-    bx.tag_vector_level(x2, 8);
-    by.tag_vector_level(x2, 8);
-    
-
-
-    //bx.tag_parallel_level(y3);
-    //    by.tag_parallel_level(y3);
-
     bx.tag_parallel_level(y3);
     by.tag_parallel_level(y3);
+#else
+    bx.tile(y, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y1, x1, y2, x2);
+    by.tile(y, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y1, x1, y2, x2);
+    bx.tag_vector_level(x2, 8);
+    by.tag_vector_level(x2, 8);
+#endif
 
     bx.before(by, x1);//computation::root);
 
@@ -168,7 +165,7 @@ int main() {
 
     constant rows_per_proc_const("rows_per_proc", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     // rows_per_proc that we end up with after computation is done (last proc does 2 less rows)
-    constant rows_per_proc_after_const("rows_per_proc_after", expr(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1, rows_per_proc - 2, rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
+    constant rows_per_proc_after_const("rows_per_proc_after", expr(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1, rows_per_proc, rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     constant rows_per_node_const("rows_per_node", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     constant procs_per_node_const("procs_per_node", expr(procs_per_node), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
@@ -211,6 +208,10 @@ int main() {
     tiramisu::wait bx_exchange_wait(bx_exchange.s->operator()(q, y, x), bx_exchange.s->get_channel(), &blur_dist);
     tiramisu::wait cpu_to_gpu_wait(input_cpu_to_gpu.os->operator()(q, y, x), input_cpu_to_gpu.os->get_channel(), &blur_dist);
 
+    input_cpu_to_gpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)rows)});
+    gpu_to_cpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols-2)});
+    cpu_to_gpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)rows)});
+
     bx_exchange.s->before(bx_exchange_wait, computation::root);
     bx_exchange_wait.before(*bx_exchange.r, computation::root);
     bx_exchange.r->before(*input_cpu_to_gpu.os, computation::root);
@@ -228,6 +229,7 @@ int main() {
     by.tag_distribute_level(y1);
     gpu_to_cpu.os->tag_distribute_level(q, false);
     bx_exchange_wait.tag_distribute_level(q, false);
+    cpu_to_gpu_wait.tag_distribute_level(q, false);
 
     bx.tag_gpu_level(y2, x);
     bx_recompute.tag_gpu_level(y, x);
@@ -236,7 +238,7 @@ int main() {
     tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1,
                                   tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc+2));
     tiramisu::expr by_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1,
-                                  tiramisu::expr(rows_per_proc-2), tiramisu::expr(rows_per_proc));
+                                  tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc));
 
     tiramisu::buffer buff_input("buff_input", {bx_select_dim0, tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);
@@ -245,19 +247,19 @@ int main() {
     tiramisu::buffer buff_input_gpu("buff_input_gpu", {tiramisu::expr(rows_per_proc+2), tiramisu::expr(cols)}, T_DATA_TYPE,
                                     tiramisu::a_output, &blur_dist);
 
-    tiramisu::buffer buff_bx_gpu("buff_bx_gpu", {bx_select_dim0, tiramisu::expr(cols - 2)},
+    tiramisu::buffer buff_bx_gpu("buff_bx_gpu", {bx_select_dim0, tiramisu::expr(cols)},
                              T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
-    tiramisu::buffer buff_by_gpu("buff_by_gpu", {by_select_dim0, tiramisu::expr(cols - 2)},
+    tiramisu::buffer buff_by_gpu("buff_by_gpu", {by_select_dim0, tiramisu::expr(cols)},
                              T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
-    tiramisu::buffer buff_by("buff_by", {by_select_dim0, tiramisu::expr(cols - 2)},
+    tiramisu::buffer buff_by("buff_by", {by_select_dim0, tiramisu::expr(cols)},
                                  T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
     tiramisu::buffer buff_bx_exchange_wait("buff_bx_exchange_wait", {2, cols}, tiramisu::p_wait_ptr,
                                            tiramisu::a_temporary, &blur_dist);
 
-    tiramisu::buffer buff_cpu_to_gpu_wait("buff_cpu_to_gpu_wait", {rows_per_proc+2, cols}, tiramisu::p_wait_ptr,
+    tiramisu::buffer buff_cpu_to_gpu_wait("buff_cpu_to_gpu_wait", {/*rows_per_proc+2, cols*/1}, tiramisu::p_wait_ptr,
                                            tiramisu::a_temporary, &blur_dist);
 
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
@@ -278,7 +280,7 @@ int main() {
 
     gpu_to_cpu.os->set_access("{gpu_to_cpu[q,y,x]->buff_by[y,x]}");
 
-    blur_dist.set_arguments({&buff_input, &buff_input_gpu, &buff_bx_gpu, &buff_by_gpu, &buff_by});
+    blur_dist.set_arguments({&buff_input, &buff_input_gpu, &buff_bx_gpu, &buff_by_gpu, &buff_by});//, &buff_cpu_to_gpu_wait});
     blur_dist.lift_dist_comps();
     blur_dist.gen_time_space_domain();
     blur_dist.gen_isl_ast();

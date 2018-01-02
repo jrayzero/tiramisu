@@ -54,6 +54,7 @@ extern "C" {
 void tiramisu_init_stream_tracker(int max_streams) {
     assert(!st.initialized);
     st.streams = (cudaStream_t *)malloc(sizeof(cudaStream_t) * max_streams);
+    //    st.events = (cudaEvent_t *)malloc(sizeof(cudaEvent_t) * max_streams);
     st.init_streams = (bool *)calloc(max_streams, sizeof(bool)); // initialize to false
     st.initialized = true;
 }
@@ -71,12 +72,12 @@ void tiramisu_cuda_memcpy_d2h(void *dst, halide_buffer_t *src, size_t count, siz
 }
 
 void tiramisu_cuda_memcpy_h2d_async(halide_buffer_t *dst, const void *src, size_t count, size_t dst_offset, int stream_id,
-                                    long *buff) {
+                                    void *buff) {
     _tiramisu_cuda_memcpy_h2d_async(&(((float*)(dst->device))[dst_offset]), src, count, stream_id, buff);
 }
 
 void tiramisu_cuda_memcpy_d2h_async(void *dst, halide_buffer_t *src, size_t count, size_t src_offset,
-                                    int stream_id, long *buff) {
+                                    int stream_id, void *buff) {
     _tiramisu_cuda_memcpy_d2h_async(dst, &(((float*)(src->device))[src_offset]), count, stream_id, buff);
 }
 
@@ -100,7 +101,7 @@ void _tiramisu_cuda_memcpy_d2d(void *dst, const void *src, size_t count) {
     assert(cudaMemcpy(dst, src, count, cudaMemcpyDeviceToDevice) == 0 && "tiramisu_cuda_memcpy_d2d failed");
 }
 
-void _tiramisu_cuda_memcpy_h2d_async(void *dst, const void *src, size_t count, int stream_id, long *buff) {
+void _tiramisu_cuda_memcpy_h2d_async(void *dst, const void *src, size_t count, int stream_id, void *buff) {
     if (!st.init_streams[stream_id]) {
         st.streams[stream_id] = tiramisu_cuda_stream_create();
         st.init_streams[stream_id] = true;
@@ -110,10 +111,10 @@ void _tiramisu_cuda_memcpy_h2d_async(void *dst, const void *src, size_t count, i
     // create the cuda event
     cudaEvent_t event = tiramisu_cuda_event_create();
     tiramisu_cuda_event_record(event, stream);
-    ((cudaEvent_t*)buff)[0] = event;
+    ((cudaEvent_t*)buff)[0] = event;    
 }
 
-void _tiramisu_cuda_memcpy_d2h_async(void *dst, const void *src, size_t count, int stream_id, long *buff) {
+void _tiramisu_cuda_memcpy_d2h_async(void *dst, const void *src, size_t count, int stream_id, void *buff) {
     if (!st.init_streams[stream_id]) {
         st.streams[stream_id] = tiramisu_cuda_stream_create();
         st.init_streams[stream_id] = true;
@@ -137,7 +138,7 @@ void tiramisu_cuda_stream_destroy(cudaStream_t stream) {
 }
 
 void _tiramisu_cuda_stream_wait_event(cudaStream_t stream, cudaEvent_t event) {
-    assert(cudaStreamWaitEvent(stream, event, 0) == 0 && "tiramisu_cuda_stream_wait_event");
+    assert(cudaStreamWaitEvent(stream, event, 0) == 0 && "tiramisu_cuda_stream_wait_event failed");
 }
 
 cudaEvent_t tiramisu_cuda_event_create() {
@@ -155,10 +156,10 @@ void tiramisu_cuda_event_record(cudaEvent_t event, cudaStream_t stream) {
     assert(cudaEventSynchronize(event) == 0 && "tiramisu_cuda_event_record synchronize failed");
 }
 
-void tiramisu_cuda_stream_wait_event(long *buff, int stream_id) {
-    cudaStream_t stream = st.streams[stream_id];
-    cudaEvent_t *event = ((cudaEvent_t*)buff);
-    _tiramisu_cuda_stream_wait_event(stream, *event);
+void tiramisu_cuda_stream_wait_event(void *buff, int stream_id) {
+  cudaStream_t stream = st.streams[stream_id];
+  cudaEvent_t event = ((cudaEvent_t)buff);
+  _tiramisu_cuda_stream_wait_event(stream, event);
 }
 
 }
