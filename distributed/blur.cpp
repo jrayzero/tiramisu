@@ -208,15 +208,18 @@ int main() {
     tiramisu::wait bx_exchange_wait(bx_exchange.s->operator()(q, y, x), bx_exchange.s->get_channel(), &blur_dist);
     tiramisu::wait cpu_to_gpu_wait(input_cpu_to_gpu.os->operator()(q, y, x), input_cpu_to_gpu.os->get_channel(), &blur_dist);
 
-    input_cpu_to_gpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)rows)});
+    input_cpu_to_gpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//, collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)rows)});
     gpu_to_cpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols-2)});
-    cpu_to_gpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)rows)});
+    cpu_to_gpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//, collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)rows)});
 
     bx_exchange.s->before(bx_exchange_wait, computation::root);
     bx_exchange_wait.before(*bx_exchange.r, computation::root);
     bx_exchange.r->before(*input_cpu_to_gpu.os, computation::root);
-    input_cpu_to_gpu.os->before(cpu_to_gpu_wait, computation::root);
+
+    input_cpu_to_gpu.os->before(cpu_to_gpu_wait, x);//computation::root);
+
     cpu_to_gpu_wait.before(bx, computation::root);
+
     bx.before(bx_recompute, computation::root);
     bx_recompute.before(by, computation::root);
     by.before(*gpu_to_cpu.os, computation::root);
@@ -259,7 +262,7 @@ int main() {
     tiramisu::buffer buff_bx_exchange_wait("buff_bx_exchange_wait", {2, cols}, tiramisu::p_wait_ptr,
                                            tiramisu::a_temporary, &blur_dist);
 
-    tiramisu::buffer buff_cpu_to_gpu_wait("buff_cpu_to_gpu_wait", {/*rows_per_proc+2, cols*/1}, tiramisu::p_wait_ptr,
+    tiramisu::buffer buff_cpu_to_gpu_wait("buff_cpu_to_gpu_wait", {rows_per_proc+2}, tiramisu::p_wait_ptr,
                                            tiramisu::a_temporary, &blur_dist);
 
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
@@ -285,7 +288,7 @@ int main() {
     blur_dist.gen_time_space_domain();
     blur_dist.gen_isl_ast();
     blur_dist.gen_halide_stmt();
-    blur_dist.gen_halide_obj("./build/generated_blur_dist.o", {Halide::Target::CUDA, Halide::Target::Debug});
+    blur_dist.gen_halide_obj("./build/generated_blur_dist.o", {Halide::Target::CUDA});//, Halide::Target::Debug});
 #endif
 
     blur_dist.dump_halide_stmt();

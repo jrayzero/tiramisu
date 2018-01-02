@@ -28,7 +28,7 @@ int main() {
 #ifdef GPU_ONLY
     std::cerr << "My rank is " << rank << std::endl;
     if (rank < NODES) {
-      halide_set_gpu_device(0);
+      halide_set_gpu_device(1);
     } else {
       halide_set_gpu_device(1);
     }
@@ -96,7 +96,10 @@ int main() {
 #ifdef DISTRIBUTE
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
-    for (int i = 0; i < ITERS; i++) {
+#ifdef GPU_ONLY
+    cudaDeviceSynchronize();
+#endif
+    for (int i = 0; i < 0/*ITERS*/; i++) {
         if (rank == 0) {
             std::cerr << "Starting iter: " << i << std::endl;
         }
@@ -134,6 +137,9 @@ int main() {
 #endif
 #ifdef DISTRIBUTE
         MPI_Barrier(MPI_COMM_WORLD);
+#endif
+#ifdef GPU_ONLY
+    cudaDeviceSynchronize();
 #endif
     }
     
