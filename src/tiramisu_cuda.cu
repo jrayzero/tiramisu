@@ -204,7 +204,6 @@ void tiramisu_cuda_event_destroy(cudaEvent_t event) {
 
 void tiramisu_cuda_event_record(cudaEvent_t event, cudaStream_t stream) {
     assert(cudaEventRecord(event, stream) == 0 && "tiramisu_cuda_event_record failed");
-    //    assert(cudaEventSynchronize(event) == 0 && "tiramisu_cuda_event_record synchronize failed");
 }
 
   /*  void tiramisu_cuda_stream_wait_event(void *buff, int stream_id) {
@@ -215,33 +214,18 @@ void tiramisu_cuda_event_record(cudaEvent_t event, cudaStream_t stream) {
 
   void tiramisu_cuda_stream_wait_event(void *buff, int stream_id) {
   cudaEvent_t event = ((cudaEvent_t)buff);
+  assert(st.kernel_stream[0] != NULL);
   _tiramisu_cuda_stream_wait_event(st.kernel_stream[0], event); // block the kernel stream on the communication event
 }
 
 int halide_launch_cuda_kernel(CUfunction f,int blocksX, int blocksY, int blocksZ,
                          int threadsX, int threadsY, int threadsZ,
                          int shared_mem_bytes, void **translated_args) {
-  fprintf(stderr, "In Jess's halide_launch_cuda_kernel");
-
-
-  CUstream stream = tiramisu_cuda_stream_create();//(CUstream)get_kernel_stream();//*((CUstream*)get_kernel_stream());
-  st.kernel_stream[0] = stream;
-  st.init_kernel_stream = true;
-      //    debug(user_context) << "    Here's the stream as gotten from halide" << stream;
-    //    CUstream stream;
-    //    cuStreamCreate(&stream, 0x1);
-      //    if (cuStreamSynchronize == NULL) {
-      //      error(user_context) << "No streams";
-      //    }
-    // We use whether this routine was defined in the cuda driver library
-    // as a test for streams support in the cuda implementation.
-    //    if (cuStreamSynchronize != NULL) {
-    //        int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
-    //        if (result != 0) {
-    //            error(user_context) << "CUDA: In halide_cuda_run, halide_cuda_get_stream returned " << result << "\n";
-    //        }
-    //    }
-
+  if (!st.init_kernel_stream) {
+    CUstream stream = tiramisu_cuda_stream_create();//(CUstream)get_kernel_stream();//*((CUstream*)get_kernel_stream());
+    st.kernel_stream[0] = stream;
+    st.init_kernel_stream = true;
+  }
   CUresult err = cuLaunchKernel(f,
                                 blocksX,  blocksY,  blocksZ,
                                 threadsX, threadsY, threadsZ,
