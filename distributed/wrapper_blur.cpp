@@ -99,7 +99,7 @@ int main() {
 #ifdef GPU_ONLY
     cudaDeviceSynchronize();
 #endif
-    for (int i = 0; i < 0/*ITERS*/; i++) {
+    for (int i = 0; i < ITERS; i++) {
         if (rank == 0) {
             std::cerr << "Starting iter: " << i << std::endl;
         }

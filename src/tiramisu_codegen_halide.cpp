@@ -2286,10 +2286,12 @@ void function::gen_halide_stmt()
         stmt = Halide::Internal::LetStmt::make("rank", mpi_rank, stmt);
 
         // First, need to initialize the stream tracker
+        // This is the prefix to it all
+        std::string nvvm_fname = "/tmp/halide_" + this->name + "_cuda_kernel_src";
         stmt = Halide::Internal::Block::make(Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_init_stream_tracker",
-                                                               {(int)(tiramisu::communication_prop::comm_prop_ids.size())})), stmt);
+                                                                                             {(int)(tiramisu::communication_prop::comm_prop_ids.size()), Halide::Expr(nvvm_fname.c_str())})), stmt);
         // then clen it up
-        stmt = Halide::Internal::Block::make(stmt, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cleanup_stream_tracker", {})));
+        stmt = Halide::Internal::Block::make(stmt, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cleanup_stream_tracker", {(int)(tiramisu::communication_prop::comm_prop_ids.size())})));
     }
 
     // Add producer tag

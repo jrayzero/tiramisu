@@ -4,7 +4,15 @@
 
 #include <cassert>
 #include "tiramisu/tiramisu_cuda.h"
+#include "tiramisu/cuda_common.h"
 #include <stdio.h>
+#include "HalideRuntimeCuda.h"
+#include "cuda.h"
+//#include "device_buffer_utils.h"
+//#include "device_interface.h"
+//#include "printer.h"
+//#include "mini_cuda.h"
+
 
 #ifdef DRIVER
 extern "C" {
@@ -51,18 +59,47 @@ void tiramisu_cuda_free(CUdeviceptr device_ptr) {
 
 extern "C" {
 
-void tiramisu_init_stream_tracker(int max_streams) {
-    assert(!st.initialized);
-    st.streams = (cudaStream_t *)malloc(sizeof(cudaStream_t) * max_streams);
-    st.init_streams = (bool *)calloc(max_streams, sizeof(bool)); // initialize to false
-    st.initialized = true;
+  void *get_kernel_stream() {
+    assert(st.init_kernel_stream);
+    return *(st.kernel_stream);
+  }
+
+CUstream tiramisu_get_kernel_stream() {
+  assert(st.init_kernel_stream);
+  return (CUstream)st.kernel_stream;
 }
 
-void tiramisu_cleanup_stream_tracker() {
+  void tiramisu_init_stream_tracker(int max_streams, char *name) {
+    assert(!st.initialized);
+    st.comm_streams = (cudaStream_t *)malloc(sizeof(cudaStream_t) * max_streams);
+    st.init_comm_streams = (bool *)calloc(max_streams, sizeof(bool)); // initialize to false
+    st.initialized = true;
+    //    if (!st.init_kernel_stream) {
+    st.kernel_stream = (cudaStream_t*)malloc(sizeof(cudaStream_t));
+    //      st.kernel_stream[0] = tiramisu_cuda_stream_create();      
+    //      st.init_kernel_stream = true;
+      //      fprintf(stderr, "query res %d\n", cudaStreamQuery((CUstream_st*)get_kernel_stream()));
+      /*      if (err != 0) {
+        fprintf(stderr, "%d\n", err);
+      }
+      st.kernel_stream = (cudaStream_t)s;*/
+    //      fprintf(stderr, "created kernel stream %p\n", st.kernel_stream);
+    //    }
+    st.nvvm_fname = name;
+}
+
+void tiramisu_cleanup_stream_tracker(int max_streams) {
     assert(st.initialized);
-    free(st.streams);
-    free(st.init_streams);
+    for (int i = 0; i < max_streams; i++) {
+      tiramisu_cuda_stream_destroy(st.comm_streams[i]);
+    }
+    tiramisu_cuda_stream_destroy(st.kernel_stream[0]);
+    free(st.comm_streams);
+    free(st.init_comm_streams);    
+    free(st.kernel_stream);
     st.initialized = false;
+    st.init_kernel_stream = false;
+    fprintf(stderr, "did stream tracker cleanup\n");
 }
 
 void tiramisu_cuda_malloc(void **device_ptr, size_t bytes) {
@@ -108,28 +145,31 @@ void _tiramisu_cuda_memcpy_d2d(void *dst, const void *src, size_t count) {
 }
 
 void _tiramisu_cuda_memcpy_h2d_async(void *dst, const void *src, size_t count, int stream_id, void *buff) {
-    if (!st.init_streams[stream_id]) {
-        st.streams[stream_id] = tiramisu_cuda_stream_create();
-        st.init_streams[stream_id] = true;
+  //  fprintf(stderr, "memcpy h2d async\n");
+    if (!st.init_comm_streams[stream_id]) {
+        st.comm_streams[stream_id] = tiramisu_cuda_stream_create();
+        st.init_comm_streams[stream_id] = true;
     }
-    cudaStream_t stream = st.streams[stream_id];
+    cudaStream_t stream = st.comm_streams[stream_id];
     assert(cudaMemcpyAsync(dst, src, count, cudaMemcpyHostToDevice, stream) == 0 && "tiramisu_cuda_memcpy_h2d_async failed");
     // create the cuda event
     cudaEvent_t event = tiramisu_cuda_event_create();
-    tiramisu_cuda_event_record(event, stream);
+    // You record the event of a particular stream. Later on you'd have another stream wait for this event. 
+    // This gives you a way to synchronize across streams
+    tiramisu_cuda_event_record(event, stream);//st.kernel_stream);//stream);
     ((cudaEvent_t*)buff)[0] = event;    
 }
 
 void _tiramisu_cuda_memcpy_d2h_async(void *dst, const void *src, size_t count, int stream_id, void *buff) {
-    if (!st.init_streams[stream_id]) {
-        st.streams[stream_id] = tiramisu_cuda_stream_create();
-        st.init_streams[stream_id] = true;
+    if (!st.init_comm_streams[stream_id]) {
+        st.comm_streams[stream_id] = tiramisu_cuda_stream_create();
+        st.init_comm_streams[stream_id] = true;
     }
-    cudaStream_t stream = st.streams[stream_id];
+    cudaStream_t stream = st.comm_streams[stream_id];
     assert(cudaMemcpyAsync(dst, src, count, cudaMemcpyDeviceToHost, stream) == 0 && "tiramisu_cuda_memcpy_d2h_async failed");
     // create the cuda event
     cudaEvent_t event = tiramisu_cuda_event_create();
-    tiramisu_cuda_event_record(event, stream);
+    tiramisu_cuda_event_record(event, stream);//st.kernel_stream);//stream);
     ((cudaEvent_t*)buff)[0] = event;
 }
 
@@ -144,7 +184,12 @@ void tiramisu_cuda_stream_destroy(cudaStream_t stream) {
 }
 
 void _tiramisu_cuda_stream_wait_event(cudaStream_t stream, cudaEvent_t event) {
-    assert(cudaStreamWaitEvent(stream, event, 0) == 0 && "tiramisu_cuda_stream_wait_event failed");
+  cudaError_t res = cudaStreamWaitEvent(stream, event, 0);
+  if (res != 0) {
+    fprintf(stderr, "%d, %p, %p\n", res, stream, event);
+    assert(false);
+  }
+  //    assert(cudaStreamWaitEvent(stream, event, 0) == 0 && "tiramisu_cuda_stream_wait_event failed");
 }
 
 cudaEvent_t tiramisu_cuda_event_create() {
@@ -159,14 +204,59 @@ void tiramisu_cuda_event_destroy(cudaEvent_t event) {
 
 void tiramisu_cuda_event_record(cudaEvent_t event, cudaStream_t stream) {
     assert(cudaEventRecord(event, stream) == 0 && "tiramisu_cuda_event_record failed");
-    assert(cudaEventSynchronize(event) == 0 && "tiramisu_cuda_event_record synchronize failed");
+    //    assert(cudaEventSynchronize(event) == 0 && "tiramisu_cuda_event_record synchronize failed");
 }
 
-void tiramisu_cuda_stream_wait_event(void *buff, int stream_id) {
-  cudaStream_t stream = st.streams[stream_id];
+  /*  void tiramisu_cuda_stream_wait_event(void *buff, int stream_id) {
+  cudaStream_t stream = st.comm_streams[stream_id];
   cudaEvent_t event = ((cudaEvent_t)buff);
   _tiramisu_cuda_stream_wait_event(stream, event);
+  }*/
+
+  void tiramisu_cuda_stream_wait_event(void *buff, int stream_id) {
+  cudaEvent_t event = ((cudaEvent_t)buff);
+  _tiramisu_cuda_stream_wait_event(st.kernel_stream[0], event); // block the kernel stream on the communication event
 }
+
+int halide_launch_cuda_kernel(CUfunction f,int blocksX, int blocksY, int blocksZ,
+                         int threadsX, int threadsY, int threadsZ,
+                         int shared_mem_bytes, void **translated_args) {
+  fprintf(stderr, "In Jess's halide_launch_cuda_kernel");
+
+
+  CUstream stream = tiramisu_cuda_stream_create();//(CUstream)get_kernel_stream();//*((CUstream*)get_kernel_stream());
+  st.kernel_stream[0] = stream;
+  st.init_kernel_stream = true;
+      //    debug(user_context) << "    Here's the stream as gotten from halide" << stream;
+    //    CUstream stream;
+    //    cuStreamCreate(&stream, 0x1);
+      //    if (cuStreamSynchronize == NULL) {
+      //      error(user_context) << "No streams";
+      //    }
+    // We use whether this routine was defined in the cuda driver library
+    // as a test for streams support in the cuda implementation.
+    //    if (cuStreamSynchronize != NULL) {
+    //        int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
+    //        if (result != 0) {
+    //            error(user_context) << "CUDA: In halide_cuda_run, halide_cuda_get_stream returned " << result << "\n";
+    //        }
+    //    }
+
+  CUresult err = cuLaunchKernel(f,
+                                blocksX,  blocksY,  blocksZ,
+                                threadsX, threadsY, threadsZ,
+                                shared_mem_bytes,
+                                *(st.kernel_stream),
+                                translated_args,
+                                NULL);
+  if (err != CUDA_SUCCESS) {
+    fprintf(stderr, "%d\n", err);
+    assert(false && "cuLaunchKernel failed");
+  }
+  return 0;
+
+}
+
 
 }
 #endif

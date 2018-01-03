@@ -39,19 +39,28 @@ extern "C" {
 
 struct stream_tracker {
 
-    cudaStream_t *streams;
+    cudaStream_t *comm_streams;
 
-    bool *init_streams;
+    bool *init_comm_streams;
+
+     cudaStream_t *kernel_stream;
+
+    bool init_kernel_stream = false;
 
     bool initialized = false;
 
+  void *cuda_module;
+
+  char *nvvm_fname;
+
+  //  char *nvvm_data;
 };
 
 static stream_tracker st;
 
-void tiramisu_init_stream_tracker(int max_streams);
+  void tiramisu_init_stream_tracker(int max_streams, char *name);
 
-void tiramisu_cleanup_stream_tracker();
+void tiramisu_cleanup_stream_tracker(int max_streams);
 
 void tiramisu_cuda_memcpy_h2d(halide_buffer_t *dst, const void *src, size_t count, size_t dst_offset);
 
@@ -88,6 +97,20 @@ cudaEvent_t tiramisu_cuda_event_create();
 void tiramisu_cuda_event_destroy(cudaEvent_t event);
 
 void tiramisu_cuda_event_record(cudaEvent_t event, cudaStream_t stream);
+
+  /*int halide_cuda_run(void *user_context,
+                    void *state_ptr,
+                    const char* entry_name,
+                    int blocksX, int blocksY, int blocksZ,
+                    int threadsX, int threadsY, int threadsZ,
+                    int shared_mem_bytes,
+                    size_t arg_sizes[],
+                    void* args[],
+                    int8_t arg_is_buffer[],
+                    int num_attributes,
+                    float* vertex_buffer,
+                    int num_coords_dim0,
+                    int num_coords_dim1);*/
 
 }
 #endif
