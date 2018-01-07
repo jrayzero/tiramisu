@@ -1227,7 +1227,7 @@ std::string generate_new_variable_name()
     return "t" + std::to_string(id_counter++);
 }
 
-void computation::tag_gpu_level(tiramisu::var L0_var, tiramisu::var L1_var)
+void computation::tag_gpu_level(tiramisu::var L0_var, tiramisu::var L1_var, int comm_prop_id)
 {
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
@@ -1240,13 +1240,13 @@ void computation::tag_gpu_level(tiramisu::var L0_var, tiramisu::var L1_var)
     int L0 = dimensions[0];
     int L1 = dimensions[1];
 
-    this->tag_gpu_level(L0, L1);
+    this->tag_gpu_level(L0, L1, comm_prop_id);
 
     DEBUG_INDENT(-4);
 }
 
 void computation::tag_gpu_level(tiramisu::var L0_var, tiramisu::var L1_var,
-                                tiramisu::var L2_var, tiramisu::var L3_var)
+                                tiramisu::var L2_var, tiramisu::var L3_var, int comm_prop_id)
 {
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
@@ -1265,14 +1265,14 @@ void computation::tag_gpu_level(tiramisu::var L0_var, tiramisu::var L1_var,
     int L2 = dimensions[2];
     int L3 = dimensions[3];
 
-    this->tag_gpu_level(L0, L1, L2, L3);
+    this->tag_gpu_level(L0, L1, L2, L3, comm_prop_id);
 
     DEBUG_INDENT(-4);
 }
 
 void computation::tag_gpu_level(tiramisu::var L0_var, tiramisu::var L1_var,
                                 tiramisu::var L2_var, tiramisu::var L3_var,
-                                tiramisu::var L4_var, tiramisu::var L5_var)
+                                tiramisu::var L4_var, tiramisu::var L5_var, int comm_prop_id)
 {
     DEBUG_FCT_NAME(3);
     DEBUG_INDENT(4);
@@ -1296,7 +1296,7 @@ void computation::tag_gpu_level(tiramisu::var L0_var, tiramisu::var L1_var,
     int L4 = dimensions[4];
     int L5 = dimensions[5];
 
-    this->tag_gpu_level(L0, L1, L2, L3, L4, L5);
+    this->tag_gpu_level(L0, L1, L2, L3, L4, L5, comm_prop_id);
 
     DEBUG_INDENT(-4);
 }
@@ -1355,7 +1355,7 @@ void tiramisu::computation::tag_distribute_level(int dist_dim)
     DEBUG_INDENT(-4);
 }
 
-void tiramisu::computation::tag_gpu_level(int dim0, int dim1)
+void tiramisu::computation::tag_gpu_level(int dim0, int dim1, int comm_prop_id)
 {
     assert(dim0 >= 0);
     assert(dim1 >= 0);
@@ -1365,9 +1365,10 @@ void tiramisu::computation::tag_gpu_level(int dim0, int dim1)
 
     this->get_function()->add_gpu_block_dimensions(this->get_name(), dim0, -1, -1);
     this->get_function()->add_gpu_thread_dimensions(this->get_name(), dim1, -1, -1);
+    this->get_function()->add_gpu_comm_prop_id(this->get_name(), comm_prop_id);
 }
 
-void tiramisu::computation::tag_gpu_level(int dim0, int dim1, int dim2, int dim3)
+void tiramisu::computation::tag_gpu_level(int dim0, int dim1, int dim2, int dim3, int comm_prop_id)
 {
     assert(dim0 >= 0);
     assert(dim1 >= 0);
@@ -1377,10 +1378,11 @@ void tiramisu::computation::tag_gpu_level(int dim0, int dim1, int dim2, int dim3
 
     this->get_function()->add_gpu_block_dimensions(this->get_name(), dim0, dim1, -1);
     this->get_function()->add_gpu_thread_dimensions(this->get_name(), dim2, dim3, -1);
+    this->get_function()->add_gpu_comm_prop_id(this->get_name(), comm_prop_id);
 }
 
 void tiramisu::computation::tag_gpu_level(int dim0, int dim1, int dim2, int dim3, int dim4,
-                                          int dim5)
+                                          int dim5, int comm_prop_id)
 {
     assert(dim0 >= 0);
     assert(dim1 >= 0);
@@ -1390,6 +1392,7 @@ void tiramisu::computation::tag_gpu_level(int dim0, int dim1, int dim2, int dim3
 
     this->get_function()->add_gpu_block_dimensions(this->get_name(), dim0, dim1, dim2);
     this->get_function()->add_gpu_thread_dimensions(this->get_name(), dim3, dim4, dim5);
+    this->get_function()->add_gpu_comm_prop_id(this->get_name(), comm_prop_id);
 }
 
 void tiramisu::computation::tag_gpu_block_level(int dim0)
@@ -6262,6 +6265,17 @@ void tiramisu::function::add_gpu_block_dimensions(std::string stmt_name, int dim
                     std::tuple<int, int, int>(dim0, dim1, dim2)));
 }
 
+void tiramisu::function::add_gpu_comm_prop_id(std::string stmt_name, int comm_prop_id) {
+  assert(!stmt_name.empty());
+  assert(this->gpu_comm_prop_ids.find(stmt_name) == this->gpu_comm_prop_ids.end());
+  this->gpu_comm_prop_ids.emplace(std::pair<std::string, int>(stmt_name, comm_prop_id));
+}
+
+int tiramisu::function::get_gpu_comm_prop_id(std::string name) {
+  assert(this->gpu_comm_prop_ids.find(name) != this->gpu_comm_prop_ids.end());
+  return this->gpu_comm_prop_ids[name];
+}
+
 void tiramisu::function::add_gpu_thread_dimensions(std::string stmt_name, int dim0,
                                                    int dim1, int dim2)
 {
@@ -7820,16 +7834,18 @@ std::set<int> tiramisu::communication_prop::comm_prop_ids;
 
 tiramisu::communication_prop::communication_prop(tiramisu::primitive_t dtype,
                                                  std::initializer_list<tiramisu::channel_attr> attrs)
-        : dtype(dtype), comm_prop_id(0) {
+        : dtype(dtype), comm_prop_id(-1) {
     this->attrs.insert(this->attrs.begin(), attrs);
-    comm_prop_ids.insert(0);
+    //    comm_prop_ids.insert(0);
 }
 
 tiramisu::communication_prop::communication_prop(tiramisu::primitive_t dtype,
                                                  std::initializer_list<tiramisu::channel_attr> attrs,
                                                  int comm_prop_id) : dtype(dtype), comm_prop_id(comm_prop_id) {
     this->attrs.insert(this->attrs.begin(), attrs);
-    comm_prop_ids.insert(comm_prop_id);
+    if (comm_prop_id != -1) {
+      comm_prop_ids.insert(comm_prop_id);
+    }
 }
 
 tiramisu::communication_prop::communication_prop() { }

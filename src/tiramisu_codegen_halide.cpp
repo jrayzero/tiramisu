@@ -1883,6 +1883,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
         // current level was marked as such.
         size_t tt = 0;
         bool convert_to_conditional = false;
+        int comm_prop_id = -2;
         while (tt < tagged_stmts.size())
         {
             if (tagged_stmts[tt] != "")
@@ -1941,7 +1942,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                 {
                     fortype = Halide::Internal::ForType::GPUThread;
                     dev_api = Halide::DeviceAPI::CUDA;
-                    std::string gpu_iter = fct.get_gpu_thread_iterator(tagged_stmts[tt], level);
+                    std::string gpu_iter = fct.get_gpu_thread_iterator(tagged_stmts[tt], level);            
                     Halide::Expr new_iterator_var =
                             Halide::Internal::Variable::make(Halide::Int(32), gpu_iter);
                     halide_body = Halide::Internal::LetStmt::make(
@@ -1963,6 +1964,9 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                     std::string gpu_iter = fct.get_gpu_block_iterator(tagged_stmts[tt], level);
                     Halide::Expr new_iterator_var =
                             Halide::Internal::Variable::make(Halide::Int(32), gpu_iter);
+                    if (gpu_iter == ".__block_id_x") {
+                      comm_prop_id = fct.get_gpu_comm_prop_id(tagged_stmts[tt]);
+                    }
                     halide_body = Halide::Internal::LetStmt::make(
                             iterator_str,
                             new_iterator_var,
@@ -2027,6 +2031,11 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
             DEBUG(3, tiramisu::str_dump("Creating the for loop."));
             result = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
                                                  fortype, dev_api, halide_body);
+            if (dev_api == Halide::DeviceAPI::CUDA && comm_prop_id != -2) {
+              // stick in a synchronization function that can be used if needed
+              result = Halide::Internal::Block::make(result, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cuda_kernel_event_record_and_wait", {comm_prop_id})));         
+              comm_prop_id = -2;
+            }
         }
         DEBUG(3, tiramisu::str_dump("For loop created."));
         DEBUG(10, std::cout << result);

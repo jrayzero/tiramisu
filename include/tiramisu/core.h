@@ -170,6 +170,8 @@ private:
       */
     std::vector<std::pair<std::string, std::tuple<int, int, int>>> gpu_block_dimensions;
 
+    std::map<std::string, int> gpu_comm_prop_ids;
+
     /**
      * Similar to gpu_dimensions but used to store information about GPU thread dimensions.
      * i.e., dimensions that should mapped to threads (in CUDA terminology).
@@ -383,6 +385,10 @@ protected:
       * Will tag the dimensions 1 and 2 to be transformed to GPU blocks.
       */
     void add_gpu_block_dimensions(std::string stmt_name, int dim0, int dim1 = -1, int dim2 = -1);
+
+    void add_gpu_comm_prop_id(std::string stmt_name, int comm_prop_id);
+
+  int get_gpu_comm_prop_id(std::string name);
 
     /**
      * Tag the dimensions \p dim0, \p dim1 and \p dim2 of the computation
@@ -2092,9 +2098,9 @@ protected:
       * The outermost loop level is 0.
       */
     // @{
-    void tag_gpu_level(int L0, int L1);
-    void tag_gpu_level(int L0, int L1, int L2, int L3);
-    void tag_gpu_level(int L0, int L1, int L2, int L3, int L4, int L5);
+  void tag_gpu_level(int L0, int L1, int comm_prop_id = -1);
+    void tag_gpu_level(int L0, int L1, int L2, int L3, int comm_prop_id = -1);
+    void tag_gpu_level(int L0, int L1, int L2, int L3, int L4, int L5, int comm_prop_id = -1);
     // @}
 
     /**
@@ -3368,9 +3374,9 @@ public:
       * Tag the loop level \p L0 and \p L1 to be mapped to GPU.
       */
     // @{
-    void tag_gpu_level(tiramisu::var L0, tiramisu::var L1);
-    void tag_gpu_level(tiramisu::var L0, tiramisu::var L1, tiramisu::var L2, tiramisu::var L3);
-    void tag_gpu_level(tiramisu::var L0, tiramisu::var L1, tiramisu::var L2, tiramisu::var L3, tiramisu::var L4, tiramisu::var L5);
+  void tag_gpu_level(tiramisu::var L0, tiramisu::var L1, int comm_prop_id = -1);
+    void tag_gpu_level(tiramisu::var L0, tiramisu::var L1, tiramisu::var L2, tiramisu::var L3, int comm_prop_id = -1);
+    void tag_gpu_level(tiramisu::var L0, tiramisu::var L1, tiramisu::var L2, tiramisu::var L3, tiramisu::var L4, tiramisu::var L5, int comm_prop_id = -1);
     // @}
 
     /**
@@ -4040,7 +4046,7 @@ private:
 
     std::vector<tiramisu::expr> dims;
 
-//    void *extra = nullptr; // for storing anything else, such as a cuda stream
+//    void *extra = nullptr; // for storing anything else, such as a cuda streamOB
 
 protected:
 

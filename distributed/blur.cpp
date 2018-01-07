@@ -173,7 +173,7 @@ int main() {
     communication_prop h2h_mpi_async(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
     communication_prop h2h_mpi_async_nonblock(T_DATA_TYPE, {ASYNC, NONBLOCK, MPI, CPU2CPU});
     communication_prop h2d_cuda_sync(T_DATA_TYPE, {SYNC, CUDA, CPU2GPU});
-    communication_prop h2d_cuda_async(T_DATA_TYPE, {ASYNC, CUDA, CPU2GPU});
+    communication_prop h2d_cuda_async(T_DATA_TYPE, {ASYNC, CUDA, CPU2GPU}, 0);
     communication_prop d2h_cuda_sync(T_DATA_TYPE, {SYNC, CUDA, GPU2CPU});
 
     // Minimal communication scheme
@@ -240,10 +240,9 @@ int main() {
     bx_exchange_wait.tag_distribute_level(q, false);
     cpu_to_gpu_wait.tag_distribute_level(q, false);
 
-    bx.tag_gpu_level(y2, x);
-    bx_recompute.tag_gpu_level(y, x);
-    by.tag_gpu_level(y2, x);
-
+    bx.tag_gpu_level(y2, x, 0);
+    bx_recompute.tag_gpu_level(y, x, 0);
+    by.tag_gpu_level(y2, x, 0);
 
     tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1,
                                   tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc+2));
@@ -296,7 +295,7 @@ int main() {
     blur_dist.gen_time_space_domain();
     blur_dist.gen_isl_ast();
     blur_dist.gen_halide_stmt();
-    blur_dist.gen_halide_obj("./build/generated_blur_dist.o", {Halide::Target::CUDA, Halide::Target::Debug});
+    blur_dist.gen_halide_obj("./build/generated_blur_dist.o", {Halide::Target::CUDA});//, Halide::Target::Debug});
 #endif
 
     blur_dist.dump_halide_stmt();
