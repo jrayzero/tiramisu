@@ -73,14 +73,12 @@ namespace tiramisu {
         return cuda_body;
     } else if (isl_ast_node_get_type(node) == isl_ast_node_user) {
       // TODO check for let statements!
-      std::cerr << "User node" << std::endl;
       isl_ast_expr *expr = isl_ast_node_user_get_expr(node);
       isl_ast_expr *arg = isl_ast_expr_get_op_arg(expr, 0);
       isl_id *id = isl_ast_expr_get_id(arg);
       isl_ast_expr_free(expr);
       isl_ast_expr_free(arg);
       std::string computation_name(isl_id_get_name(id));
-      std::cerr << "The user node name is " << computation_name << std::endl;
       isl_id *comp_id = isl_ast_node_get_annotation(node);
       tiramisu::computation *comp = (tiramisu::computation *)isl_id_get_user(comp_id);
       isl_id_free(comp_id);
@@ -103,7 +101,7 @@ namespace tiramisu {
     std::string kernel_signature = "void DEVICE_" + kernel_name + "()";
     std::string kernel_code = "__global__\n";    
     kernel_code +=  kernel_signature + " {\n";
-    kernel_code += body + "\n}\n\n";    
+    kernel_code += "  " + body + "\n}\n\n";    
     // wrapper function that the host calls
     std::string kernel_wrapper_signature = "void " + kernel_name + "()";
     kernel_code += kernel_wrapper_signature + " { }\n\n";
@@ -124,7 +122,7 @@ namespace tiramisu {
     std::string body = generator::codegen_kernel_body(fct, node, level, start_kernel_level, end_kernel_level);
     std::string kernel_fn = "build/" + kernel_name + ".cu";
     generate_kernel_file(kernel_name, kernel_fn, body);
-    compile_kernel_to_obj(kernel_fn);
+    //    compile_kernel_to_obj(kernel_fn);
     return kernel_fn;
     
   }
@@ -175,9 +173,9 @@ namespace tiramisu {
       std::string name_str(isl_id_get_name(identifier));
       isl_id_free(identifier);
       if (!convert_to_loop_type) {
-        result = "int " + name_str;
+        result = "(int)" + name_str;
       } else {
-        result = c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " " + name_str;
+        result = "(" + c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + ")" + name_str;
       }
     } else if (isl_ast_expr_get_type(isl_expr) == isl_ast_expr_op) {
       std::string op0, op1, op2;
@@ -199,7 +197,6 @@ namespace tiramisu {
           op2 = cuda_expr_from_isl_ast_expr(expr2, convert_to_loop_type);
           isl_ast_expr_free(expr2);
         }
-      
       switch (isl_ast_expr_get_op_type(isl_expr))
         {
         case isl_ast_op_and:
@@ -287,9 +284,8 @@ namespace tiramisu {
 
   std::string generator::linearize_access_cuda(int dims, const shape_t *shape, isl_ast_expr *index_expr) {
     assert(isl_ast_expr_get_op_n_arg(index_expr) > 1);
-    
     std::string index = "";
-    for (int i = 0; i < dims; i++)
+    for (int i = 1; i < dims; i++)
       {
         isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i);
         std::string operand_h = cuda_expr_from_isl_ast_expr(operand, true);
@@ -303,7 +299,7 @@ namespace tiramisu {
   std::string generator::linearize_access_cuda(int dims, const shape_t *shape, std::vector<tiramisu::expr> index_expr) {
     assert(index_expr.size() > 0);
     std::string index = "";
-    for (int i = 0; i < dims; i++)
+    for (int i = 1; i < dims; i++)
     {
         std::vector<isl_ast_expr *> ie = {};
         std::string operand_h = generator::cuda_expr_from_tiramisu_expr(NULL, ie, index_expr[i], nullptr);
@@ -318,7 +314,7 @@ namespace tiramisu {
   std::string generator::linearize_access_cuda(int dims, std::vector<std::string> &strides, std::vector<tiramisu::expr> index_expr) {
     assert(index_expr.size() > 0);
     std::string index = "";
-    for (int i = 0; i < dims; i++)
+    for (int i = 1; i < dims; i++)
       {
         std::vector<isl_ast_expr *> ie = {};
         std::string operand_h = generator::cuda_expr_from_tiramisu_expr(NULL, ie, index_expr[i - 1], nullptr);
@@ -330,11 +326,11 @@ namespace tiramisu {
   std::string generator::linearize_access_cuda(int dims, std::vector<std::string> &strides, isl_ast_expr *index_expr) {
     assert(isl_ast_expr_get_op_n_arg(index_expr) > 1);    
     std::string index = "";
-    for (int i = 0; i < dims; i++)
+    for (int i = 1; i < dims; i++)
       {
         isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i);
-        std::string operand_h = cuda_expr_from_isl_ast_expr(operand, true);
-        index += operand_h + " * " + strides[i];
+        std::string operand_h = cuda_expr_from_isl_ast_expr(operand, true);        
+        index += " " + operand_h + " * " + strides[i];
         isl_ast_expr_free(operand);
       }
 
@@ -752,28 +748,8 @@ namespace tiramisu {
                   tiramisu_expr.get_op_type() == tiramisu::o_lin_index) {
                   std::string index;
 
-                  // If index_expr is empty, and since tiramisu_expr is
-                  // an access expression, this means that index_expr was not
-                  // computed using the statement generator because this
-                  // expression is not an expression that is associated with
-                  // a computation. It is rather an expression used by
-                  // a computation (for example, as the size of a buffer
-                  // dimension). So in this case, we retrieve the indices directly
-                  // from tiramisu_expr.
-                  // The possible problem in this case, is that the indices
-                  // in tiramisu_expr cannot be adapted to the schedule if
-                  // these indices are i, j, .... This means that these
-                  // indices have to be constant value only. So we check for this.
-
-                  // If the consumer is in a distributed loop and the computation it is accessing is not,
-                  // then we need to remove the distributed iterator from the linearized access because
-                  // it is just a rank
                   if (index_expr.size() == 0) {
                     for (int i = 0; i < tiramisu_buffer->get_dim_sizes().size(); i++) {
-                      // Actually any access that does not require
-                      // scheduling is supported but currently we only
-                      // accept literal constants as anything else was not
-                      // needed til now.
                       assert(tiramisu_expr.get_access()[i].is_constant() && "Only constant accesses are supported.");
                     }
                     if (tiramisu_buffer->has_constant_extents()) {

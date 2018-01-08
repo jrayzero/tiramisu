@@ -1238,6 +1238,7 @@ void computation::tag_gpu_level2(tiramisu::var L0_var, tiramisu::var L1_var, int
   this->check_dimensions_validity(dimensions);
   int L0 = dimensions[0];
   int L1 = dimensions[1];
+  std::cerr << "L0 " << L0 << ", L1 " << L1 << std::endl;
 
   this->get_function()->add_gpu_range(this->get_name(), L0 /*start level*/, L1 /*end level*/);
   this->get_function()->add_gpu_comm_prop_id(this->get_name(), comm_prop_id);
