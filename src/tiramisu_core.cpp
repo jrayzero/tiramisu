@@ -1227,6 +1227,29 @@ std::string generate_new_variable_name()
     return "t" + std::to_string(id_counter++);
 }
 
+void computation::tag_gpu_level2(tiramisu::var L0_var, tiramisu::var L1_var, int comm_prop_id) {
+  DEBUG_FCT_NAME(3);
+  DEBUG_INDENT(4);
+
+  assert(L0_var.get_name().length() > 0);
+  assert(L1_var.get_name().length() > 0);
+  std::vector<int> dimensions =
+    this->get_loop_level_numbers_from_dimension_names({L0_var.get_name(), L1_var.get_name()});
+  this->check_dimensions_validity(dimensions);
+  int L0 = dimensions[0];
+  int L1 = dimensions[1];
+
+  this->get_function()->add_gpu_range(this->get_name(), L0 /*start level*/, L1 /*end level*/);
+  this->get_function()->add_gpu_comm_prop_id(this->get_name(), comm_prop_id);
+  
+  DEBUG_INDENT(-4);
+}
+
+void function::add_gpu_range(std::string comp_name, int start_level, int end_level) {
+  assert(gpu_ranges.find(comp_name) == gpu_ranges.end() && "This computation already has been tagged with GPU levels.");
+  this->gpu_ranges.emplace(comp_name, std::pair<int, int>(start_level, end_level));
+}
+
 void computation::tag_gpu_level(tiramisu::var L0_var, tiramisu::var L1_var, int comm_prop_id)
 {
     DEBUG_FCT_NAME(3);
@@ -5886,6 +5909,11 @@ bool tiramisu::function::should_unroll(const std::string &comp, int lev0) const
     return found;
 }
 
+bool tiramisu::function::should_map_to_gpu(const std::string comp_name) {
+  
+  return gpu_ranges.find(comp_name) != gpu_ranges.end();
+}
+
 bool tiramisu::function::should_map_to_gpu_block(const std::string &comp, int lev0) const
 {
     DEBUG_FCT_NAME(10);
@@ -6591,7 +6619,7 @@ std::string str_from_tiramisu_type_primitive(tiramisu::primitive_t type)
         case tiramisu::p_int16:
             return "int16";
         case tiramisu::p_uint32:
-            return "uin32";
+            return "uint32";
         case tiramisu::p_int32:
             return "int32";
         case tiramisu::p_uint64:
@@ -7830,16 +7858,16 @@ void tiramisu::computation::storage_fold(tiramisu::var L0_var, int factor)
  * Channel
  */
 
-std::set<int> tiramisu::communication_prop::comm_prop_ids;
+std::set<int> tiramisu::xfer_prop::comm_prop_ids;
 
-tiramisu::communication_prop::communication_prop(tiramisu::primitive_t dtype,
+tiramisu::xfer_prop::xfer_prop(tiramisu::primitive_t dtype,
                                                  std::initializer_list<tiramisu::channel_attr> attrs)
         : dtype(dtype), comm_prop_id(-1) {
     this->attrs.insert(this->attrs.begin(), attrs);
     //    comm_prop_ids.insert(0);
 }
 
-tiramisu::communication_prop::communication_prop(tiramisu::primitive_t dtype,
+tiramisu::xfer_prop::xfer_prop(tiramisu::primitive_t dtype,
                                                  std::initializer_list<tiramisu::channel_attr> attrs,
                                                  int comm_prop_id) : dtype(dtype), comm_prop_id(comm_prop_id) {
     this->attrs.insert(this->attrs.begin(), attrs);
@@ -7848,21 +7876,21 @@ tiramisu::communication_prop::communication_prop(tiramisu::primitive_t dtype,
     }
 }
 
-tiramisu::communication_prop::communication_prop() { }
+tiramisu::xfer_prop::xfer_prop() { }
 
-int tiramisu::communication_prop::get_comm_prop_id() const {
+int tiramisu::xfer_prop::get_comm_prop_id() const {
     return comm_prop_id;
 }
 
-void tiramisu::communication_prop::add_attr(tiramisu::channel_attr attr) {
+void tiramisu::xfer_prop::add_attr(tiramisu::channel_attr attr) {
     attrs.push_back(attr);
 }
 
-bool tiramisu::communication_prop::contains_attr(tiramisu::channel_attr attr) const {
+bool tiramisu::xfer_prop::contains_attr(tiramisu::channel_attr attr) const {
     return attrs.end() != std::find(attrs.begin(), attrs.end(), attr);
 }
 
-bool tiramisu::communication_prop::contains_attrs(std::vector<tiramisu::channel_attr> attrs) const {
+bool tiramisu::xfer_prop::contains_attrs(std::vector<tiramisu::channel_attr> attrs) const {
     for (auto attr : attrs) {
         if (this->attrs.end() == std::find(this->attrs.begin(), this->attrs.end(), attr)) {
             return false;
@@ -7871,11 +7899,11 @@ bool tiramisu::communication_prop::contains_attrs(std::vector<tiramisu::channel_
     return true;
 }
 
-tiramisu::primitive_t tiramisu::communication_prop::get_dtype() const {
+tiramisu::primitive_t tiramisu::xfer_prop::get_dtype() const {
     return this->dtype;
 }
 
-std::string tiramisu::communication_prop::attr_to_string(tiramisu::channel_attr attr) {
+std::string tiramisu::xfer_prop::attr_to_string(tiramisu::channel_attr attr) {
     switch (attr) {
         case SYNC: return "SYNC";
         case ASYNC: return "ASYNC";
@@ -7884,7 +7912,7 @@ std::string tiramisu::communication_prop::attr_to_string(tiramisu::channel_attr 
         case BLOCK: return "BLOCK";
         case NONBLOCK: return "NONBLOCK";
         default: {
-            assert(false && "Unknown communication_prop attr specified.");
+            assert(false && "Unknown xfer_prop attr specified.");
             return "";
         }
     }
@@ -7896,7 +7924,7 @@ std::string tiramisu::communication_prop::attr_to_string(tiramisu::channel_attr 
 
 tiramisu::communicator::communicator(std::string iteration_domain_str, tiramisu::expr e,
                                      bool schedule_this_computation, tiramisu::primitive_t data_type,
-                                     tiramisu::communication_prop chan, tiramisu::function *fct) :
+                                     tiramisu::xfer_prop chan, tiramisu::function *fct) :
         computation(iteration_domain_str, e, schedule_this_computation, data_type, fct), chan(chan) {}
 
 tiramisu::communicator::communicator(std::string iteration_domain_str, tiramisu::expr e, bool schedule_this_computation,
@@ -7927,7 +7955,7 @@ tiramisu::expr tiramisu::communicator::get_num_elements() const {
     return num;
 }
 
-communication_prop tiramisu::communicator::get_channel() const {
+xfer_prop tiramisu::communicator::get_channel() const {
     return chan;
 }
 
@@ -7954,7 +7982,7 @@ std::vector<communicator *> tiramisu::communicator::collapse(int level, tiramisu
  * Send
  */
 
-std::string create_send_func_name(const communication_prop chan) {
+std::string create_send_func_name(const xfer_prop chan) {
     if (chan.contains_attr(MPI)) {
         std::string name = "tiramisu_MPI";
         if (chan.contains_attr(SYNC) && chan.contains_attr(BLOCK)) {
@@ -8024,7 +8052,7 @@ std::string create_send_func_name(const communication_prop chan) {
 int send::next_msg_tag = 0;
 
 tiramisu::send::send(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs,
-                     communication_prop chan, bool schedule_this, tiramisu::function *fct, std::vector<expr> dims) :
+                     xfer_prop chan, bool schedule_this, tiramisu::function *fct, std::vector<expr> dims) :
         communicator(iteration_domain_str, rhs, schedule_this, chan.get_dtype(),
                      chan, fct), producer(producer),
         msg_tag(tiramisu::expr(next_msg_tag++)) {
@@ -8054,7 +8082,7 @@ void tiramisu::send::set_matching_recv(tiramisu::recv *matching_recv) {
  * Recv
  */
 
-std::string create_recv_func_name(const communication_prop chan) {
+std::string create_recv_func_name(const xfer_prop chan) {
 
     if (chan.contains_attr(MPI)) {
         std::string name = "tiramisu_MPI";
@@ -8102,7 +8130,7 @@ std::string create_recv_func_name(const communication_prop chan) {
     }
 }
 
-tiramisu::recv::recv(std::string iteration_domain_str, bool schedule_this, tiramisu::communication_prop chan, tiramisu::function *fct)
+tiramisu::recv::recv(std::string iteration_domain_str, bool schedule_this, tiramisu::xfer_prop chan, tiramisu::function *fct)
         : communicator(iteration_domain_str, tiramisu::expr(), schedule_this, chan.get_dtype(),
                        chan, fct) {
     _is_library_call = true;
@@ -8125,8 +8153,8 @@ bool tiramisu::recv::is_recv() const {
  * one sided
  */
 
-tiramisu::one_sided::one_sided(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs,
-                               communication_prop chan, bool schedule_this_computation, tiramisu::function *fct,
+tiramisu::send_recv::send_recv(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs,
+                               xfer_prop chan, bool schedule_this_computation, tiramisu::function *fct,
                                std::vector<expr> dims) : communicator(iteration_domain_str, rhs, schedule_this_computation, chan.get_dtype(),
                                                                       chan, fct), producer(producer) {
     _is_library_call = true;
@@ -8145,7 +8173,7 @@ tiramisu::one_sided::one_sided(std::string iteration_domain_str, tiramisu::compu
  * Wait
  */
 
-tiramisu::wait::wait(tiramisu::expr rhs, communication_prop channel, tiramisu::function *fct)
+tiramisu::wait::wait(tiramisu::expr rhs, xfer_prop channel, tiramisu::function *fct)
         : communicator(), rhs(rhs) {
     assert(rhs.get_op_type() == tiramisu::o_access && "The RHS expression for a wait should be an access!");
     tiramisu::computation *op = fct->get_computation_by_name(rhs.get_name())[0];
@@ -8157,7 +8185,7 @@ tiramisu::wait::wait(tiramisu::expr rhs, communication_prop channel, tiramisu::f
     this->chan = channel;
 }
 
-tiramisu::wait::wait(std::string iteration_domain_str, tiramisu::expr rhs, communication_prop channel,
+tiramisu::wait::wait(std::string iteration_domain_str, tiramisu::expr rhs, xfer_prop channel,
                      bool schedule_this,
                      tiramisu::function *fct) : communicator(iteration_domain_str, rhs, schedule_this, tiramisu::p_async, fct), rhs(rhs) {
     _is_library_call = true;
@@ -8341,8 +8369,8 @@ void tiramisu::function::lift_mpi_comp(tiramisu::computation *comp) {
 // So you still need an access function for the recv
 void tiramisu::function::lift_cuda_comp(tiramisu::computation *comp) {
     // Processed as one sided communication, so do together.
-    if (comp->is_one_sided()) {
-        one_sided *os = static_cast<one_sided *>(comp);
+    if (comp->is_send_recv()) {
+        send_recv *os = static_cast<send_recv *>(comp);
         tiramisu::expr num_elements(tiramisu::o_cast, global::get_loop_iterator_data_type(), os->get_num_elements());
         tiramisu::expr xfer_type(os->get_channel().get_dtype());
         bool is_async = os->get_channel().contains_attr(ASYNC); // async CUDA is like nonblocking MPI
@@ -8376,8 +8404,8 @@ void tiramisu::function::lift_cuda_comp(tiramisu::computation *comp) {
 
 void tiramisu::function::lift_dist_comps() {
     for (std::vector<tiramisu::computation *>::iterator comp = body.begin(); comp != body.end(); comp++) {
-        if ((*comp)->is_send() || (*comp)->is_recv() || (*comp)->is_wait() || (*comp)->is_one_sided()) {
-            communication_prop chan = static_cast<tiramisu::communicator *>(*comp)->get_channel();
+        if ((*comp)->is_send() || (*comp)->is_recv() || (*comp)->is_wait() || (*comp)->is_send_recv()) {
+            xfer_prop chan = static_cast<tiramisu::communicator *>(*comp)->get_channel();
             if (chan.contains_attr(MPI)) {
                 lift_mpi_comp(*comp);
             } else if (chan.contains_attr(CUDA)) {
@@ -8405,7 +8433,7 @@ bool tiramisu::computation::is_wait() const {
     return false;
 }
 
-bool tiramisu::computation::is_one_sided() const {
+bool tiramisu::computation::is_send_recv() const {
     return false;
 }
 
@@ -8421,12 +8449,12 @@ bool tiramisu::wait::is_wait() const {
     return true;
 }
 
-bool tiramisu::one_sided::is_one_sided() const {
+bool tiramisu::send_recv::is_send_recv() const {
     return true;
 }
 
 xfer tiramisu::computation::create_xfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_dest,
-                                        tiramisu::expr recv_src, communication_prop send_chan, communication_prop recv_chan,
+                                        tiramisu::expr recv_src, xfer_prop send_chan, xfer_prop recv_chan,
                                         tiramisu::expr send_expr, tiramisu::function *fct) {
     if (send_chan.contains_attr(MPI)) {
         assert(recv_chan.contains_attr(MPI));
@@ -8463,13 +8491,13 @@ xfer tiramisu::computation::create_xfer(std::string send_iter_domain, std::strin
     return c;
 }
 
-xfer tiramisu::computation::create_xfer(std::string iter_domain_str, communication_prop chan, tiramisu::expr expr,
+xfer tiramisu::computation::create_xfer(std::string iter_domain_str, xfer_prop chan, tiramisu::expr expr,
                                         tiramisu::function *fct) {
     assert(expr.get_op_type() == tiramisu::o_access);
     tiramisu::computation *producer = fct->get_computation_by_name(expr.get_name())[0];
 
     isl_set *iter_domain = isl_set_read_from_str(producer->get_ctx(), iter_domain_str.c_str());
-    tiramisu::one_sided *os = new tiramisu::one_sided(isl_set_to_str(iter_domain), producer, expr, chan, true,
+    tiramisu::send_recv *os = new tiramisu::send_recv(isl_set_to_str(iter_domain), producer, expr, chan, true,
                                                       producer->get_function(), {1});
     isl_map *sched = os->gen_identity_schedule_for_iteration_domain();
 

@@ -36,8 +36,8 @@ class communicator;
 class send;
 class recv;
 class wait;
-class one_sided;
-class communication_prop;
+class send_recv;
+class xfer_prop;
 struct transfer;
 struct xfer;
 
@@ -64,6 +64,15 @@ HalideCodegenOutput halide_pipeline_to_tiramisu_function(
  * Split string on a delimiter
  */
 void split_string(std::string str, std::string delimiter, std::vector<std::string> &vector);
+
+  struct shape_t {
+    unsigned long min;
+    unsigned long extent;
+    unsigned long stride;
+  };
+
+tiramisu::expr replace_original_indices_with_transformed_indices(tiramisu::expr exp,
+                                                                 std::map<std::string, isl_ast_expr *> iterators_map);
 
 /**
  * Add a free variable to a map, i.e. [N]->{S[x]->S[x]}, where N is the free parameter. N goes in the "box" ([])
@@ -152,7 +161,10 @@ private:
       * (i.e. the outermost loop) around the computation S0
       * should be vectorized with a vector length 4.
       */
-    std::vector<std::tuple<std::string, int, int>> vector_dimensions;
+  std::vector<std::tuple<std::string, int, int>> vector_dimensions;
+
+  std::map<std::string, std::pair<int, int> > gpu_ranges;
+  void add_gpu_range(std::string, int start_level, int end_level);
 
     /**
       * A vector representing the GPU block dimensions around
@@ -619,6 +631,8 @@ protected:
      * This function overrides any previously set iterator names.
      */
     void set_iterator_names(const std::vector<std::string> &it_names);
+
+  bool should_map_to_gpu(const std::string);
 
     /**
       * Return true if the computation \p comp should be mapped to GPU block
@@ -1599,6 +1613,9 @@ private:
       */
     void create_halide_assignment();
 
+  // Like create_halide_assignment, but it generates CUDA code
+  std::string create_kernel_assignment();
+
     /*
      * Create a new Tiramisu constant M = v*floor(N/v) and use it as
      * a separator.
@@ -2542,7 +2559,7 @@ protected:
 
     virtual bool is_send() const;
 
-    virtual bool is_one_sided() const;
+    virtual bool is_send_recv() const;
 
     virtual bool is_recv() const;
 
@@ -3377,6 +3394,10 @@ public:
   void tag_gpu_level(tiramisu::var L0, tiramisu::var L1, int comm_prop_id = -1);
     void tag_gpu_level(tiramisu::var L0, tiramisu::var L1, tiramisu::var L2, tiramisu::var L3, int comm_prop_id = -1);
     void tag_gpu_level(tiramisu::var L0, tiramisu::var L1, tiramisu::var L2, tiramisu::var L3, tiramisu::var L4, tiramisu::var L5, int comm_prop_id = -1);
+
+    void tag_gpu_level2(tiramisu::var L0, tiramisu::var L1, int comm_prop_id = -1);
+    void tag_gpu_level2(tiramisu::var L0, tiramisu::var L1, tiramisu::var L2, tiramisu::var L3, int comm_prop_id = -1);
+    void tag_gpu_level2(tiramisu::var L0, tiramisu::var L1, tiramisu::var L2, tiramisu::var L3, tiramisu::var L4, tiramisu::var L5, int comm_prop_id = -1);
     // @}
 
     /**
@@ -3655,10 +3676,10 @@ public:
     }
 
     static xfer create_xfer(std::string send_iter_domain, std::string recv_iter_domain, tiramisu::expr send_dest,
-                            tiramisu::expr recv_src, communication_prop send_chan, communication_prop recv_chan,
+                            tiramisu::expr recv_src, xfer_prop send_chan, xfer_prop recv_chan,
                             tiramisu::expr send_expr, tiramisu::function *fct);
 
-    static xfer create_xfer(std::string iter_domain, communication_prop chan, tiramisu::expr expr,
+    static xfer create_xfer(std::string iter_domain, xfer_prop chan, tiramisu::expr expr,
                             tiramisu::function *fct);
 
 };
@@ -3851,11 +3872,21 @@ protected:
             int level, std::vector<std::string> &tagged_stmts,
             bool is_a_child_block = false);
 
+  // This generates a cuda file containing the kernels that should be linked in later on when running the code. Returns the file name
+  static std::string cuda_kernel_from_isl_node(
+            function &fct, isl_ast_node *node,
+            int level, std::vector<std::string> &tagged_stmts, std::string kernel_name, int start, int end);
+
     /**
      * Create a Halide expression from a  Tiramisu expression.
      */
     static Halide::Expr halide_expr_from_tiramisu_expr(const tiramisu::function *fct, std::vector<isl_ast_expr *> &index_expr,
                                                        const tiramisu::expr &tiramisu_expr, tiramisu::computation *comp);
+
+  static std::string cuda_expr_from_tiramisu_expr(const tiramisu::function *fct, std::vector<isl_ast_expr *> &index_expr,
+                                                  const tiramisu::expr &tiramisu_expr, tiramisu::computation *comp);
+
+  static std::string codegen_kernel_body(function &fct, isl_ast_node *node, int current_level,int kernel_starting_level, int kernel_ending_level);
 
     /**
      * Linearize a multidimensional access to a Halide buffer.
@@ -3872,6 +3903,11 @@ protected:
     static Halide::Expr
     linearize_access(int dims, std::vector<Halide::Expr> &strides, std::vector<tiramisu::expr> index_expr);
     static Halide::Expr linearize_access(int dims, std::vector<Halide::Expr> &strides, isl_ast_expr *index_expr);
+
+  static std::string linearize_access_cuda(int dims, const shape_t *shape, isl_ast_expr *index_expr);
+  static std::string linearize_access_cuda(int dims, const shape_t *shape, std::vector<tiramisu::expr> index_expr);
+  static std::string linearize_access_cuda(int dims, std::vector<std::string> &strides, std::vector<tiramisu::expr> index_expr);
+  static std::string linearize_access_cuda(int dims, std::vector<std::string> &strides, isl_ast_expr *index_expr);
     //@}
 
     /**
@@ -3997,7 +4033,7 @@ struct transfer {
 struct xfer {
     tiramisu::send *s;
     tiramisu::recv *r;
-    tiramisu::one_sided *os;
+    tiramisu::send_recv *os;
 };
 
 enum wait_type {
@@ -4006,7 +4042,7 @@ enum wait_type {
 };
 
 // TODO make a check for valid property combinations
-class communication_prop {
+class xfer_prop {
     friend communicator;
 private:
 
@@ -4014,15 +4050,15 @@ private:
 
     std::vector<tiramisu::channel_attr> attrs;
 
-    communication_prop();
+    xfer_prop();
 
     int comm_prop_id;
 
 public:
 
-    communication_prop(tiramisu::primitive_t dtype, std::initializer_list<tiramisu::channel_attr> attrs);
+    xfer_prop(tiramisu::primitive_t dtype, std::initializer_list<tiramisu::channel_attr> attrs);
 
-    communication_prop(tiramisu::primitive_t dtype, std::initializer_list<tiramisu::channel_attr> attrs,
+    xfer_prop(tiramisu::primitive_t dtype, std::initializer_list<tiramisu::channel_attr> attrs,
                        int comm_prop_id);
 
     static std::set<int> comm_prop_ids;
@@ -4050,7 +4086,7 @@ private:
 
 protected:
 
-    communication_prop chan;
+    xfer_prop chan;
 
     communicator();
 
@@ -4060,7 +4096,7 @@ public:
                  tiramisu::primitive_t data_type, tiramisu::function *fct);
 
     communicator(std::string iteration_domain_str, tiramisu::expr rhs,
-                 bool schedule_this_computation, tiramisu::primitive_t, tiramisu::communication_prop chan,
+                 bool schedule_this_computation, tiramisu::primitive_t, tiramisu::xfer_prop chan,
                  tiramisu::function *fct);
 
     // collapse a level
@@ -4073,36 +4109,25 @@ public:
 
     void add_dim(tiramisu::expr size);
 
-    communication_prop get_channel() const;
+    xfer_prop get_channel() const;
 
     tiramisu::expr get_num_elements() const;
 
     void set_wait_access(std::string req_access_map_str);
 
-//    template <typename T>
-//    T *get_extra() {
-//        assert(extra && "extra == nullptr");
-//        return static_cast<T*>(extra);
-//    }
-//
-//    template <typename T>
-//    void set_extra(T *extra) {
-//        this->extra = (void*)extra;
-//    }
-
 };
 
-class one_sided : public communicator {
+class send_recv : public communicator {
 private:
 
     tiramisu::computation *producer;
 
 public:
 
-    one_sided(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs,
-              communication_prop chan, bool schedule_this_computation, tiramisu::function *fct, std::vector<expr> dims);
+    send_recv(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs,
+              xfer_prop chan, bool schedule_this_computation, tiramisu::function *fct, std::vector<expr> dims);
 
-    virtual bool is_one_sided() const override;
+    virtual bool is_send_recv() const override;
 
 };
 
@@ -4124,7 +4149,7 @@ private:
 
 public:
 
-    send(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs, communication_prop chan,
+    send(std::string iteration_domain_str, tiramisu::computation *producer, tiramisu::expr rhs, xfer_prop chan,
          bool schedule_this_computation, tiramisu::function *fct, std::vector<expr> dims);
 
     tiramisu::computation *get_producer() const;
@@ -4168,7 +4193,7 @@ private:
 
 public:
 
-    recv(std::string iteration_domain_str, bool schedule_this, tiramisu::communication_prop chan, tiramisu::function *fct);
+    recv(std::string iteration_domain_str, bool schedule_this, tiramisu::xfer_prop chan, tiramisu::function *fct);
 
     tiramisu::send *get_matching_send() const;
 
@@ -4203,9 +4228,9 @@ private:
 
 public:
 
-    wait(tiramisu::expr rhs, communication_prop channel, tiramisu::function *fct);
+    wait(tiramisu::expr rhs, xfer_prop channel, tiramisu::function *fct);
 
-    wait(std::string iteration_domain_str, tiramisu::expr rhs, communication_prop channel, bool schedule_this,
+    wait(std::string iteration_domain_str, tiramisu::expr rhs, xfer_prop channel, bool schedule_this,
          tiramisu::function *fct);
 
     tiramisu::wait_type get_wait_type() const;
