@@ -1887,6 +1887,8 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
         bool convert_to_conditional = false;
         int comm_prop_id = -2;
         bool handoff_gpu_loop = false; // if true, this loop will be processed elsewhere
+        bool process_gpu_loop = false;
+        std::string comp_name = "";
         while (tt < tagged_stmts.size())
           {
             if (tagged_stmts[tt] != "")
@@ -1896,6 +1898,10 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                   if (range.first <= level) {
                     // skip up to the non-GPU levels
                     handoff_gpu_loop = true;
+                    if (range.first == level) {
+                      process_gpu_loop = true;
+                      comp_name = tagged_stmts[tt];
+                    }
                     tagged_stmts[tt] = "";
                     break;
                   }
@@ -2013,8 +2019,16 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
         DEBUG(10, tiramisu::str_dump("The full list of tagged statements is now:"));
         for (const auto &ts: tagged_stmts)
           DEBUG(10, tiramisu::str_dump(ts + " "));
-        if (handoff_gpu_loop) {
-          result = halide_body;
+        if (handoff_gpu_loop && process_gpu_loop) {
+          assert(comp_name != "");
+          std::cerr << "Computation name is " << comp_name << std::endl;
+          std::pair<int, int> range = fct.gpu_ranges[comp_name];
+          std::string kernel = "tiramisu_CUDA_kernel_" + comp_name;
+          result = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), kernel, {}));
+          // now actually generate that backend code for both the loops and the computations
+          std::string kernel_fn = generator::cuda_kernel_from_isl_node(fct, node, level, 
+                                                                       tagged_stmts, kernel, range.first, range.second);
+          std::cerr << "Kernel filename: " << kernel_fn << std::endl;
         } else if (convert_to_conditional) {
           DEBUG(3, tiramisu::str_dump("Converting for loop into a rank conditional."));
           Halide::Expr rank_var =
@@ -2025,7 +2039,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
           // We need a reference still to this iterator name, so set it equal to the rank
           halide_body = Halide::Internal::LetStmt::make(iterator_str, rank_var, halide_body);
           result = Halide::Internal::IfThenElse::make(condition, halide_body, else_s);
-        } else {
+        } else if(!handoff_gpu_loop) {
           DEBUG(3, tiramisu::str_dump("Creating the for loop."));
           result = Halide::Internal::For::make(iterator_str, init_expr, cond_upper_bound_halide_format - init_expr,
                                                fortype, dev_api, halide_body);
@@ -2100,12 +2114,13 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
               }
             }
             if (use_gpu_backend) {
-              std::pair<int, int> range = fct.gpu_ranges[computation_name];
+              // don't do anything for now
+              /*              std::pair<int, int> range = fct.gpu_ranges[computation_name];
               std::string kernel = "tiramisu_CUDA_kernel_" + computation_name;
               result = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), kernel, {}));
               // now actually generate that backend code
               std::string kernel_fn = generator::cuda_kernel_from_isl_node(fct, node, level, tagged_stmts, kernel, range.first, range.second);
-              std::cerr << "Kernel filename: " << kernel_fn << std::endl;
+              std::cerr << "Kernel filename: " << kernel_fn << std::endl;*/
             } else {
               DEBUG(10, tiramisu::str_dump("The full list of tagged statements is now"));
               for (const auto &ts: tagged_stmts)

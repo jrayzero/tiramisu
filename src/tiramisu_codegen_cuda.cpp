@@ -36,6 +36,7 @@ namespace tiramisu {
   // generate a kernel from the original isl node
   std::string generator::codegen_kernel_body(function &fct, isl_ast_node *node, int current_level, int kernel_starting_level, int kernel_ending_level) {
     if (isl_ast_node_get_type(node) == isl_ast_node_block) {
+      // I think blocks would combine multiple computations in the loop 
       std::cerr << "WTF is an isl block" << std::endl;
       exit(29);
       return "";
@@ -43,37 +44,72 @@ namespace tiramisu {
       std::string code = "";
       if (current_level > kernel_ending_level) {
         std::cerr << "Generating for loop in kernel" << std::endl;
-
-
-
+        assert(false && "Support for loops in kernels once we actually need them");
+        return "";
       } else { // this is a GPU kernel loop, i.e. a thread iterator (or block iterator, w/e)
         std::cerr << "Generating a thread iterator for the kernel" << std::endl;
-        
+        // Figure out the new name for this iterator based on blocks and threads
+        isl_ast_expr *iter = isl_ast_node_for_get_iterator(node);
+        char *cstr = isl_ast_expr_to_C_str(iter);
+        std::string iterator_str = std::string(cstr);
+        std::string idx_computation = "";
+        std::cerr << "kernel_ending_level-kernel_starting_level = " << (kernel_ending_level - kernel_starting_level) << " with current level " << current_level << std::endl;
+        if (kernel_ending_level - kernel_starting_level == 1) { // 1 dimension
+          if (current_level == kernel_ending_level) {
+            idx_computation = "int thread_x = threadIdx.x;\n";
+          } else {
+            idx_computation = "int block_x = blockIdx.x;\n";
+          }
+        } else if (kernel_ending_level - kernel_starting_level == 3) { // 2 dimension
+          if (current_level == kernel_ending_level) {
+            idx_computation = "int thread_y = threadIdx.y;\n";
+          } else if (current_level == kernel_ending_level - 1) {
+            idx_computation = "int thread_x = threadIdx.x;\n";
+          } else if (current_level == kernel_ending_level - 2) {
+            idx_computation = "int block_y = blockIdx.y;\n";
+          } else {
+            idx_computation = "int block_x = blockIdx.x;\n";
+          }
+        } else if (kernel_ending_level - kernel_starting_level == 5) { // 3 dimension
+          if (current_level == kernel_ending_level) {
+            idx_computation = "int thread_z = threadIdx.z;\n";
+          } else if (current_level == kernel_ending_level - 1) {
+            idx_computation = "int thread_y = threadIdx.y;\n";
+          } else if (current_level == kernel_ending_level - 2) {
+            idx_computation = "int thread_x = threadIdx.x;\n";
+          } else if (current_level == kernel_ending_level - 3) {
+            idx_computation = "int block_z = blockIdx.z;\n";
+          } else if (current_level == kernel_ending_level - 4) {
+            idx_computation = "int block_y = blockIdx.y;\n";
+          } else {
+            idx_computation = "int block_x = blockIdx.x;\n";
+          }
+        } else {
+          assert(false && "Too many levels tagged for GPU! Must be <= 3 per thread and per block");
+        }
 
-
-      }
-      isl_ast_expr *iter = isl_ast_node_for_get_iterator(node);
-      char *cstr = isl_ast_expr_to_C_str(iter);
-      std::string iterator_str = std::string(cstr);
-      isl_ast_expr *init = isl_ast_node_for_get_init(node);
-      isl_ast_expr *cond = isl_ast_node_for_get_cond(node);
-      isl_ast_expr *inc  = isl_ast_node_for_get_inc(node);
+        isl_ast_expr *init = isl_ast_node_for_get_init(node);
+        isl_ast_expr *cond = isl_ast_node_for_get_cond(node);
+        isl_ast_expr *inc  = isl_ast_node_for_get_inc(node);
       
-      isl_val *inc_val = isl_ast_expr_get_val(inc);
-      if (!isl_val_is_one(inc_val))
-        {
+        isl_val *inc_val = isl_ast_expr_get_val(inc);
+        if (!isl_val_is_one(inc_val)) {
           tiramisu::error("The increment in one of the loops is not +1."
                           "This is not supported", 1);
         }
         isl_val_free(inc_val);
-        
+        std::cerr << "The idx_computation is " << idx_computation << std::endl;
         isl_ast_node *body = isl_ast_node_for_get_body(node);
         isl_ast_expr *cond_upper_bound_isl_format = NULL;
-        
+        std::cerr << "About to codegen for loop body at level " << (current_level + 1) << std::endl;
+        std::cerr << "end level: " << kernel_ending_level << std::endl;
         std::string cuda_body = tiramisu::generator::codegen_kernel_body(fct, body, current_level + 1, kernel_starting_level, kernel_ending_level);
+        cuda_body = idx_computation + cuda_body;
         return cuda_body;
+      }
     } else if (isl_ast_node_get_type(node) == isl_ast_node_user) {
       // TODO check for let statements!
+      std::cerr << "It's a user block" << std::endl;
       isl_ast_expr *expr = isl_ast_node_user_get_expr(node);
       isl_ast_expr *arg = isl_ast_expr_get_op_arg(expr, 0);
       isl_id *id = isl_ast_expr_get_id(arg);
