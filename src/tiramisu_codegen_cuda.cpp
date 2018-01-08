@@ -200,7 +200,7 @@ namespace tiramisu {
       switch (isl_ast_expr_get_op_type(isl_expr))
         {
         case isl_ast_op_and:
-          result = op0 + " && " + op1;
+          result = "(" + op0 + " && " + op1 + ")";
           break;
         case isl_ast_op_and_then:
           assert(false);
@@ -208,7 +208,7 @@ namespace tiramisu {
                           0);
           break;
         case isl_ast_op_or:
-          result = op0 + " || " + op1;
+          result = "(" + op0 + " || " + op1 + ")";
           break;
         case isl_ast_op_or_else:
           assert(false);
@@ -222,19 +222,19 @@ namespace tiramisu {
           assert(false);
           break;
         case isl_ast_op_minus:          
-          result = "-" + op0;
+          result = "(-" + op0 + ")";
           break;
         case isl_ast_op_add:
-          result = op0 + " + " + op1;
+          result = "(" + op0 + " + " + op1 + ")";
           break;
         case isl_ast_op_sub:
-          result = op0 + " - " + op1;
+          result = "(" + op0 + " - " + op1 + ")";
           break;
         case isl_ast_op_mul:
-          result = op0 + " * " + op1;
+          result = "(" + op0 + " * " + op1 + ")";
           break;
         case isl_ast_op_div:
-          result = op0 + " / " + op1;
+          result = "(" + op0 + " / " + op1 + ")";
           break;
         case isl_ast_op_fdiv_q:
         case isl_ast_op_pdiv_q:
@@ -246,22 +246,22 @@ namespace tiramisu {
           break;
         case isl_ast_op_select:
         case isl_ast_op_cond:
-          result = op0 + " ? " + op1 + " : " + op2;
+          result = "(" + op0 + " ? " + op1 + " : " + op2 + ")";
           break;
         case isl_ast_op_le:
-          result = op0 + " <= " + op1;
+          result = "(" + op0 + " <= " + op1 + ")";
           break;
         case isl_ast_op_lt:
-          result = op0 + " < " + op1;
+          result = "(" + op0 + " < " + op1 + ")";
           break;
         case isl_ast_op_ge:
-          result = op0 + " >= " + op1;
+          result = "(" + op0 + " >= " + op1 + ")";
           break;
         case isl_ast_op_gt:
-          result = op0 + " > " + op1;
+          result = "(" + op0 + " > " + op1 + ")";
           break;
         case isl_ast_op_eq:
-          result = op0 + " == " + op1;
+          result = "(" + op0 + " == " + op1 + ")";
           break;
         default:
           tiramisu::str_dump("Transforming the following expression",
@@ -281,15 +281,19 @@ namespace tiramisu {
     return result;
   }
 
-
+  // my bounds on this loop are messed up
   std::string generator::linearize_access_cuda(int dims, const shape_t *shape, isl_ast_expr *index_expr) {
     assert(isl_ast_expr_get_op_n_arg(index_expr) > 1);
     std::string index = "";
-    for (int i = 1; i < dims; i++)
+    for (int i = dims; i >= 1; i--)
       {
         isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i);
         std::string operand_h = cuda_expr_from_isl_ast_expr(operand, true);
-        index += operand_h + " * " + std::to_string(shape[i].stride);
+        if (i == dims) {
+          index = "((" + operand_h + ") * (" + std::to_string(shape[dims-i].stride) + "))";
+        } else {
+          index = "(" + index + " + " + "((" + operand_h + ") * (" + std::to_string(shape[dims-i].stride) + ")))";
+        }
         isl_ast_expr_free(operand);
       }
         
@@ -297,13 +301,14 @@ namespace tiramisu {
   }
 
   std::string generator::linearize_access_cuda(int dims, const shape_t *shape, std::vector<tiramisu::expr> index_expr) {
+    assert(false && "Fix linearize");
     assert(index_expr.size() > 0);
     std::string index = "";
     for (int i = 1; i < dims; i++)
     {
         std::vector<isl_ast_expr *> ie = {};
-        std::string operand_h = generator::cuda_expr_from_tiramisu_expr(NULL, ie, index_expr[i], nullptr);
-        index += operand_h + " * " + std::to_string(shape[i].stride);
+        std::string operand_h = generator::cuda_expr_from_tiramisu_expr(NULL, ie, index_expr[i-1], nullptr);
+        index += operand_h + " * " + std::to_string(shape[i-1].stride);
     }
 
     DEBUG_INDENT(-4);
@@ -312,13 +317,14 @@ namespace tiramisu {
   }
   
   std::string generator::linearize_access_cuda(int dims, std::vector<std::string> &strides, std::vector<tiramisu::expr> index_expr) {
+    assert(false && "Fix linearize");
     assert(index_expr.size() > 0);
     std::string index = "";
     for (int i = 1; i < dims; i++)
       {
         std::vector<isl_ast_expr *> ie = {};
-        std::string operand_h = generator::cuda_expr_from_tiramisu_expr(NULL, ie, index_expr[i - 1], nullptr);
-        index += operand_h + " * " + strides[i];
+        std::string operand_h = generator::cuda_expr_from_tiramisu_expr(NULL, ie, index_expr[i-1], nullptr);
+        index += operand_h + " * " + strides[i-1];
       }
     return index;
   }
@@ -326,11 +332,15 @@ namespace tiramisu {
   std::string generator::linearize_access_cuda(int dims, std::vector<std::string> &strides, isl_ast_expr *index_expr) {
     assert(isl_ast_expr_get_op_n_arg(index_expr) > 1);    
     std::string index = "";
-    for (int i = 1; i < dims; i++)
+    for (int i = dims; i >= 1; i--)
       {
-        isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i);
+        isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i); // skip the first op arg, which is just the name of the buffer
         std::string operand_h = cuda_expr_from_isl_ast_expr(operand, true);        
-        index += " " + operand_h + " * " + strides[i];
+        if (i == dims) {
+          index = "((" + operand_h + ") * (" + strides[dims-i] + "))";
+        } else {
+          index = "(" + index + " + ((" + operand_h + ") * (" + strides[dims-i] + ")))";
+        }
         isl_ast_expr_free(operand);
       }
 
@@ -370,7 +380,7 @@ namespace tiramisu {
     if (lhs_tiramisu_buffer->has_constant_extents()) {
       for (int i = 0; i < lhs_buf_dims; i++) {
         lhs_shape[i].min = 0;
-        int dim_idx = lhs_tiramisu_buffer->get_dim_sizes().size() - i - 1;
+        int dim_idx = lhs_tiramisu_buffer->get_dim_sizes().size() - i - 1;;
         lhs_shape[i].extent = (int) lhs_tiramisu_buffer->get_dim_sizes()[dim_idx].get_int_val();
         lhs_shape[i].stride = stride;
         stride *= (int) lhs_tiramisu_buffer->get_dim_sizes()[dim_idx].get_int_val();
@@ -379,14 +389,22 @@ namespace tiramisu {
       std::vector<isl_ast_expr *> empty_index_expr;
       std::string stride_expr = "1";
       for (int i = 0; i < lhs_tiramisu_buffer->get_dim_sizes().size(); i++) {
-        int dim_idx = lhs_tiramisu_buffer->get_dim_sizes().size() - i - 1;
+        int dim_idx = lhs_tiramisu_buffer->get_dim_sizes().size() - i - 1;//i+1;
         strides_vector.push_back(stride_expr);
-        stride_expr = stride_expr + " * " + 
-          generator::cuda_expr_from_tiramisu_expr(this->get_function(), empty_index_expr,
-                                                  replace_original_indices_with_transformed_indices(
-                                                                                                    lhs_tiramisu_buffer->get_dim_sizes()[dim_idx],
-                                                                                                    this->get_iterators_map()),
-                                                  this);
+        if ( i == 0) {
+          stride_expr = "(" + generator::cuda_expr_from_tiramisu_expr(this->get_function(), empty_index_expr,
+                                                                replace_original_indices_with_transformed_indices(
+                                                                                                                  lhs_tiramisu_buffer->get_dim_sizes()[dim_idx],
+                                                                                                                  this->get_iterators_map()),
+                                                                      this) + ")";
+        } else {
+          stride_expr = "((" + stride_expr + ") * (" + 
+            generator::cuda_expr_from_tiramisu_expr(this->get_function(), empty_index_expr,
+                                                    replace_original_indices_with_transformed_indices(
+                                                                                                      lhs_tiramisu_buffer->get_dim_sizes()[dim_idx],
+                                                                                                      this->get_iterators_map()),
+                                                    this) + "))";
+        }
       }
     }
 
@@ -490,10 +508,10 @@ namespace tiramisu {
         switch (tiramisu_expr.get_op_type())
           {
           case tiramisu::o_logical_and:
-            result = op0 + " && " +op1;
+            result = "(" + op0 + " && " + op1 + ")";
             break;
           case tiramisu::o_logical_or:
-            result = op0 + " || " + op1;
+            result = "(" + op0 + " || " + op1 + ")";
             break;
           case tiramisu::o_max:
             assert(false && "max not supported in kernel");
@@ -502,25 +520,25 @@ namespace tiramisu {
             assert(false && "min not supported in kernel");
             break;
           case tiramisu::o_minus:
-            result = "-" + op0;
+            result = "(-" + op0 + ")";
             break;
           case tiramisu::o_add:
-            result = op0 + " + " + op1;
+            result = "(" + op0 + " + " + op1 + ")";
             break;
           case tiramisu::o_sub:
-            result = op0 + " - " + op1;
+            result = "(" + op0 + " - " + op1 + ")";
             break;
           case tiramisu::o_mul:
-            result = op0 + " * " + op1;
+            result = "(" + op0 + " * " + op1 + ")";
             break;
           case tiramisu::o_div:
-            result = op0 + " / " + op1;
+            result = "(" + op0 + " / " + op1 + ")";
             break;
           case tiramisu::o_mod:
             assert(false && "modulo not supported in kernel");
             break;
           case tiramisu::o_select:
-            result = op0 + " ? " + op1 + " : " + op2;
+            result = "(" + op0 + " ? " + op1 + " : " + op2 + ")";
             break;
           case tiramisu::o_lerp:
             assert(false && "lerp not supported in kernel");
@@ -529,37 +547,37 @@ namespace tiramisu {
             tiramisu::error("Code generation for o_cond is not supported yet.", true);
             break;
           case tiramisu::o_le:
-            result = op0 + " <= " + op1;
+            result = "(" + op0 + " <= " + op1 + ")";
             break;
           case tiramisu::o_lt:
-            result = op0 + " < " + op1;
+            result = "(" + op0 + " < " + op1 + ")";
             break;
           case tiramisu::o_ge:
-            result = op0 + " >= " + op1;
+            result = "(" + op0 + " >= " + op1 + ")";
             break;
           case tiramisu::o_gt:
-            result = op0 + " > " + op1;
+            result = "(" + op0 + " > " + op1 + ")";
             break;
           case tiramisu::o_logical_not:
-            result = "!" + op0;
+            result = "(!" + op0 + ")";
             break;
           case tiramisu::o_eq:
-            result = op0 + " == " + op1;
+            result = "(" + op0 + " == " + op1 + ")";
             break;
           case tiramisu::o_ne:
-            result = op0 + " != " + op1;
+            result = "(" + op0 + " != " + op1 + ")";
             break;
           case tiramisu::o_bitwise_and:
-            result = op0 + " & " + op1;
+            result = "(" + op0 + " & " + op1 + ")";
             break;
           case tiramisu::o_bitwise_or:
-            result = op0 + " | " + op1;
+            result = "(" + op0 + " | " + op1 + ")";
             break;
           case tiramisu::o_bitwise_xor:
-            result = op0 + " ^ " + op1;
+            result = "(" + op0 + " ^ " + op1 + ")";
             break;
           case tiramisu::o_bitwise_not:
-            result = "~" + op0;
+            result = "(~" + op0 + ")";
             break;
           case tiramisu::o_is_nan:
             tiramisu::error("Code generation for o_is_nan is not supported yet in CUDA.", true);
@@ -576,10 +594,10 @@ namespace tiramisu {
               tiramisu::error("Code generation for o_type is not supported yet in CUDA.", true);
             }
           case tiramisu::o_right_shift:
-            result = op0 + ">>" + op1;
+            result = "(" + op0 + ">>" + op1 + ")";
             break;
           case tiramisu::o_left_shift:
-            result = op0 + " << " + op1;
+            result = "(" + op0 + " << " + op1 + ")";
             break;
           case tiramisu::o_floor:
             if (tiramisu_expr.get_data_type() == tiramisu::p_float32) {
@@ -589,7 +607,7 @@ namespace tiramisu {
             }
             break;
           case tiramisu::o_cast:
-            result = "(" + c_type_from_tiramisu_type(tiramisu_expr.get_data_type()) + ")" + op0;
+            result = "((" + c_type_from_tiramisu_type(tiramisu_expr.get_data_type()) + ")" + op0 + ")";
             break;
           case tiramisu::o_sin:
             assert(false && "do this cuda func later");
@@ -731,16 +749,22 @@ namespace tiramisu {
                   shape[i].extent = (int)tiramisu_buffer->get_dim_sizes()[dim_idx].get_int_val();
                   shape[i].stride = stride;
                   stride *= (int)tiramisu_buffer->get_dim_sizes()[dim_idx].get_int_val();
-                    }
+                }
               } else {
                 std::vector<isl_ast_expr *> empty_index_expr;
                 std::string stride_expr = "1";
                 for (int i = 0; i < tiramisu_buffer->get_dim_sizes().size(); i++) {
                   int dim_idx = tiramisu_buffer->get_dim_sizes().size() - i - 1;
                   strides_vector.push_back(stride_expr);
-                  stride_expr = stride_expr + " * " + generator::cuda_expr_from_tiramisu_expr(fct, empty_index_expr,
-                                                                                              tiramisu_buffer->get_dim_sizes()[dim_idx],
-                                                                                              comp);
+                  if (i == 0) {
+                    stride_expr = "(" + generator::cuda_expr_from_tiramisu_expr(fct, empty_index_expr,
+                                                                          tiramisu_buffer->get_dim_sizes()[dim_idx],
+                                                                          comp) + ")";
+                  } else {
+                    stride_expr = "((" + stride_expr + ") * (" + generator::cuda_expr_from_tiramisu_expr(fct, empty_index_expr,
+                                                                                                tiramisu_buffer->get_dim_sizes()[dim_idx],
+                                                                                                comp) + "))";
+                  }
                 }
               }
               if (tiramisu_expr.get_op_type() == tiramisu::o_access ||
@@ -793,7 +817,7 @@ namespace tiramisu {
             tiramisu::error("Translating an unsupported ISL expression into a Halide expression.", 1);
           }
     } else if (tiramisu_expr.get_expr_type() == tiramisu::e_var) {
-      result = c_type_from_tiramisu_type(tiramisu_expr.get_data_type()) + " " + tiramisu_expr.get_name();
+      result = /*c_type_from_tiramisu_type(tiramisu_expr.get_data_type()) + " " +*/ tiramisu_expr.get_name();
     } else {
       tiramisu::str_dump("tiramisu type of expr: ",
                          str_from_tiramisu_type_expr(tiramisu_expr.get_expr_type()).c_str());
