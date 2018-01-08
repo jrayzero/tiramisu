@@ -19,12 +19,13 @@
 
 // TODO
 // 0a. Generate kernel code...
-// 0b. Get rid of the GPU tagged loops (it is processing those still)
-// 0c. Make sure to convert the outer loop to a conditional!
 // 1. Initialize context and all of that (that would go in the wrapper function that is called from the Halide IR)
 // 2. Launch kernel
 // make sure having multiple computations in the same loop nest work. Both will need to be converted into kernels
 namespace tiramisu {
+
+  std::vector<std::string> closure_buffers;
+  std::vector<std::string> closure_vars;
 
   std::string cuda_headers() {
     std::string includes = "#include <cuda.h>\n";
@@ -62,7 +63,7 @@ namespace tiramisu {
       if (!isl_val_is_one(inc_val))
         {
           tiramisu::error("The increment in one of the loops is not +1."
-                          "This is not supporte", 1);
+                          "This is not supported", 1);
         }
         isl_val_free(inc_val);
         
@@ -98,7 +99,25 @@ namespace tiramisu {
     // headers
     kernel << cuda_headers() << std::endl;
     // kernel
-    std::string kernel_signature = "void DEVICE_" + kernel_name + "()";
+    std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
+    int idx = 0;
+    for (std::string b : closure_buffers) {
+      if (idx == 0) {
+        kernel_signature += b;
+      } else {
+        kernel_signature += ", " + b;
+      }
+      idx++;
+    }
+    for (std::string v : closure_vars) {
+      if (idx == 0) {
+        kernel_signature += v;
+      } else {
+        kernel_signature += ", " + v;
+      }
+      idx++;
+    }
+    kernel_signature += ")";
     std::string kernel_code = "__global__\n";    
     kernel_code +=  kernel_signature + " {\n";
     kernel_code += "  " + body + "\n}\n\n";    
@@ -122,7 +141,7 @@ namespace tiramisu {
     std::string body = generator::codegen_kernel_body(fct, node, level, start_kernel_level, end_kernel_level);
     std::string kernel_fn = "build/" + kernel_name + ".cu";
     generate_kernel_file(kernel_name, kernel_fn, body);
-    //    compile_kernel_to_obj(kernel_fn);
+    compile_kernel_to_obj(kernel_fn);
     return kernel_fn;
     
   }
@@ -174,9 +193,16 @@ namespace tiramisu {
       isl_id_free(identifier);
       if (!convert_to_loop_type) {
         result = "(int)" + name_str;
+        if (std::find(closure_vars.begin(), closure_vars.end(), "int " + name_str) == closure_vars.end()) {
+          closure_vars.push_back("int " + name_str);
+        }
       } else {
         result = "(" + c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + ")" + name_str;
+        if (std::find(closure_vars.begin(), closure_vars.end(), c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " " + name_str) == closure_vars.end()) {
+          closure_vars.push_back(c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " " + name_str);
+        }
       }
+      
     } else if (isl_ast_expr_get_type(isl_expr) == isl_ast_expr_op) {
       std::string op0, op1, op2;
       
@@ -370,6 +396,11 @@ namespace tiramisu {
     assert(buffer_entry != this->fct->get_buffers().end());
     const auto &lhs_tiramisu_buffer = buffer_entry->second;
     int lhs_buf_dims = lhs_tiramisu_buffer->get_dim_sizes().size();
+
+    std::string buffer_sig = c_type_from_tiramisu_type(lhs_tiramisu_buffer->get_elements_type()) + " *" + lhs_buffer_name;
+    if (std::find(closure_buffers.begin(), closure_buffers.end(), buffer_sig) == closure_buffers.end()) {
+      closure_buffers.push_back(buffer_sig);
+    }
     
     // Tiramisu buffer is from outermost to innermost, whereas Halide buffer is
     // from innermost to outermost; thus, we need to reverse the order
@@ -734,6 +765,11 @@ namespace tiramisu {
 
               const auto &tiramisu_buffer = buffer_entry->second;
 
+              std::string buffer_sig = c_type_from_tiramisu_type(tiramisu_buffer->get_elements_type()) + " *" + buffer_name;
+              if (std::find(closure_buffers.begin(), closure_buffers.end(), buffer_sig) == closure_buffers.end()) {
+                closure_buffers.push_back(buffer_sig);
+              }
+
               std::string type = c_type_from_tiramisu_type(tiramisu_buffer->get_elements_type());
 
               // Tiramisu buffer is from outermost to innermost, whereas Halide buffer is from innermost
@@ -817,7 +853,7 @@ namespace tiramisu {
             tiramisu::error("Translating an unsupported ISL expression into a Halide expression.", 1);
           }
     } else if (tiramisu_expr.get_expr_type() == tiramisu::e_var) {
-      result = /*c_type_from_tiramisu_type(tiramisu_expr.get_data_type()) + " " +*/ tiramisu_expr.get_name();
+      result = tiramisu_expr.get_name();
     } else {
       tiramisu::str_dump("tiramisu type of expr: ",
                          str_from_tiramisu_type_expr(tiramisu_expr.get_expr_type()).c_str());
