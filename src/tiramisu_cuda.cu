@@ -4,7 +4,7 @@
 
 #include <cassert>
 #include "tiramisu/tiramisu_cuda.h"
-//#include "tiramisu/cuda_common.h"
+#include "tiramisu/tiramisu_cuda_runtime.h"
 #include <stdio.h>
 #include "HalideRuntimeCuda.h"
 #include "cuda.h"
@@ -58,6 +58,18 @@ void tiramisu_cuda_free(CUdeviceptr device_ptr) {
 #ifdef RUNTIME
 
 extern "C" {
+
+// TODO load all at once into one module to reduce overhead of loading module everytime at runtime
+void *tiramisu_init_cuda(int device_num) {
+    struct cuda_vars *cvars = (struct cuda_vars*)malloc(sizeof(struct cuda_vars));
+    assert(cuInit(0) == 0);
+    assert(cuDeviceGet(&(cvars->device), device_num) == 0);
+    size_t memory;
+    cuDeviceTotalMem(&memory, cvars->device);
+    fprintf(stderr, "Total memory on device %d is %lu\n", device_num, memory);
+    assert(cuCtxCreate(&(cvars[0].ctx), 0, cvars[0].device) == 0);
+    return (void*)cvars;
+}
 
 void *get_kernel_stream() {
     assert(st.init_kernel_stream);

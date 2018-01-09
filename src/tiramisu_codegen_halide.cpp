@@ -2024,7 +2024,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
           std::cerr << "Computation name is " << comp_name << std::endl;
           std::pair<int, int> range = fct.gpu_ranges[comp_name];
           std::string kernel = "tiramisu_CUDA_kernel_" + comp_name;
-          result = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), kernel, {}));
+          result = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), kernel, {/*Halide::Internal::Variable::make(Halide::Handle(), "cuda_vars")*/}));
           // now actually generate that backend code for both the loops and the computations
           std::string kernel_fn = generator::cuda_kernel_from_isl_node(fct, node, level, 
                                                                        tagged_stmts, kernel, range.first, range.second);
@@ -2326,11 +2326,13 @@ void function::gen_halide_stmt()
 
         // First, need to initialize the stream tracker
         // This is the prefix to it all
-        std::string nvvm_fname = "";
-        stmt = Halide::Internal::Block::make(Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_init_stream_tracker",
-                                                                                             {(int)(tiramisu::xfer_prop::comm_prop_ids.size()), Halide::Expr(nvvm_fname.c_str())})), stmt);
-        // then clen it up
-        stmt = Halide::Internal::Block::make(stmt, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cleanup_stream_tracker", {(int)(tiramisu::xfer_prop::comm_prop_ids.size())})));
+        stmt = Halide::Internal::LetStmt::make("cuda_vars", make_comm_call(Halide::Handle(), "tiramisu_cuda_init", {}), stmt);
+//        stmt = Halide::Internal::Block::make(Halide::Internal::Evaluate::make(make_comm_call()));
+//        std::string nvvm_fname = "";
+//        stmt = Halide::Internal::Block::make(Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_init_stream_tracker",
+//                                                                                             {(int)(tiramisu::xfer_prop::comm_prop_ids.size()), Halide::Expr(nvvm_fname.c_str())})), stmt);
+//        // then clen it up
+//        stmt = Halide::Internal::Block::make(stmt, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cleanup_stream_tracker", {(int)(tiramisu::xfer_prop::comm_prop_ids.size())})));
     }
 
     // Add producer tag

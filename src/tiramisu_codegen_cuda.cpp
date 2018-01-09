@@ -25,6 +25,7 @@
 namespace tiramisu {
 
 std::vector<std::string> closure_buffers;
+std::vector<std::string> closure_buffers_no_type;
 // vars to pass into the wrapper
 std::vector<std::string> closure_vars;
 
@@ -35,6 +36,8 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
 std::string cuda_headers() {
     std::string includes = "#include <cuda.h>\n";
     includes += "#include <iostream>\n";
+    includes += "#include <cassert>\n";
+    includes += "#include \"tiramisu/tiramisu_cuda_runtime.h\"\n";
     return includes;
 }
 
@@ -235,13 +238,11 @@ std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct
             } else {
                 tiramisu::error("The for loop upper bound is not an isl_est_expr of type le or lt" , 1);
             }
-            isl_ast_expr_dump(cond_upper_bound_isl_format);
             std::string cuda_extent =
                     cuda_expr_from_isl_ast_expr(cond_upper_bound_isl_format, kernel_starting_level, kernel_ending_level, true, false, true);
 
             std::string cuda_init = cuda_expr_from_isl_ast_expr(init, kernel_starting_level, kernel_ending_level, true, false, true);
             std::string cuda_loop_extent = "(" + cuda_extent + " - " + cuda_init + ")";
-            std::cerr << "loop extent " << cuda_loop_extent << std::endl;
 
             isl_ast_expr *inc  = isl_ast_node_for_get_inc(node);
 
@@ -315,7 +316,7 @@ std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct
 
 // put all the CUDA code for this kernel together
 void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::string kernel_wrapper_fn,
-                          std::string kernel_body, std::string kernel_wrapper_body) {
+                          std::string kernel_body, std::string kernel_wrapper_body, std::string fatbin_fn) {
     std::ofstream kernel;
     kernel.open(kernel_fn);
     std::ofstream kernel_wrapper;
@@ -325,18 +326,29 @@ void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::s
     kernel_wrapper << cuda_headers() << std::endl;
     // kernel
     std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
-    std::string kernel_wrapper_signature = "void " + kernel_name + "(";
+    std::string kernel_wrapper_signature = "void " + kernel_name + "(/*void *_cuda_vars,*/ ";
+    std::string kernel_params = "  void *kernel_args[] = {";
     int idx = 0;
     for (std::string b : closure_buffers) {
         if (idx == 0) {
             kernel_signature += b;
-            kernel_wrapper_signature += b;
         } else {
             kernel_signature += ", " + b;
-            kernel_wrapper_signature += ", " + b;
         }
         idx++;
     }
+    idx = 0;
+    for (std::string b : closure_buffers_no_type) {
+        if (idx == 0) {
+            kernel_wrapper_signature += "CUdeviceptr " + b;
+            kernel_params += "&" + b;
+        } else {
+            kernel_wrapper_signature += ", CUdeviceptr " + b;
+            kernel_params += ", &" + b;
+        }
+        idx++;
+    }
+    kernel_params += "};\n";
     for (std::string v : closure_vars) {
         if (idx == 0) {
             kernel_wrapper_signature += v;
@@ -346,13 +358,18 @@ void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::s
         idx++;
     }
     kernel_signature += ")";
-    kernel_wrapper_signature += ")";
+    kernel_wrapper_signature += ", CUstream kernel_stream)";
     std::string kernel_code = "__global__\n";
     kernel_code +=  kernel_signature + " {\n";
     kernel_code += "  " + kernel_body + "\n}\n\n";
     kernel << kernel_code << std::endl;
     // wrapper function that the host calls
-    kernel_wrapper << kernel_wrapper_signature << " {\n" << kernel_wrapper_body << "}\n\n";
+    std::string kernel_launch = "  assert(cuLaunchKernel(kernel, grid_width, grid_height, grid_depth, block_width, block_height, block_depth, 0 /*No shmem for now*/, kernel_stream, kernel_args, 0) == 0);\n";
+    std::string module_mgmt = "//  struct cuda_vars *cvars = (struct cuda_vars*)_cuda_vars;\n";
+    module_mgmt += "  CUmodule mod; CUfunction kernel;\n";
+    module_mgmt += "  assert(cuModuleLoad(&mod, \"" + fatbin_fn + "\") == 0);\n";
+    module_mgmt += "  assert(cuModuleGetFunction(&kernel, mod, \"DEVICE_" + kernel_name + "\") == 0);\n";
+    kernel_wrapper << kernel_wrapper_signature << " {\n" << module_mgmt << kernel_params << kernel_wrapper_body << kernel_launch << "}\n\n";
     kernel.close();
     kernel_wrapper.close();
 }
@@ -360,11 +377,13 @@ void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::s
 // compile the kernel file to an object file that can later be linked in
 void compile_kernel_to_obj(std::string kernel_fn, std::string kernel_wrapper_fn) {
     // Generate a fat binary with a cubin file from the kernel
-    std::string cmd = "nvcc -IHalide/include -Iinclude/ -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_fn + " --fatbin -odir /tmp/";
+    std::string cmd = "nvcc -I/Users/JRay/ClionProjects/tiramisu/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_fn + " --fatbin -odir /tmp/";
+    std::cerr << "cmd: " << cmd << std::endl;
     int ret = system(cmd.c_str());
     assert(ret == 0 && "Non-zero exit code for nvcc invocation");
     // Compile the wrapper into an object file
-    cmd = "nvcc -IHalide/include -Iinclude/ -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_wrapper_fn + " -odir /tmp/";
+    cmd = "nvcc -I/Users/JRay/ClionProjects/tiramisu/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_wrapper_fn + " -odir /tmp/";
+    std::cerr << "cmd: " << cmd << std::endl;
     ret = system(cmd.c_str());
     assert(ret == 0 && "Non-zero exit code for nvcc invocation");
 }
@@ -375,8 +394,9 @@ std::string tiramisu::generator::cuda_kernel_from_isl_node(function &fct, isl_as
     std::string kernel_body = bodies.first;
     std::string wrapper_body = bodies.second;
     std::string kernel_fn = "/tmp/" + kernel_name + ".cu";
+    std::string kernel_fatbin_fn = "/tmp/" + kernel_name + ".fatbin";
     std::string kernel_wrapper_fn = "/tmp/" + kernel_name + "_wrapper.cu";
-    generate_kernel_file(kernel_name, kernel_fn, kernel_wrapper_fn, kernel_body, wrapper_body);
+    generate_kernel_file(kernel_name, kernel_fn, kernel_wrapper_fn, kernel_body, wrapper_body, kernel_fatbin_fn);
     compile_kernel_to_obj(kernel_fn, kernel_wrapper_fn);
     return kernel_fn;
 }
@@ -685,6 +705,7 @@ std::string tiramisu::computation::create_kernel_assignment() {
     std::string buffer_sig = c_type_from_tiramisu_type(lhs_tiramisu_buffer->get_elements_type()) + " *" + lhs_buffer_name;
     if (std::find(closure_buffers.begin(), closure_buffers.end(), buffer_sig) == closure_buffers.end()) {
         closure_buffers.push_back(buffer_sig);
+        closure_buffers_no_type.push_back(lhs_buffer_name);
     }
 
     // Tiramisu buffer is from outermost to innermost, whereas Halide buffer is
@@ -1054,6 +1075,7 @@ std::string tiramisu::generator::cuda_expr_from_tiramisu_expr(const tiramisu::fu
                 std::string buffer_sig = c_type_from_tiramisu_type(tiramisu_buffer->get_elements_type()) + " *" + buffer_name;
                 if (std::find(closure_buffers.begin(), closure_buffers.end(), buffer_sig) == closure_buffers.end()) {
                     closure_buffers.push_back(buffer_sig);
+                    closure_buffers_no_type.push_back(buffer_name);
                 }
 
                 std::string type = c_type_from_tiramisu_type(tiramisu_buffer->get_elements_type());
