@@ -25,10 +25,12 @@
 namespace tiramisu {
 
 std::vector<std::string> closure_buffers;
+// vars to pass into the wrapper
 std::vector<std::string> closure_vars;
 
 std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_starting_level, int kernel_ending_level,
-                                        bool convert_to_loop_type = false, bool map_iterator = false);
+                                        bool convert_to_loop_type = false, bool map_iterator = false,
+                                        bool capture_vars = false);
 
 std::string cuda_headers() {
     std::string includes = "#include <cuda.h>\n";
@@ -196,7 +198,8 @@ tiramisu::expr generator::replace_original_indices_with_gpu_indices(tiramisu::co
 
 
 // generate a kernel from the original isl node
-std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct, isl_ast_node *node, int current_level, int kernel_starting_level, int kernel_ending_level) {
+std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct, isl_ast_node *node, int current_level,
+                                                                   int kernel_starting_level, int kernel_ending_level) {
     if (isl_ast_node_get_type(node) == isl_ast_node_block) {
         // I think blocks would combine multiple computations in the loop
         std::cerr << "WTF is an isl block" << std::endl;
@@ -232,10 +235,11 @@ std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct
             } else {
                 tiramisu::error("The for loop upper bound is not an isl_est_expr of type le or lt" , 1);
             }
+            isl_ast_expr_dump(cond_upper_bound_isl_format);
             std::string cuda_extent =
-                    cuda_expr_from_isl_ast_expr(cond_upper_bound_isl_format, kernel_starting_level, kernel_ending_level, true);
+                    cuda_expr_from_isl_ast_expr(cond_upper_bound_isl_format, kernel_starting_level, kernel_ending_level, true, false, true);
 
-            std::string cuda_init = cuda_expr_from_isl_ast_expr(init, kernel_starting_level, kernel_ending_level, true);
+            std::string cuda_init = cuda_expr_from_isl_ast_expr(init, kernel_starting_level, kernel_ending_level, true, false, true);
             std::string cuda_loop_extent = "(" + cuda_extent + " - " + cuda_init + ")";
             std::cerr << "loop extent " << cuda_loop_extent << std::endl;
 
@@ -284,7 +288,8 @@ std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct
             }
             isl_val_free(inc_val);
             isl_ast_node *body = isl_ast_node_for_get_body(node);
-            std::pair<std::string, std::string> bodies = tiramisu::generator::codegen_kernel_body(fct, body, current_level + 1, kernel_starting_level, kernel_ending_level);
+            std::pair<std::string, std::string> bodies = tiramisu::generator::codegen_kernel_body(fct, body,
+                                                                                                  current_level + 1, kernel_starting_level, kernel_ending_level);
             std::string cuda_body = bodies.first;
             cuda_body = idx_computation + cuda_body;
             return std::pair<std::string, std::string>(cuda_body, bodies.second + cuda_dim);//bodies.second);
@@ -309,11 +314,15 @@ std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct
 }
 
 // put all the CUDA code for this kernel together
-void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::string kernel_body, std::string kernel_wrapper_body) {
+void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::string kernel_wrapper_fn,
+                          std::string kernel_body, std::string kernel_wrapper_body) {
     std::ofstream kernel;
     kernel.open(kernel_fn);
+    std::ofstream kernel_wrapper;
+    kernel_wrapper.open(kernel_wrapper_fn);
     // headers
     kernel << cuda_headers() << std::endl;
+    kernel_wrapper << cuda_headers() << std::endl;
     // kernel
     std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
     std::string kernel_wrapper_signature = "void " + kernel_name + "(";
@@ -328,31 +337,36 @@ void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::s
         }
         idx++;
     }
-    /*    for (std::string v : closure_vars) {
-      if (idx == 0) {
-        kernel_signature += v;
-      } else {
-        kernel_signature += ", " + v;
-      }
-      idx++;
-      }*/
+    for (std::string v : closure_vars) {
+        if (idx == 0) {
+            kernel_wrapper_signature += v;
+        } else {
+            kernel_wrapper_signature += ", " + v;
+        }
+        idx++;
+    }
     kernel_signature += ")";
     kernel_wrapper_signature += ")";
     std::string kernel_code = "__global__\n";
     kernel_code +=  kernel_signature + " {\n";
     kernel_code += "  " + kernel_body + "\n}\n\n";
-    // wrapper function that the host calls
-    kernel_code += kernel_wrapper_signature + " {\n" + kernel_wrapper_body + "}\n\n";
     kernel << kernel_code << std::endl;
+    // wrapper function that the host calls
+    kernel_wrapper << kernel_wrapper_signature << " {\n" << kernel_wrapper_body << "}\n\n";
     kernel.close();
+    kernel_wrapper.close();
 }
 
 // compile the kernel file to an object file that can later be linked in
-void compile_kernel_to_obj(std::string kernel_fn) {
-    std::string compiler = "nvcc -IHalide/include -Iinclude/ -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_fn + " -odir build";
-    int ret = system(compiler.c_str());
+void compile_kernel_to_obj(std::string kernel_fn, std::string kernel_wrapper_fn) {
+    // Generate a fat binary with a cubin file from the kernel
+    std::string cmd = "nvcc -IHalide/include -Iinclude/ -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_fn + " --fatbin -odir /tmp/";
+    int ret = system(cmd.c_str());
     assert(ret == 0 && "Non-zero exit code for nvcc invocation");
-
+    // Compile the wrapper into an object file
+    cmd = "nvcc -IHalide/include -Iinclude/ -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_wrapper_fn + " -odir /tmp/";
+    ret = system(cmd.c_str());
+    assert(ret == 0 && "Non-zero exit code for nvcc invocation");
 }
 
 std::string tiramisu::generator::cuda_kernel_from_isl_node(function &fct, isl_ast_node *node,
@@ -360,11 +374,11 @@ std::string tiramisu::generator::cuda_kernel_from_isl_node(function &fct, isl_as
     std::pair<std::string, std::string> bodies = generator::codegen_kernel_body(fct, node, level, start_kernel_level, end_kernel_level);
     std::string kernel_body = bodies.first;
     std::string wrapper_body = bodies.second;
-    std::string kernel_fn = "build/" + kernel_name + ".cu";
-    generate_kernel_file(kernel_name, kernel_fn, kernel_body, wrapper_body);
-    compile_kernel_to_obj(kernel_fn);
+    std::string kernel_fn = "/tmp/" + kernel_name + ".cu";
+    std::string kernel_wrapper_fn = "/tmp/" + kernel_name + "_wrapper.cu";
+    generate_kernel_file(kernel_name, kernel_fn, kernel_wrapper_fn, kernel_body, wrapper_body);
+    compile_kernel_to_obj(kernel_fn, kernel_wrapper_fn);
     return kernel_fn;
-
 }
 
 std::string c_type_from_tiramisu_type(tiramisu::primitive_t type) {
@@ -397,15 +411,17 @@ std::string c_type_from_tiramisu_type(tiramisu::primitive_t type) {
     }
 }
 
-std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_starting_level, int kernel_ending_level, bool convert_to_loop_type, bool map_iterator) {
+std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_starting_level, int kernel_ending_level,
+                                        bool convert_to_loop_type, bool map_iterator, bool capture_vars) {
     std::string result;
 
     if (isl_ast_expr_get_type(isl_expr) == isl_ast_expr_int) {
         isl_val *init_val = isl_ast_expr_get_val(isl_expr);
         if (!convert_to_loop_type) {
-            result = "(int)" + std::to_string(isl_val_get_num_si(init_val));//Halide::Expr((int32_t) isl_val_get_num_si(init_val));
+            result = "(int)" + std::to_string(isl_val_get_num_si(init_val));
         } else {
-            result = "(" + c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + ")" + std::to_string(isl_val_get_num_si(init_val));
+            result = "(" + c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + ")" +
+                     std::to_string(isl_val_get_num_si(init_val));
         }
         isl_val_free(init_val);
     } else if (isl_ast_expr_get_type(isl_expr) == isl_ast_expr_id) {
@@ -456,34 +472,41 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
 
         if (!convert_to_loop_type) {
             result = "(int)" + name_str;
-            //        if (std::find(closure_vars.begin(), closure_vars.end(), "int " + name_str) == closure_vars.end()) {
-            //          closure_vars.push_back("int " + name_str);
-            //        }
+            if (capture_vars) {
+                if (std::find(closure_vars.begin(), closure_vars.end(), "int " + name_str) == closure_vars.end()) {
+                    closure_vars.push_back("int " + name_str);
+                }
+            }
         } else {
             result = "(" + c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + ")" + name_str;
-            //        if (std::find(closure_vars.begin(), closure_vars.end(), c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " " + name_str) == closure_vars.end()) {
-            //          closure_vars.push_back(c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " " + name_str);
-            //        }
+            if (capture_vars) {
+                if (std::find(closure_vars.begin(), closure_vars.end(),
+                              c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " " + name_str) ==
+                    closure_vars.end()) {
+                    closure_vars.push_back(
+                            c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " " + name_str);
+                }
+            }
         }
 
     } else if (isl_ast_expr_get_type(isl_expr) == isl_ast_expr_op) {
         std::string op0, op1, op2;
 
         isl_ast_expr *expr0 = isl_ast_expr_get_op_arg(isl_expr, 0);
-        op0 = cuda_expr_from_isl_ast_expr(expr0, kernel_starting_level, kernel_ending_level, convert_to_loop_type,  map_iterator);
+        op0 = cuda_expr_from_isl_ast_expr(expr0, kernel_starting_level, kernel_ending_level, convert_to_loop_type, map_iterator, capture_vars);
         isl_ast_expr_free(expr0);
 
         if (isl_ast_expr_get_op_n_arg(isl_expr) > 1)
         {
             isl_ast_expr *expr1 = isl_ast_expr_get_op_arg(isl_expr, 1);
-            op1 = cuda_expr_from_isl_ast_expr(expr1, kernel_starting_level, kernel_ending_level, convert_to_loop_type, map_iterator);
+            op1 = cuda_expr_from_isl_ast_expr(expr1, kernel_starting_level, kernel_ending_level, convert_to_loop_type, map_iterator, capture_vars);
             isl_ast_expr_free(expr1);
         }
 
         if (isl_ast_expr_get_op_n_arg(isl_expr) > 2)
         {
             isl_ast_expr *expr2 = isl_ast_expr_get_op_arg(isl_expr, 2);
-            op2 = cuda_expr_from_isl_ast_expr(expr2, kernel_starting_level, kernel_ending_level, convert_to_loop_type, map_iterator);
+            op2 = cuda_expr_from_isl_ast_expr(expr2, kernel_starting_level, kernel_ending_level, convert_to_loop_type, map_iterator, capture_vars);
             isl_ast_expr_free(expr2);
         }
         switch (isl_ast_expr_get_op_type(isl_expr))
@@ -508,7 +531,7 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
                 assert(false);
                 break;
             case isl_ast_op_min:
-                result = "(std::min(" + op0 + ", " + op1 + ")";
+                result = "(std::min(" + op0 + ", " + op1 + "))";
                 break;
             case isl_ast_op_minus:
                 result = "(-" + op0 + ")";
