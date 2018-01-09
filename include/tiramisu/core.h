@@ -78,7 +78,7 @@ tiramisu::expr replace_original_indices_with_transformed_indices(tiramisu::expr 
  * Add a free variable to a map, i.e. [N]->{S[x]->S[x]}, where N is the free parameter. N goes in the "box" ([])
  */
 isl_map *isl_map_add_free_var(const std::string &free_var_name, isl_map *map, isl_ctx *ctx);
-
+tiramisu::expr tiramisu_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, bool convert_to_loop_type = false);
 int loop_level_into_dynamic_dimension(int level);
 int loop_level_into_static_dimension(int level);
 
@@ -3884,7 +3884,7 @@ protected:
                                                        const tiramisu::expr &tiramisu_expr, tiramisu::computation *comp);
 
   static std::string cuda_expr_from_tiramisu_expr(const tiramisu::function *fct, std::vector<isl_ast_expr *> &index_expr,
-                                                  const tiramisu::expr &tiramisu_expr, tiramisu::computation *comp);
+                                                  const tiramisu::expr &tiramisu_expr, tiramisu::computation *comp, bool map_iterators = false);
 
   static std::string codegen_kernel_body(function &fct, isl_ast_node *node, int current_level,int kernel_starting_level, int kernel_ending_level);
 
@@ -3904,10 +3904,13 @@ protected:
     linearize_access(int dims, std::vector<Halide::Expr> &strides, std::vector<tiramisu::expr> index_expr);
     static Halide::Expr linearize_access(int dims, std::vector<Halide::Expr> &strides, isl_ast_expr *index_expr);
 
-  static std::string linearize_access_cuda(int dims, const shape_t *shape, isl_ast_expr *index_expr);
-  static std::string linearize_access_cuda(int dims, const shape_t *shape, std::vector<tiramisu::expr> index_expr);
-  static std::string linearize_access_cuda(int dims, std::vector<std::string> &strides, std::vector<tiramisu::expr> index_expr);
-  static std::string linearize_access_cuda(int dims, std::vector<std::string> &strides, isl_ast_expr *index_expr);
+  static std::string linearize_access_cuda(int dims, const shape_t *shape, isl_ast_expr *index_expr, int, int);
+  static std::string linearize_access_cuda(int dims, const shape_t *shape, std::vector<tiramisu::expr> index_expr, int, int);
+  static std::string linearize_access_cuda(int dims, std::vector<std::string> &strides, std::vector<tiramisu::expr> index_expr, int, int);
+  static std::string linearize_access_cuda(int dims, std::vector<std::string> &strides, isl_ast_expr *index_expr, int, int);
+
+  static tiramisu::expr replace_original_indices_with_gpu_indices(tiramisu::computation *comp, tiramisu::expr exp,
+                                                           std::map<std::string, isl_ast_expr *> iterators_map);
     //@}
 
     /**

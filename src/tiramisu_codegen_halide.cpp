@@ -992,7 +992,7 @@ void generator::get_rhs_accesses(const tiramisu::function *func, const tiramisu:
     DEBUG_FCT_NAME(3);
 }
 
-tiramisu::expr tiramisu_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, bool convert_to_loop_type = false)
+tiramisu::expr tiramisu_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, bool convert_to_loop_type)
 {
     DEBUG_FCT_NAME(10);
     DEBUG_INDENT(4);
