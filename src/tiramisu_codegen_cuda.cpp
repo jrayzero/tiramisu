@@ -381,13 +381,13 @@ void compile_kernel_to_obj(std::string kernel_fn, std::string kernel_wrapper_fn)
     // Generate a fat binary with a cubin file from the kernel
     std::string cmd = "nvcc -I/Users/JRay/ClionProjects/tiramisu/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_fn + " --fatbin -odir /tmp/";
     std::cerr << "cmd: " << cmd << std::endl;
-    int ret = system(cmd.c_str());
-    assert(ret == 0 && "Non-zero exit code for nvcc invocation");
+//    int ret = system(cmd.c_str());
+//    assert(ret == 0 && "Non-zero exit code for nvcc invocation");
     // Compile the wrapper into an object file
     cmd = "nvcc -I/Users/JRay/ClionProjects/tiramisu/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_wrapper_fn + " -odir /tmp/";
     std::cerr << "cmd: " << cmd << std::endl;
-    ret = system(cmd.c_str());
-    assert(ret == 0 && "Non-zero exit code for nvcc invocation");
+//    ret = system(cmd.c_str());
+//    assert(ret == 0 && "Non-zero exit code for nvcc invocation");
 }
 
 std::string tiramisu::generator::cuda_kernel_from_isl_node(function &fct, isl_ast_node *node,

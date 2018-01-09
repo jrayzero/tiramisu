@@ -3238,7 +3238,7 @@ void tiramisu::computation::allocate_and_map_buffer_automatically(tiramisu::argu
     this->automatically_allocated_buffer = buff;
 
     tiramisu::computation *allocation;
-    if (type == tiramisu::a_temporary)
+    if (type == tiramisu::a_temporary || type == tiramisu::a_temporary_gpu)
     {
         allocation = buff->allocate_at(*this, computation::root_dimension);
         allocation->set_name("_allocation_" + this->name);
@@ -6223,9 +6223,9 @@ Halide::Argument::Kind halide_argtype_from_tiramisu_argtype(tiramisu::argument_t
 {
     Halide::Argument::Kind res;
 
-    if (type == tiramisu::a_temporary)
+    if (type == tiramisu::a_temporary || type == tiramisu::a_temporary_gpu)
     {
-        tiramisu::error("Buffer type \"temporary\" can't be translated to Halide.\n", true);
+        tiramisu::error("Buffer types \"temporary\" and \"temporary_gpu\" can't be translated to Halide.\n", true);
     }
 
     if (type == tiramisu::a_input)
@@ -6598,6 +6598,8 @@ std::string str_from_tiramisu_type_argument(tiramisu::argument_t type)
             return "output";
         case tiramisu::a_temporary:
             return "temporary";
+        case tiramisu::a_temporary_gpu:
+            return "temporary_gpu";
         default:
             tiramisu::error("Tiramisu type not supported.", true);
             return "";

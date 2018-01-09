@@ -2288,6 +2288,28 @@ void function::gen_halide_stmt()
                     halide_dim_sizes, Halide::Internal::const_true(), stmt);
 
             buf->mark_as_allocated();
+        } else if (buf->get_argument_type() == tiramisu::a_temporary_gpu) {
+            Halide::Expr bytes = 0;
+            for (int i = buf->get_dim_sizes().size() - 1; i >= 0; --i)
+            {
+                const auto sz = buf->get_dim_sizes()[i];
+                std::vector<isl_ast_expr *> ie = {};
+                bytes += generator::halide_expr_from_tiramisu_expr(this, ie, sz, nullptr);
+            }
+            bytes *= halide_type_from_tiramisu_type(buf->get_elements_type()).bytes();
+            stmt = Halide::Internal::LetStmt::make(buf->get_name(), make_comm_call(Halide::type_of<struct halide_buffer_t *>(), "tiramisu_cudad_malloc",
+                                                                            {bytes}), stmt);
+//            Halide::Expr gpu_buffer = Halide::Internal::Variable::make(Halide::Handle(),
+//                                                                       buf->get_name());
+//            stmt = Halide::Internal::Block::make(Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(),
+//                                                                                                 "tiramisu_cudad_malloc",
+//                                                                                                 {gpu_buffer, bytes})), stmt);
+            // I still need this because I don't know how to declare the buffer without this halide allocate.
+//            stmt = Halide::Internal::Allocate::make(
+//                    buf->get_name(),
+//                    halide_type_from_tiramisu_type(buf->get_elements_type()),
+//                    {1}, Halide::Internal::const_true(), stmt);
+            buf->mark_as_allocated();
         }
     }
 
@@ -2701,10 +2723,10 @@ void tiramisu::computation::create_halide_assignment()
                     if (this->lhs_access_type == tiramisu::o_lin_index) {
                         result = lhs_index;
                     } else if (this->lhs_access_type == tiramisu::o_buffer) { // want to just pass in the raw buffer
-                        result = Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), lhs_tiramisu_buffer->get_name() + ".buffer");
+                        result = Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), lhs_tiramisu_buffer->get_name());// + ".buffer");
                         result2 = lhs_index;
                         halide_call_args[3] = result2;
-                    } else if (lhs_tiramisu_buffer->get_argument_type() != tiramisu::a_temporary) {
+                    } else if (lhs_tiramisu_buffer->get_argument_type() != tiramisu::a_temporary && lhs_tiramisu_buffer->get_argument_type() != tiramisu::a_temporary_gpu) {
                         Halide::Buffer<> buffer = Halide::Buffer<>(
                                 type,
                                 NULL,
@@ -3310,7 +3332,7 @@ Halide::Expr generator::halide_expr_from_tiramisu_expr(const tiramisu::function 
                 {
                     // Create a pointer to Halide buffer.
                     result = Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(),
-                                                              tiramisu_buffer->get_name() + ".buffer");
+                                                              tiramisu_buffer->get_name());// + ".buffer");
                 }
                 delete[] shape;
             }
