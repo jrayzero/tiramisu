@@ -193,18 +193,16 @@ namespace tiramisu {
 
 
   // generate a kernel from the original isl node
-  std::string generator::codegen_kernel_body(function &fct, isl_ast_node *node, int current_level, int kernel_starting_level, int kernel_ending_level) {
+  std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct, isl_ast_node *node, int current_level, int kernel_starting_level, int kernel_ending_level) {
     if (isl_ast_node_get_type(node) == isl_ast_node_block) {
       // I think blocks would combine multiple computations in the loop 
       std::cerr << "WTF is an isl block" << std::endl;
       exit(29);
-      return "";
     } else if (isl_ast_node_get_type(node) == isl_ast_node_for) {
       std::string code = "";
       if (current_level > kernel_ending_level) {
         std::cerr << "Generating for loop in kernel" << std::endl;
         assert(false && "Support for loops in kernels once we actually need them");
-        return "";
       } else { // this is a GPU kernel loop, i.e. a thread iterator (or block iterator, w/e)
         std::cerr << "Generating a thread iterator for the kernel" << std::endl;
         // Figure out the new name for this iterator based on blocks and threads
@@ -259,9 +257,10 @@ namespace tiramisu {
         isl_val_free(inc_val);
         isl_ast_node *body = isl_ast_node_for_get_body(node);
         isl_ast_expr *cond_upper_bound_isl_format = NULL;
-        std::string cuda_body = tiramisu::generator::codegen_kernel_body(fct, body, current_level + 1, kernel_starting_level, kernel_ending_level);
+        std::pair<std::string, std::string> bodies = tiramisu::generator::codegen_kernel_body(fct, body, current_level + 1, kernel_starting_level, kernel_ending_level);
+        std::string cuda_body = bodies.first;
         cuda_body = idx_computation + cuda_body;
-        return cuda_body;
+        return std::pair<std::string, std::string>(cuda_body, bodies.second);
       }
     } else if (isl_ast_node_get_type(node) == isl_ast_node_user) {
       // TODO check for let statements!
@@ -275,16 +274,15 @@ namespace tiramisu {
       tiramisu::computation *comp = (tiramisu::computation *)isl_id_get_user(comp_id);
       isl_id_free(comp_id);
       std::string code = comp->create_kernel_assignment();
-      return code;
+      return std::pair<std::string, std::string>(code, "");
     } else {
       std::cerr << "I don't know wtf this isl type is" << std::endl;
       exit(29);
-      return "";
     }
   }
 
   // put all the CUDA code for this kernel together
-  void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::string body) {
+  void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::string kernel_body, std::string kernel_wrapper_body) {
     std::ofstream kernel;
     kernel.open(kernel_fn);
     // headers
@@ -311,10 +309,10 @@ namespace tiramisu {
     kernel_signature += ")";
     std::string kernel_code = "__global__\n";    
     kernel_code +=  kernel_signature + " {\n";
-    kernel_code += "  " + body + "\n}\n\n";    
+    kernel_code += "  " + kernel_body + "\n}\n\n";    
     // wrapper function that the host calls
     std::string kernel_wrapper_signature = "void " + kernel_name + "()";
-    kernel_code += kernel_wrapper_signature + " { }\n\n";
+    kernel_code += kernel_wrapper_signature + " {\n" + kernel_wrapper_body + "}\n\n";
     kernel << kernel_code << std::endl;
     kernel.close();
   }
@@ -329,9 +327,11 @@ namespace tiramisu {
 
   std::string tiramisu::generator::cuda_kernel_from_isl_node(function &fct, isl_ast_node *node,
                                                              int level, std::vector<std::string> &tagged_stmts, std::string kernel_name, int start_kernel_level, int end_kernel_level) {
-    std::string body = generator::codegen_kernel_body(fct, node, level, start_kernel_level, end_kernel_level);
+    std::pair<std::string, std::string> bodies = generator::codegen_kernel_body(fct, node, level, start_kernel_level, end_kernel_level);
+    std::string kernel_body = bodies.first;
+    std::string wrapper_body = bodies.second;
     std::string kernel_fn = "build/" + kernel_name + ".cu";
-    generate_kernel_file(kernel_name, kernel_fn, body);
+    generate_kernel_file(kernel_name, kernel_fn, kernel_body, wrapper_body);
     compile_kernel_to_obj(kernel_fn);
     return kernel_fn;
     
