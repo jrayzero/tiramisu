@@ -15,21 +15,21 @@
 #ifdef DRIVER
 /*extern "C" {
 
-void tiramisu_cuda_malloc(CUdeviceptr *device_ptr, size_t bytes);
+void tiramisu_cudad_malloc(CUdeviceptr *device_ptr, size_t bytes);
 
-void tiramisu_cuda_free(CUdeviceptr device_ptr);
+void tiramisu_cudad_free(CUdeviceptr device_ptr);
 
 void _tiramisu_cuda_memcpy_h2d(CUdeviceptr dst, const void *src, size_t count);
 
-void tiramisu_cuda_memcpy_d2h(void *dst, CUdeviceptr src, size_t count);
+void tiramisu_cudad_memcpy_d2h(void *dst, CUdeviceptr src, size_t count);
 
-void htiramisu_cuda_malloc(halide_buffer_t *buff, size_t bytes);
+void tiramisu_cudad_malloc(halide_buffer_t *buff, size_t bytes);
 
-void htiramisu_cuda_free(halide_buffer_t *buff);
+void tiramisu_cudad_free(halide_buffer_t *buff);
 
-void htiramisu_cuda_memcpy_h2d(halide_buffer_t *dst, const void *src, size_t count);
+void tiramisu_cudad_memcpy_h2d(halide_buffer_t *dst, const void *src, size_t count);
 
-void htiramisu_cuda_memcpy_d2h(void *dst, halide_buffer_t *src, size_t count);
+void tiramisu_cudad_memcpy_d2h(void *dst, halide_buffer_t *src, size_t count);
 
 }*/
 #endif

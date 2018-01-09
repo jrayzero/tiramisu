@@ -213,7 +213,6 @@ std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct
             std::cerr << "Generating for loop in kernel" << std::endl;
             assert(false && "Support for loops in kernels once we actually need them");
         } else { // this is a GPU kernel loop, i.e. a thread iterator (or block iterator, w/e)
-            std::cerr << "Generating a thread iterator for the kernel" << std::endl;
             // Figure out the new name for this iterator based on blocks and threads
             // and then convert to the appropriate coordinate
             isl_ast_expr *iter = isl_ast_node_for_get_iterator(node);
@@ -358,7 +357,7 @@ void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::s
         idx++;
     }
     kernel_signature += ")";
-    kernel_wrapper_signature += ", CUstream kernel_stream)";
+    kernel_wrapper_signature += ", CUstream kernel_stream, CUevent event /*make kernel_stream wait on this event*/, CUevent other_event)";
     std::string kernel_code = "__global__\n";
     kernel_code +=  kernel_signature + " {\n";
     kernel_code += "  " + kernel_body + "\n}\n\n";
@@ -369,7 +368,10 @@ void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::s
     module_mgmt += "  CUmodule mod; CUfunction kernel;\n";
     module_mgmt += "  assert(cuModuleLoad(&mod, \"" + fatbin_fn + "\") == 0);\n";
     module_mgmt += "  assert(cuModuleGetFunction(&kernel, mod, \"DEVICE_" + kernel_name + "\") == 0);\n";
-    kernel_wrapper << kernel_wrapper_signature << " {\n" << module_mgmt << kernel_params << kernel_wrapper_body << kernel_launch << "}\n\n";
+    std::string event_check = "  if (event != NULL) { cuStreamWaitEvent(kernel_stream, event, 0); }\n";
+    std::string event_record = "  if (other_event != NULL) { cuEventRecord(other_event, kernel_stream); }\n";
+    kernel_wrapper << kernel_wrapper_signature << " {\n" << module_mgmt << kernel_params << kernel_wrapper_body
+                   << event_check << kernel_launch << event_record << "}\n\n";
     kernel.close();
     kernel_wrapper.close();
 }
