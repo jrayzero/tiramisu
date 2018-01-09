@@ -27,6 +27,8 @@ namespace tiramisu {
   std::vector<std::string> closure_buffers;
   std::vector<std::string> closure_vars;
 
+  std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_starting_level, int kernel_ending_level, bool convert_to_loop_type = false, bool map_iterator = false);
+
   std::string cuda_headers() {
     std::string includes = "#include <cuda.h>\n";
     includes += "#include <iostream>\n";
@@ -211,11 +213,40 @@ namespace tiramisu {
         char *cstr = isl_ast_expr_to_C_str(iter);
         std::string iterator_str = std::string(cstr);
         std::string idx_computation = "";
+        std::string cuda_dim = "";
+
+        isl_ast_expr *init = isl_ast_node_for_get_init(node);
+        isl_ast_expr *cond = isl_ast_node_for_get_cond(node);
+
+        isl_ast_expr *cond_upper_bound_isl_format = NULL;
+        if (isl_ast_expr_get_op_type(cond) == isl_ast_op_lt) {
+          cond_upper_bound_isl_format = isl_ast_expr_get_op_arg(cond, 1);
+        } else if (isl_ast_expr_get_op_type(cond) == isl_ast_op_le) {
+          // Create an expression of "1".
+          isl_val *one = isl_val_one(isl_ast_node_get_ctx(node));
+          // Add 1 to the ISL ast upper bound to transform it into a strinct bound.
+          cond_upper_bound_isl_format = isl_ast_expr_add(
+                                                         isl_ast_expr_get_op_arg(cond, 1),
+                                                         isl_ast_expr_from_val(one));
+        } else {
+          tiramisu::error("The for loop upper bound is not an isl_est_expr of type le or lt" , 1);
+        }
+        std::string cuda_extent = 
+          cuda_expr_from_isl_ast_expr(cond_upper_bound_isl_format, kernel_starting_level, kernel_ending_level, true);
+
+        std::string cuda_init = cuda_expr_from_isl_ast_expr(init, kernel_starting_level, kernel_ending_level, true);
+        std::string cuda_loop_extent = "(" + cuda_extent + " - " + cuda_init + ")";
+        std::cerr << "loop extent " << cuda_loop_extent << std::endl;
+
+        isl_ast_expr *inc  = isl_ast_node_for_get_inc(node);
+
         if (kernel_ending_level - kernel_starting_level == 1) { // 1 dimension
           if (current_level == kernel_ending_level) {
             idx_computation = "int thread_x = threadIdx.x;\n";
+            cuda_dim = "\n  int block_width = " + cuda_loop_extent + ";\n  int block_height = 1;\n  int block_depth = 1;\n";
           } else {
             idx_computation = "int block_x = blockIdx.x;\n";//blockIdx.x;\n";
+            cuda_dim = "\n  int grid_width = " + cuda_loop_extent + ";\n  int grid_height = 1;\n  int grid_depth = 1;\n";
           }
         } else if (kernel_ending_level - kernel_starting_level == 3) { // 2 dimension
           if (current_level == kernel_ending_level) {
@@ -244,10 +275,6 @@ namespace tiramisu {
         } else {
           assert(false && "Too many levels tagged for GPU! Must be <= 3 per thread and per block");
         }
-
-        isl_ast_expr *init = isl_ast_node_for_get_init(node);
-        isl_ast_expr *cond = isl_ast_node_for_get_cond(node);
-        isl_ast_expr *inc  = isl_ast_node_for_get_inc(node);
       
         isl_val *inc_val = isl_ast_expr_get_val(inc);
         if (!isl_val_is_one(inc_val)) {
@@ -256,11 +283,10 @@ namespace tiramisu {
         }
         isl_val_free(inc_val);
         isl_ast_node *body = isl_ast_node_for_get_body(node);
-        isl_ast_expr *cond_upper_bound_isl_format = NULL;
         std::pair<std::string, std::string> bodies = tiramisu::generator::codegen_kernel_body(fct, body, current_level + 1, kernel_starting_level, kernel_ending_level);
         std::string cuda_body = bodies.first;
         cuda_body = idx_computation + cuda_body;
-        return std::pair<std::string, std::string>(cuda_body, bodies.second);
+        return std::pair<std::string, std::string>(cuda_body, bodies.second + cuda_dim);//bodies.second);
       }
     } else if (isl_ast_node_get_type(node) == isl_ast_node_user) {
       // TODO check for let statements!
@@ -289,12 +315,15 @@ namespace tiramisu {
     kernel << cuda_headers() << std::endl;
     // kernel
     std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
+    std::string kernel_wrapper_signature = "void " + kernel_name + "(";
     int idx = 0;
     for (std::string b : closure_buffers) {
       if (idx == 0) {
         kernel_signature += b;
+        kernel_wrapper_signature += b;
       } else {
         kernel_signature += ", " + b;
+        kernel_wrapper_signature += ", " + b;
       }
       idx++;
     }
@@ -307,11 +336,11 @@ namespace tiramisu {
       idx++;
       }*/
     kernel_signature += ")";
+    kernel_wrapper_signature += ")";
     std::string kernel_code = "__global__\n";    
     kernel_code +=  kernel_signature + " {\n";
     kernel_code += "  " + kernel_body + "\n}\n\n";    
     // wrapper function that the host calls
-    std::string kernel_wrapper_signature = "void " + kernel_name + "()";
     kernel_code += kernel_wrapper_signature + " {\n" + kernel_wrapper_body + "}\n\n";
     kernel << kernel_code << std::endl;
     kernel.close();
@@ -367,7 +396,7 @@ namespace tiramisu {
     }
   } 
   
-  std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_starting_level, int kernel_ending_level, bool convert_to_loop_type = false, bool map_iterator = false) {
+  std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_starting_level, int kernel_ending_level, bool convert_to_loop_type, bool map_iterator) {
     std::string result;
 
     if (isl_ast_expr_get_type(isl_expr) == isl_ast_expr_int) {
@@ -478,7 +507,7 @@ namespace tiramisu {
           assert(false);
           break;
         case isl_ast_op_min:
-          assert(false);
+          result = "(std::min(" + op0 + ", " + op1 + ")";
           break;
         case isl_ast_op_minus:          
           result = "(-" + op0 + ")";

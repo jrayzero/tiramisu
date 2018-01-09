@@ -80,8 +80,8 @@ int main() {
 
 #ifdef CPU_ONLY
 #ifdef DISTRIBUTE
-    communication_prop sync_block(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
-    communication_prop async_block(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
+    xfer_prop sync_block(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
+    xfer_prop async_block(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
     // transfer the computed rows from bx
     xfer bx_exchange = computation::create_xfer("[procs, cols]->{bx_exchange_s[q,y,x]: 1<=q<procs and 0<=y<2 and 0<=x<cols-2 and procs>1}",
                                                 "[procs, cols]->{bx_exchange_r[q,y,x]: 0<=q<procs-1 and 0<=y<2 and 0<=x<cols-2 and procs>1}",
@@ -169,12 +169,12 @@ int main() {
     constant rows_per_node_const("rows_per_node", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     constant procs_per_node_const("procs_per_node", expr(procs_per_node), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
-    communication_prop h2h_mpi_sync(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
-    communication_prop h2h_mpi_async(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
-    communication_prop h2h_mpi_async_nonblock(T_DATA_TYPE, {ASYNC, NONBLOCK, MPI, CPU2CPU});
-    communication_prop h2d_cuda_sync(T_DATA_TYPE, {SYNC, CUDA, CPU2GPU});
-    communication_prop h2d_cuda_async(T_DATA_TYPE, {ASYNC, CUDA, CPU2GPU}, 0);
-    communication_prop d2h_cuda_sync(T_DATA_TYPE, {SYNC, CUDA, GPU2CPU});
+    xfer_prop h2h_mpi_sync(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
+    xfer_prop h2h_mpi_async(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
+    xfer_prop h2h_mpi_async_nonblock(T_DATA_TYPE, {ASYNC, NONBLOCK, MPI, CPU2CPU});
+    xfer_prop h2d_cuda_sync(T_DATA_TYPE, {SYNC, CUDA, CPU2GPU});
+    xfer_prop h2d_cuda_async(T_DATA_TYPE, {ASYNC, CUDA, CPU2GPU}, 0);
+    xfer_prop d2h_cuda_sync(T_DATA_TYPE, {SYNC, CUDA, GPU2CPU});
 
     // Minimal communication scheme
 
@@ -215,7 +215,7 @@ int main() {
 
     computation dummy("[procs]->{dummy[q, y, x]: 0<=q<procs and 0<=y<10 and 0<=x<10}", expr(0), true, T_DATA_TYPE, &blur_dist);
     dummy.tag_distribute_level(q);
-    dummy.tag_gpu_level(y,x);
+    dummy.tag_gpu_level2(y,x);
 
     dummy.before(*bx_exchange.s, computation::root);
     bx_exchange.s->before(bx_exchange_wait, computation::root);
@@ -240,9 +240,9 @@ int main() {
     bx_exchange_wait.tag_distribute_level(q, false);
     cpu_to_gpu_wait.tag_distribute_level(q, false);
 
-    bx.tag_gpu_level(y2, x, 0);
-    bx_recompute.tag_gpu_level(y, x, 0);
-    by.tag_gpu_level(y2, x, 0);
+    bx.tag_gpu_level2(y2, x, 0);
+    bx_recompute.tag_gpu_level2(y, x, 0);
+    by.tag_gpu_level2(y2, x, 0);
 
     tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1,
                                   tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc+2));

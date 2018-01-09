@@ -91,6 +91,7 @@ int main() {
     std::cerr << "Running once for warm up"  << std::endl;
     blur_dist_gpu(buff_input.raw_buffer(), buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());//, buff_wait.raw_buffer());
     buff_output.raw_buffer()->set_device_dirty(false);
+    exit(29);
 #endif
     
 #ifdef DISTRIBUTE

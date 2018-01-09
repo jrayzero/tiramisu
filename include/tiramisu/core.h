@@ -1614,7 +1614,7 @@ private:
     void create_halide_assignment();
 
   // Like create_halide_assignment, but it generates CUDA code
-  std::string create_kernel_assignment();
+  std::string  create_kernel_assignment();
 
     /*
      * Create a new Tiramisu constant M = v*floor(N/v) and use it as
