@@ -8026,7 +8026,10 @@ std::string create_send_func_name(const xfer_prop chan) {
         }
         return name;
     } else if (chan.contains_attr(CUDA)) {
-        std::string name = "tiramisu_cuda_memcpy";
+        std::string name = "tiramisu_cudad_memcpy";
+        if (chan.contains_attr(ASYNC)) {
+            name += "_async";
+        }
         if (chan.contains_attr(CPU2CPU)) {
             name += "_h2h";
         } else if (chan.contains_attr(CPU2GPU)) {
@@ -8038,9 +8041,7 @@ std::string create_send_func_name(const xfer_prop chan) {
         } else {
             assert(false && "Unknown CUDA transfer direction");
         }
-        if (chan.contains_attr(ASYNC)) {
-            name += "_async";
-        }
+
         return name;
     }
     assert(false && "Communication must be either MPI or CUDA!");
@@ -8393,10 +8394,10 @@ void tiramisu::function::lift_cuda_comp(tiramisu::computation *comp) {
         }
     } else if (comp->is_wait()) { // stream synchronize
         wait *w = static_cast<wait *>(comp);
-        w->rhs_argument_idx = 0; // this argument becomes the wait buffer
+        w->rhs_argument_idx = 1; // this argument becomes the wait buffer
         w->library_call_args.resize(2);
-        w->library_call_args[1] = w->get_channel().get_comm_prop_id();
-        w->library_call_name = "tiramisu_cuda_stream_wait_event";
+        w->library_call_args[0] = w->get_channel().get_comm_prop_id();
+        w->library_call_name = "tiramisu_cudad_stream_wait_event";
     }
 }
 

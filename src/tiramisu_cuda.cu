@@ -6,12 +6,8 @@
 #include "tiramisu/tiramisu_cuda.h"
 #include "tiramisu/tiramisu_cuda_runtime.h"
 #include <stdio.h>
-#include "HalideRuntimeCuda.h"
+#include "HalideRuntime.h"
 #include "cuda.h"
-//#include "device_buffer_utils.h"
-//#include "device_interface.h"
-//#include "printer.h"
-//#include "mini_cuda.h"
 
 
 extern "C" {
@@ -38,35 +34,58 @@ inline void tiramisu_check_cudad_error(const char *wrapper_name, CUresult code) 
     }
 }
 
-void _tiramisu_cudad_malloc(CUdeviceptr *device_ptr, size_t bytes) {
+inline void _tiramisu_cudad_malloc(CUdeviceptr *device_ptr, size_t bytes) {
     tiramisu_check_cudad_error("tiramisu_cudad_malloc", cuMemAlloc(device_ptr, bytes));
 }
 
-void _tiramisu_cudad_free(CUdeviceptr device_ptr) {
+inline void _tiramisu_cudad_free(CUdeviceptr device_ptr) {
     tiramisu_check_cudad_error("tiramisu_cudad_free", cuMemFree(device_ptr));
 }
 
-void _tiramisu_cudad_memcpy_h2d(CUdeviceptr dst, const void *src, size_t count) {
+inline void _tiramisu_cudad_memcpy_h2d(CUdeviceptr dst, const void *src, size_t count) {
     tiramisu_check_cudad_error("tiramisu_cudad_memcpy_h2d", cuMemcpyHtoD(dst, src, count));
 }
 
-void _tiramisu_cudad_memcpy_d2h(void *dst, CUdeviceptr src, size_t count) {
+inline void _tiramisu_cudad_memcpy_d2h(void *dst, CUdeviceptr src, size_t count) {
     tiramisu_check_cudad_error("tiramisu_cudad_memcpy_h2d", cuMemcpyDtoH(dst, src, count));
 }
 
-CUstream tiramisu_cudad_stream_create() {
-    CUstream stream;
-    tiramisu_check_cudad_error("tiramisu_cudad_stream_create", cuStreamCreate(&stream, 0));
-    return stream;
+inline void _tiramisu_cudad_memcpy_async_h2d(CUdeviceptr dst, const void *src, size_t count, CUstream stream, CUevent event) {
+    tiramisu_check_cudad_error("tiramisu_cudad_memcpy_async_h2d", cuMemcpyHtoDAsync(dst, src, count, stream));
+    tiramisu_cudad_event_record(event, stream);
+}
+
+inline void _tiramisu_cudad_memcpy_async_d2h(void *dst, CUdeviceptr src, size_t count, CUstream stream, CUevent event) {
+    tiramisu_check_cudad_error("tiramisu_cudad_memcpy_async_d2h", cuMemcpyDtoHAsync(dst, src, count, stream));
+    tiramisu_cudad_event_record(event, stream);
+}
+
+void *tiramisu_cudad_stream_create(int num_streams) {
+    CUstream *streams = (CUstream*)malloc(sizeof(CUstream) * num_streams);
+    for (int i = 0; i < num_streams; i++) {
+        CUstream stream;
+        tiramisu_check_cudad_error("tiramisu_cudad_stream_create", cuStreamCreate(&stream, 0));
+        streams[i] = stream;
+    }
+    return (void*)streams;
+}
+
+void tiramisu_cudad_stream_create(halide_buffer_t *stream_buff, int num_streams) {
+    for (int i = 0; i < num_streams; i++) {
+        CUstream stream;
+        (CUstream*)(stream_buff->host)[i] = &stream;
+        tiramisu_check_cudad_error("tiramisu_cudad_stream_create", cuStreamCreate(&stream, 0));
+    }
 }
 
 void tiramisu_cudad_stream_destroy(CUstream stream) {
     tiramisu_check_cudad_error("tiramisu_cudad_stream_destroy", cuStreamDestroy(stream));
 }
 
-CUevent tiramisu_cudad_event_create() {
+void *tiramisu_cudad_event_create() {
     CUevent event;
     tiramisu_check_cudad_error("tiramisu_cudad_event_create", cuEventCreate(&event, 0));
+    return (void*)event;
 }
 
 void tiramisu_cudad_event_destroy(CUevent event) {
@@ -77,7 +96,9 @@ void tiramisu_cudad_event_record(CUevent event, CUstream stream) {
     tiramisu_check_cudad_error("tiramisu_cudad_event_record", cuEventRecord(event, stream));
 }
 
-void tiramisu_cudad_stream_wait_event(CUstream stream, CUevent event) {
+void tiramisu_cudad_stream_wait_event(void *_stream, void *_event) {
+    CUstream stream = (CUstream)_stream;
+    CUevent event = (CUevent)_event;
     tiramisu_check_cudad_error("tiramisu_cudad_stream_wait_event", cuStreamWaitEvent(stream, event, 0));
 }
 
@@ -97,6 +118,14 @@ void tiramisu_cudad_memcpy_h2d(halide_buffer_t *dst, const void *src, size_t cou
 
 void tiramisu_cudad_memcpy_d2h(void *dst, halide_buffer_t *src, size_t count) {
     _tiramisu_cudad_memcpy_d2h(dst, (CUdeviceptr)(src->device), count);
+}
+
+void tiramisu_cudad_memcpy_async_h2d(halide_buffer_t *dst, const void *src, size_t count, void *stream, void *event_buff) {
+    _tiramisu_cudad_memcpy_async_h2d((CUdeviceptr)(dst->device), src, count, (CUstream)stream, ((CUevent*)event_buff)[0]);
+}
+
+void tiramisu_cudad_memcpy_async_d2h(void *dst, halide_buffer_t *src, size_t count, void *stream, void *event_buff) {
+    _tiramisu_cudad_memcpy_async_d2h(dst, (CUdeviceptr)(src->device), count, (CUstream)stream, ((CUevent*)event_buff)[0]);
 }
 
 }
