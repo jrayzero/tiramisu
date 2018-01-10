@@ -2812,8 +2812,8 @@ void tiramisu::computation::create_halide_assignment()
                         result = lhs_index;
                     } else if (this->lhs_access_type == tiramisu::o_buffer) { // want to just pass in the raw buffer
                         result = Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), lhs_tiramisu_buffer->get_name());// + ".buffer");
-                        result2 = lhs_index;
-                        halide_call_args[3] = result2;
+//                        result2 = lhs_index;
+//                        halide_call_args[3] = result2;
                     } else if (lhs_tiramisu_buffer->get_argument_type() != tiramisu::a_temporary && lhs_tiramisu_buffer->get_argument_type() != tiramisu::a_temporary_gpu) {
                         Halide::Buffer<> buffer = Halide::Buffer<>(
                                 type,
@@ -2856,9 +2856,9 @@ void tiramisu::computation::create_halide_assignment()
 
                         expr mod_rhs2(tiramisu::o_lin_index, old.get_name(), old.get_access(), old.get_data_type());
                         this->expression = mod_rhs2;
-                        halide_call_args[3] = // just the index
-                                generator::halide_expr_from_tiramisu_expr(this->fct, this->get_index_expr(),
-                                                                          this->get_expr(), this);
+//                        halide_call_args[3] = // just the index
+//                                generator::halide_expr_from_tiramisu_expr(this->fct, this->get_index_expr(),
+//                                                                          this->get_expr(), this);
 
                     } else {
                         halide_call_args[rhs_argument_idx] =

@@ -77,11 +77,9 @@ inline void _tiramisu_cudad_memcpy_async_d2h(void *dst, CUdeviceptr src, size_t 
 void tiramisu_cudad_stream_create(void *_stream_buff, int num_streams) {
     CUstream *stream_buff = (CUstream*)_stream_buff;
     for (int i = 0; i < num_streams; i++) {
-        fprintf(stderr, "creating stream %d\n", i);
         CUstream stream;
         tiramisu_check_cudad_error("tiramisu_cudad_stream_create", cuStreamCreate(&stream, 0));
         stream_buff[i] = stream;
-        fprintf(stderr, "stream created %d\n", stream_buff[i]);
     }
 
     //    halide_buffer_t *stream_buff = (halide_buffer_t*)malloc(sizeof(halide_buffer_t));
