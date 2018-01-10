@@ -2047,9 +2047,10 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                         Halide::Internal::Variable::make(halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()), arg_name);
                 kernel_params.push_back(var);
             }
-
+            kernel_params.push_back(Halide::Internal::Load::make(Halide::Handle(), "streams", 0 /*This is our kernel stream idx by default*/,
+                                                                 Halide::Buffer<>(), Halide::Internal::Parameter(),
+                                                                 Halide::Internal::const_true()));
             result = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), kernel, kernel_params));
-            std::cerr << "Kernel filename: " << std::get<0>(kernel_fn_and_buffer_names) << std::endl;
         } else if (convert_to_conditional) {
             DEBUG(3, tiramisu::str_dump("Converting for loop into a rank conditional."));
             Halide::Expr rank_var =

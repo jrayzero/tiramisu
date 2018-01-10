@@ -370,7 +370,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         idx++;
     }
     kernel_signature += ")";
-    kernel_wrapper_signature += ", CUstream kernel_stream, CUevent event, CUevent other_event)";
+    kernel_wrapper_signature += ", CUstream kernel_stream/*, CUevent event, CUevent other_event*/)";
     std::string kernel_code = "__global__\n";
     kernel_code +=  kernel_signature + " {\n";
     kernel_code += "  " + kernel_body + "\n}\n\n";
@@ -380,8 +380,8 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     std::string module_mgmt = "  CUmodule mod; CUfunction kernel;\n";
     module_mgmt += "  assert(cuModuleLoad(&mod, \"" + fatbin_fn + "\") == 0);\n";
     module_mgmt += "  assert(cuModuleGetFunction(&kernel, mod, \"DEVICE_" + kernel_name + "\") == 0);\n";
-    std::string event_check = "  if (event != NULL) { cuStreamWaitEvent(kernel_stream, event, 0); }\n";
-    std::string event_record = "  if (other_event != NULL) { cuEventRecord(other_event, kernel_stream); }\n";
+    std::string event_check = "  //if (event != NULL) { cuStreamWaitEvent(kernel_stream, event, 0); }\n";
+    std::string event_record = "  //if (other_event != NULL) { cuEventRecord(other_event, kernel_stream); }\n";
     kernel_wrapper << kernel_wrapper_signature << " {\n" << module_mgmt << kernel_params << kernel_wrapper_body
                    << event_check << kernel_launch << event_record << "}\n\n";
     kernel.close();

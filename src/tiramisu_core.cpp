@@ -7874,6 +7874,7 @@ tiramisu::xfer_prop::xfer_prop(tiramisu::primitive_t dtype,
     if (comm_prop_id != -1) {
       comm_prop_ids.insert(comm_prop_id);
     }
+    comm_prop_ids.insert(0); // The kernel one. Just make sure it gets in there
 }
 
 tiramisu::xfer_prop::xfer_prop() { }
