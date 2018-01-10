@@ -332,6 +332,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     // kernel
     std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
     std::string kernel_wrapper_signature = "extern \"C\" {\nvoid " + kernel_name + "(";
+    std::string kernel_wrapper_signature_no_event = "void " + kernel_name + "_no_event(";
     std::string kernel_params = "  void *kernel_args[] = {";
     std::vector<std::string> buffer_names;
     std::vector<std::string> other_params;
@@ -349,9 +350,11 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         buffer_names.push_back(b);
         if (idx == 0) {
             kernel_wrapper_signature += "halide_buffer_t *" + b;
+            kernel_wrapper_signature_no_event += "halide_buffer_t *" + b;
             kernel_params += "&(" + b + "->device)";
         } else {
             kernel_wrapper_signature += ", halide_buffer_t *" + b;
+            kernel_wrapper_signature_no_event += ", halide_buffer_t *" + b;
             kernel_params += ", &(" + b + "->device)";
         }
         idx++;
@@ -361,8 +364,10 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     for (std::string v : closure_vars) {
         if (idx == 0) {
             kernel_wrapper_signature += v;
+            kernel_wrapper_signature_no_event += v;
         } else {
             kernel_wrapper_signature += ", " + v;
+            kernel_wrapper_signature_no_event += ", " + v;
         }
         idx++;
     }
@@ -372,7 +377,8 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         idx++;
     }
     kernel_signature += ")";
-    kernel_wrapper_signature += ", void *_kernel_stream, void *_kernel_event_stream)";
+    kernel_wrapper_signature += ", void *_kernel_stream, void *_kernel_event_buff)";
+    kernel_wrapper_signature_no_event += ", void *_kernel_stream)";
     std::string kernel_code = "extern \"C\" {\n__global__\n";
     kernel_code +=  kernel_signature + " {\n";
     kernel_code += /*"  " + kernel_body +*/ "\n}\n}/*extern \"C\"*/\n";
@@ -385,10 +391,12 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     module_mgmt += "  CUresult func_err = cuModuleGetFunction(&kernel, mod, \"DEVICE_" + kernel_name + "\");\n";
     module_mgmt += "  if (func_err != CUDA_SUCCESS) { const char *cuda_err; cuGetErrorName(func_err, &cuda_err); fprintf(stderr, \"CUDA error for cuModuleGetFunction: %s\\n\", cuda_err); assert(false); }\n";
     std::string event_check = "  //if (event != NULL) { cuStreamWaitEvent(kernel_stream[0], event, 0); }\n";
-    std::string event_record = "  if(_kernel_event_stream) {\n    fprintf(stderr, \"creating event and recording\\n\");\n    CUevent *kernel_event_stream = (CUevent*)_kernel_event_stream;\n";//"  //if (other_event != NULL) { cuEventRecord(other_event, kernel_stream); }\n";
-    event_record += "    CUevent event;\n    assert(cuEventCreate(&event, 0) == 0);\n    assert(cuEventRecord(event, kernel_stream[0]) == 0);\n    kernel_event_stream[0] = event;\n  }\n";
+    std::string event_record = "  if(_kernel_event_buff) {\n    fprintf(stderr, \"creating event\\n\");\n    CUevent *kernel_event_buff = (CUevent*)_kernel_event_buff;\n";//"  //if (other_event != NULL) { cuEventRecord(other_event, kernel_stream); }\n";
+    event_record += "    CUevent event;\n    assert(cuEventCreate(&event, 0) == 0);\n    fprintf(stderr, \"recording\\n\");\n    assert(cuEventRecord(event, kernel_stream[0]) == 0);\n    kernel_event_buff[0] = event;\n  }\n";
     kernel_wrapper << kernel_wrapper_signature << " {\nfprintf(stderr, \"In kernel wrapper: " << kernel_name << "\\n\");\n" << module_mgmt << kernel_params << kernel_wrapper_body
-                   << event_check << kernel_launch << event_record << "fprintf(stderr, \"Leaving kernel wrapper: " << kernel_name << "\\n\");\n" << "}\n}/*extern \"C\"*/\n";
+                   << event_check << kernel_launch << event_record << "fprintf(stderr, \"Leaving kernel wrapper: " << kernel_name << "\\n\");\n" << "}\n";
+    kernel_wrapper << kernel_wrapper_signature_no_event << " {\nfprintf(stderr, \"In kernel wrapper: " << kernel_name << "\\n\");\n" << module_mgmt << kernel_params << kernel_wrapper_body
+                   << kernel_launch << "fprintf(stderr, \"Leaving kernel wrapper: " << kernel_name << "\\n\");\n" << "}\n}/*extern \"C\"*/\n";
     kernel.close();
     kernel_wrapper.close();
     return std::pair<std::vector<std::string>, std::vector<std::string>>(buffer_names, other_params);

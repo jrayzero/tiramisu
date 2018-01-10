@@ -2105,7 +2105,9 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                 result2 = Halide::Internal::Call::make(Halide::Handle(1, wait_type.handle_type),
                                                        Halide::Internal::Call::address_of, {result2},
                                                        Halide::Internal::Call::Intrinsic);
-                kernel_params.push_back(result2);
+                kernel_params.push_back(result2);                
+            } else {
+              kernel += "_no_event";
             }
             result = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), kernel, kernel_params));
         } else if (convert_to_conditional) {
