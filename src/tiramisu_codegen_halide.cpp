@@ -2047,9 +2047,13 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                         Halide::Internal::Variable::make(halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()), arg_name);
                 kernel_params.push_back(var);
             }
-            kernel_params.push_back(Halide::Internal::Load::make(Halide::Handle(), "streams", 0 /*This is our kernel stream idx by default*/,
-                                                                 Halide::Buffer<>(), Halide::Internal::Parameter(),
-                                                                 Halide::Internal::const_true()));
+            Halide::Expr kernel_stream = Halide::Internal::Load::make(Halide::Handle(), "streams", 0,
+                                                                      Halide::Buffer<>(), Halide::Internal::Parameter(),
+                                                                      Halide::Internal::const_true());
+            kernel_stream = Halide::Internal::Call::make(Halide::Handle(),
+                                                         Halide::Internal::Call::address_of, {kernel_stream},
+                                                         Halide::Internal::Call::Intrinsic);
+            kernel_params.push_back(kernel_stream);
             computation *comp = fct.get_computation_by_name(comp_name)[0];
             if (comp->is_nonblock_or_async) { // needs an event buffer
 
@@ -2099,8 +2103,8 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                         Halide::Internal::Parameter(), Halide::Internal::const_true(wait_type.lanes()));
 
                 result2 = Halide::Internal::Call::make(Halide::Handle(1, wait_type.handle_type),
-                                                      Halide::Internal::Call::address_of, {result2},
-                                                      Halide::Internal::Call::Intrinsic);
+                                                       Halide::Internal::Call::address_of, {result2},
+                                                       Halide::Internal::Call::Intrinsic);
                 kernel_params.push_back(result2);
             }
             result = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), kernel, kernel_params));
@@ -2422,22 +2426,28 @@ void function::gen_halide_stmt()
                                                                           std::vector<Halide::Expr>(),
                                                                           Halide::Internal::Call::Extern));
         stmt = Halide::Internal::LetStmt::make("rank", mpi_rank, stmt);
-        //        halide_dimension_t shape;
-        //        shape.min = 0;
-        //        shape.stride = 1;
-        //        shape.extent =(uint64_t)xfer_prop::comm_prop_ids.size();
-        stmt = Halide::Internal::LetStmt::make("streams", make_comm_call(Halide::type_of<struct halide_buffer_t *>(), "tiramisu_cudad_stream_create", {Halide::Expr((uint64_t)xfer_prop::comm_prop_ids.size())}), stmt);
-        /*        Halide::Expr streams_buffer =
-                Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), "streams.buffer");
+        halide_dimension_t shape;
+        shape.min = 0;
+        shape.stride = 1;
+        shape.extent =(uint64_t)xfer_prop::comm_prop_ids.size();
 
+
+        //        stmt = Halide::Internal::LetStmt::make("streams", make_comm_call(Halide::type_of<struct halide_buffer_t *>(),
+        //                                                                         "tiramisu_cudad_stream_create", {Halide::Expr((uint64_t)xfer_prop::comm_prop_ids.size())}), stmt);
+        /*        Halide::Expr streams_buffer =
+                Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), "streams.buffer");*/
+        Halide::Expr streams_buffer = Halide::Internal::Load::make(
+                Halide::Handle(), "streams", 0, Halide::Buffer<>(),
+                Halide::Internal::Parameter(), Halide::Internal::const_true());
+        streams_buffer = Halide::Internal::Call::make(Halide::Handle(),
+                                                      Halide::Internal::Call::address_of, {streams_buffer},
+                                                      Halide::Internal::Call::Intrinsic);
         stmt = Halide::Internal::Block::make(Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(),
-                                                                                      "tiramisu_cudad_stream_create",
-                                                                                      {streams_buffer})), stmt);*/
-        /*        stmt = Halide::Internal::Allocate::make("streams", Halide::Handle(),
+                                                                                             "tiramisu_cudad_stream_create",
+                                                                                             {streams_buffer})), stmt);
+        stmt = Halide::Internal::Allocate::make("streams", Halide::Handle(),
                                                 {Halide::Expr((uint64_t)xfer_prop::comm_prop_ids.size())},
-                                                Halide::Internal::const_true(), stmt);*/
-        //         TODO return this context eventually so it can be destroyed
-        //        stmt = Halide::Internal::LetStmt::make("cuda_vars", make_comm_call(Halide::Handle(), "tiramisu_cuda_init", {}), stmt);
+                                                Halide::Internal::const_true(), stmt);
     }
 
     // Add producer tag
@@ -2779,9 +2789,22 @@ void tiramisu::computation::create_halide_assignment()
                         }
                     }
                     // Now add the stream
-                    halide_call_args[4] = Halide::Internal::Load::make(Halide::Handle(), "streams",
-                                                                       this->library_call_args[4].get_int32_value(), Halide::Buffer<>(),
-                                                                       Halide::Internal::Parameter(), Halide::Internal::const_true());
+
+                    //                    Halide::Expr kernel_stream = Halide::Internal::Load::make(Halide::Handle(), "streams", 0,
+                    //                                                                              Halide::Buffer<>(), Halide::Internal::Parameter(),
+                    //                                                                              Halide::Internal::const_true());
+                    //                    kernel_stream = Halide::Internal::Call::make(Halide::Handle(),
+                    //                                                                 Halide::Internal::Call::address_of, {kernel_stream},
+                    //                                                                 Halide::Internal::Call::Intrinsic);
+                    //                    kernel_params.push_back(kernel_stream);
+
+                    //                    halide_call_args[4]
+                    Halide::Expr call_stream = Halide::Internal::Load::make(Halide::Handle(), "streams",
+                                                                            this->library_call_args[4].get_int32_value(), Halide::Buffer<>(),
+                                                                            Halide::Internal::Parameter(), Halide::Internal::const_true());
+                    call_stream = Halide::Internal::Call::make(Halide::Handle(), Halide::Internal::Call::address_of,
+                                                               {call_stream}, Halide::Internal::Call::Intrinsic);
+                    halide_call_args[4] = call_stream;
                 } else {
                     for (int i = 0; i < this->library_call_args.size(); i++) {
                         if (i != this->rhs_argument_idx && i != this->lhs_argument_idx &&
@@ -2901,8 +2924,8 @@ void tiramisu::computation::create_halide_assignment()
                 assert(this->wait_index_expr != NULL);
                 Halide::Expr wait_index;
                 if (wait_tiramisu_buffer->has_constant_extents()) {
-                     wait_index = tiramisu::generator::linearize_access(wait_buf_dims, wait_shape,
-                                                                                    this->wait_index_expr);
+                    wait_index = tiramisu::generator::linearize_access(wait_buf_dims, wait_shape,
+                                                                       this->wait_index_expr);
                 } else {
                     wait_index = tiramisu::generator::linearize_access(wait_tiramisu_buffer->get_dim_sizes().size(),
                                                                        wait_strides_vector, this->wait_index_expr);
