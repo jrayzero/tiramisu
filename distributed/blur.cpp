@@ -177,6 +177,8 @@ int main() {
     xfer_prop d2h_cuda_sync(T_DATA_TYPE, {SYNC, CUDA, GPU2CPU});
     xfer_prop d2h_cuda_async(T_DATA_TYPE, {ASYNC, CUDA, GPU2CPU}, 2);
 
+    xfer_prop kernel(T_DATA_TYPE, {ASYNC, CUDA}, 0);
+
     // Minimal communication scheme
 
     // First, transfer border region between the procs.
@@ -217,6 +219,9 @@ int main() {
     tiramisu::wait cpu_to_gpu_wait(input_cpu_to_gpu.os->operator()(q, y, x), input_cpu_to_gpu.os->get_channel(), &blur_dist);
     tiramisu::wait gpu_to_cpu_wait(gpu_to_cpu.os->operator()(q, y, x), gpu_to_cpu.os->get_channel(), &blur_dist);
 
+    tiramisu::wait kernel_by_wait("[procs]->{by_wait[q,y]: 0<=q<procs and 0<=y<1}", by(y, x), kernel, true, &blur_dist);
+    kernel_by_wait.tag_distribute_level(q);
+
     input_cpu_to_gpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//, collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)rows)});
     cpu_to_gpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//, collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)rows)});
     gpu_to_cpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols-2)});
@@ -234,7 +239,9 @@ int main() {
     cpu_to_gpu_wait.before(bx, computation::root);
     bx.before(bx_recompute, computation::root);
     bx_recompute.before(by, computation::root);
-    by.before(*gpu_to_cpu.os, computation::root);
+    by.before(kernel_by_wait, computation::root);
+    kernel_by_wait.before(*gpu_to_cpu.os, computation::root);
+//    by.before(*gpu_to_cpu.os, computation::root);
     gpu_to_cpu.os->before(gpu_to_cpu_wait, computation::root);
 
     bx_exchange.s->tag_distribute_level(q, false);
@@ -281,6 +288,9 @@ int main() {
     tiramisu::buffer buff_gpu_to_cpu_wait("buff_gpu_to_cpu_wait", {by_select_dim0}, tiramisu::p_wait_ptr,
                                           tiramisu::a_temporary, &blur_dist);
 
+    tiramisu::buffer buff_kernel_by_wait("buff_kernel_by_wait", {1}, tiramisu::p_wait_ptr,
+                                          tiramisu::a_temporary, &blur_dist);
+
     dummy.set_access("{dummy[q,y,x]->buff_bx_gpu[0,0]}"); // we will just overwrite this later
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
 
@@ -301,6 +311,8 @@ int main() {
     gpu_to_cpu.os->set_access("{gpu_to_cpu_os[q,y,x]->buff_by[y,x]}");
 
     gpu_to_cpu.os->set_wait_access("{gpu_to_cpu_os[q,y,x]->buff_gpu_to_cpu_wait[y]}");
+
+    by.set_wait_access("{by[y,x]->buff_kernel_by_wait[0]}");
 
     blur_dist.set_arguments({&buff_input, &buff_by});//, &buff_cpu_to_gpu_wait});
     blur_dist.lift_dist_comps();

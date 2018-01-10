@@ -8192,6 +8192,8 @@ tiramisu::wait::wait(std::string iteration_domain_str, tiramisu::expr rhs, xfer_
                      tiramisu::function *fct) : communicator(iteration_domain_str, rhs, schedule_this, tiramisu::p_async, fct), rhs(rhs) {
     _is_library_call = true;
     this->chan = channel;
+    computation *comp = fct->get_computation_by_name(rhs.get_name())[0];
+    comp->is_nonblock_or_async = true;
 }
 
 wait_type tiramisu::wait::get_wait_type() const {
@@ -8561,7 +8563,7 @@ bool tiramisu::computation::should_drop_rank_iter() const {
     return this->drop_rank_iter_from_index;
 }
 
-void tiramisu::communicator::set_wait_access(std::string req_access_map_str) {
+void tiramisu::computation::set_wait_access(std::string req_access_map_str) {
     this->wait_access_map = isl_map_read_from_str(this->get_ctx(), req_access_map_str.c_str());
 }
 

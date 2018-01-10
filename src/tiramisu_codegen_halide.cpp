@@ -2050,6 +2050,59 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
             kernel_params.push_back(Halide::Internal::Load::make(Halide::Handle(), "streams", 0 /*This is our kernel stream idx by default*/,
                                                                  Halide::Buffer<>(), Halide::Internal::Parameter(),
                                                                  Halide::Internal::const_true()));
+            computation *comp = fct.get_computation_by_name(comp_name)[0];
+            if (comp->is_nonblock_or_async) { // needs an event buffer
+
+                const auto &wait_buffer_entry = fct.get_buffers().find(
+                        isl_map_get_tuple_name(comp->wait_access_map, isl_dim_out));
+                assert(wait_buffer_entry != fct.get_buffers().end());
+                const auto &wait_tiramisu_buffer = wait_buffer_entry->second;
+                // Now, compute the index into the buffer
+                halide_dimension_t *wait_shape = new halide_dimension_t[wait_tiramisu_buffer->get_dim_sizes().size()];
+                int wait_stride = 1;
+                int wait_buf_dims = wait_tiramisu_buffer->get_dim_sizes().size();
+                std::vector<Halide::Expr> wait_strides_vector;
+                if (wait_tiramisu_buffer->has_constant_extents()) {
+                    for (int i = 0; i < wait_buf_dims; i++) {
+                        wait_shape[i].min = 0;
+                        int dim_idx = wait_tiramisu_buffer->get_dim_sizes().size() - i - 1;
+                        wait_shape[i].extent = (int) wait_tiramisu_buffer->get_dim_sizes()[dim_idx].get_int_val();
+                        wait_shape[i].stride = wait_stride;
+                        wait_stride *= (int) wait_tiramisu_buffer->get_dim_sizes()[dim_idx].get_int_val();
+                    }
+                } else {
+                    std::vector<isl_ast_expr *> empty_index_expr;
+                    Halide::Expr stride_expr = Halide::Expr(1);
+                    for (int i = 0; i < wait_tiramisu_buffer->get_dim_sizes().size(); i++)
+                    {
+                        int dim_idx = wait_tiramisu_buffer->get_dim_sizes().size() - i - 1;
+                        wait_strides_vector.push_back(stride_expr);
+                        stride_expr = stride_expr * generator::halide_expr_from_tiramisu_expr(&fct, empty_index_expr,
+                                                                                              wait_tiramisu_buffer->get_dim_sizes()[dim_idx],
+                                                                                              comp);
+                    }
+                }
+
+                assert(comp->wait_index_expr != NULL);
+                Halide::Expr wait_index;
+                if (wait_tiramisu_buffer->has_constant_extents()) {
+                    wait_index = tiramisu::generator::linearize_access(wait_buf_dims, wait_shape,
+                                                                       comp->wait_index_expr);
+                } else {
+                    wait_index = tiramisu::generator::linearize_access(wait_tiramisu_buffer->get_dim_sizes().size(),
+                                                                       wait_strides_vector, comp->wait_index_expr);
+                }
+                // Finally, index into the buffer
+                Halide::Type wait_type = halide_type_from_tiramisu_type(p_wait_ptr);
+                Halide::Expr result2 = Halide::Internal::Load::make(
+                        wait_type, wait_tiramisu_buffer->get_name(), wait_index, Halide::Buffer<>(),
+                        Halide::Internal::Parameter(), Halide::Internal::const_true(wait_type.lanes()));
+
+                result2 = Halide::Internal::Call::make(Halide::Handle(1, wait_type.handle_type),
+                                                      Halide::Internal::Call::address_of, {result2},
+                                                      Halide::Internal::Call::Intrinsic);
+                kernel_params.push_back(result2);
+            }
             result = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), kernel, kernel_params));
         } else if (convert_to_conditional) {
             DEBUG(3, tiramisu::str_dump("Converting for loop into a rank conditional."));
@@ -2822,6 +2875,7 @@ void tiramisu::computation::create_halide_assignment()
                 halide_dimension_t *wait_shape = new halide_dimension_t[wait_tiramisu_buffer->get_dim_sizes().size()];
                 int wait_stride = 1;
                 int wait_buf_dims = wait_tiramisu_buffer->get_dim_sizes().size();
+                std::vector<Halide::Expr> wait_strides_vector;
                 if (wait_tiramisu_buffer->has_constant_extents()) {
                     for (int i = 0; i < wait_buf_dims; i++) {
                         wait_shape[i].min = 0;
@@ -2836,7 +2890,7 @@ void tiramisu::computation::create_halide_assignment()
                     for (int i = 0; i < wait_tiramisu_buffer->get_dim_sizes().size(); i++)
                     {
                         int dim_idx = wait_tiramisu_buffer->get_dim_sizes().size() - i - 1;
-                        strides_vector.push_back(stride_expr);
+                        wait_strides_vector.push_back(stride_expr);
                         stride_expr = stride_expr * generator::halide_expr_from_tiramisu_expr(fct, empty_index_expr,
                                                                                               wait_tiramisu_buffer->get_dim_sizes()[dim_idx],
                                                                                               this);
@@ -2850,7 +2904,7 @@ void tiramisu::computation::create_halide_assignment()
                                                                                     this->wait_index_expr);
                 } else {
                     wait_index = tiramisu::generator::linearize_access(wait_tiramisu_buffer->get_dim_sizes().size(),
-                                                                  strides_vector, this->wait_index_expr);
+                                                                       wait_strides_vector, this->wait_index_expr);
                 }
                 // Finally, index into the buffer
                 Halide::Type wait_type = halide_type_from_tiramisu_type(p_wait_ptr);

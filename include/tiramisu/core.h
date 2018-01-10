@@ -1960,6 +1960,8 @@ private:
 
 public:
 
+    void set_wait_access(std::string req_access_map_str);
+
     void drop_rank_iter();
 
     bool should_drop_rank_iter() const;
@@ -2246,6 +2248,8 @@ protected:
       * happen within the function call as a side effect, such as with MPI sends and recvs).
       */
     bool _is_library_call;
+
+    bool is_nonblock_or_async = false;
 
     /**
       * If this operation is a library call, this vector contains the arguments to that function call, except for
@@ -4115,8 +4119,6 @@ public:
     xfer_prop get_channel() const;
 
     tiramisu::expr get_num_elements() const;
-
-    void set_wait_access(std::string req_access_map_str);
 
 };
 

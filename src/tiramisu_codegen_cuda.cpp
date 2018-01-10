@@ -370,7 +370,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         idx++;
     }
     kernel_signature += ")";
-    kernel_wrapper_signature += ", CUstream kernel_stream, void *_kernel_event_stream = nullptr, int kernel_event_idx = -1/*, CUevent event, CUevent other_event*/)";
+    kernel_wrapper_signature += ", CUstream kernel_stream, void *_kernel_event_stream = nullptr/*, CUevent event, CUevent other_event*/)";
     std::string kernel_code = "__global__\n";
     kernel_code +=  kernel_signature + " {\n";
     kernel_code += "  " + kernel_body + "\n}\n\n";
@@ -381,8 +381,8 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     module_mgmt += "  assert(cuModuleLoad(&mod, \"" + fatbin_fn + "\") == 0);\n";
     module_mgmt += "  assert(cuModuleGetFunction(&kernel, mod, \"DEVICE_" + kernel_name + "\") == 0);\n";
     std::string event_check = "  //if (event != NULL) { cuStreamWaitEvent(kernel_stream, event, 0); }\n";
-    std::string event_record = "  if(_kernel_event_stream) {\n    assert(kernel_event_idx >= 0);\n    CUevent *kernel_event_stream = (CUevent*)_kernel_event_stream;\n";//"  //if (other_event != NULL) { cuEventRecord(other_event, kernel_stream); }\n";
-    event_record += "    CUevent event;\n    assert(cuEventCreate(&event, 0) == 0);\n    assert(cuEventRecord(event, kernel_stream) == 0);\n    kernel_event_stream[kernel_event_idx] = event;\n  }\n";
+    std::string event_record = "  if(_kernel_event_stream) {\n    CUevent *kernel_event_stream = (CUevent*)_kernel_event_stream;\n";//"  //if (other_event != NULL) { cuEventRecord(other_event, kernel_stream); }\n";
+    event_record += "    CUevent event;\n    assert(cuEventCreate(&event, 0) == 0);\n    assert(cuEventRecord(event, kernel_stream) == 0);\n    kernel_event_stream[0] = event;\n  }\n";
     kernel_wrapper << kernel_wrapper_signature << " {\n" << module_mgmt << kernel_params << kernel_wrapper_body
                    << event_check << kernel_launch << event_record << "}\n\n";
     kernel.close();
@@ -395,13 +395,13 @@ void compile_kernel_to_obj(std::string kernel_fn, std::string kernel_wrapper_fn)
     // Generate a fat binary with a cubin file from the kernel
     std::string cmd = "nvcc -I/Users/JRay/ClionProjects/tiramisu/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_fn + " --fatbin -odir /tmp/";
     std::cerr << "cmd: " << cmd << std::endl;
-//    int ret = system(cmd.c_str());
-//    assert(ret == 0 && "Non-zero exit code for nvcc invocation");
+    int ret = system(cmd.c_str());
+    assert(ret == 0 && "Non-zero exit code for nvcc invocation");
     // Compile the wrapper into an object file
     cmd = "nvcc -I/Users/JRay/ClionProjects/tiramisu/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_wrapper_fn + " -odir /tmp/";
-//    std::cerr << "cmd: " << cmd << std::endl;
-//    ret = system(cmd.c_str());
-//    assert(ret == 0 && "Non-zero exit code for nvcc invocation");
+    std::cerr << "cmd: " << cmd << std::endl;
+    ret = system(cmd.c_str());
+    assert(ret == 0 && "Non-zero exit code for nvcc invocation");
 }
 
 std::tuple<std::string, std::vector<std::string>, std::vector<std::string>> tiramisu::generator::cuda_kernel_from_isl_node(function &fct, isl_ast_node *node,
