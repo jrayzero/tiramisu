@@ -55,13 +55,13 @@ int main() {
                            T_DATA_TYPE, &blur_dist);
     // compute more than is needed, just to make the comp a little easier
     computation bx("[rows, cols]->{bx[y, x]: 0<=y<rows and 0<=x<cols}",
-                           (((blur_input(y, x) + blur_input(y, (x + expr((C_LOOP_ITER_TYPE)1)))) +
-                                                           blur_input(y, (x + expr((C_LOOP_ITER_TYPE)2)))) / expr((C_DATA_TYPE)3)),
+                   (((blur_input(y, x) + blur_input(y, (x + expr((C_LOOP_ITER_TYPE)1)))) +
+                     blur_input(y, (x + expr((C_LOOP_ITER_TYPE)2)))) / expr((C_DATA_TYPE)3)),
                    true, T_DATA_TYPE, &blur_dist);
 
     computation by("[rows, cols]->{by[y, x]: 0<=y<rows and 0<=x<cols}",
-                                      (((bx(y, x) + bx((y + expr((C_LOOP_ITER_TYPE)1)), x)) +
-                                        bx((y + expr((C_LOOP_ITER_TYPE)2)), x)) / expr((C_DATA_TYPE)3)),
+                   (((bx(y, x) + bx((y + expr((C_LOOP_ITER_TYPE)1)), x)) +
+                     bx((y + expr((C_LOOP_ITER_TYPE)2)), x)) / expr((C_DATA_TYPE)3)),
                    true, T_DATA_TYPE, &blur_dist);
 
     // -------------------------------------------------------
@@ -79,7 +79,7 @@ int main() {
 #endif
 
 #ifdef CPU_ONLY
-#ifdef DISTRIBUTE
+    #ifdef DISTRIBUTE
     xfer_prop sync_block(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
     xfer_prop async_block(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
     // transfer the computed rows from bx
@@ -187,9 +187,16 @@ int main() {
                     blur_input(y, x), &blur_dist);
 
     // Need an  CPU-GPU transfer for each input
-    xfer input_cpu_to_gpu =
-            computation::create_xfer("[procs, rows_per_proc, cols]->{input_cpu_to_gpu_os[q,y,x]: 0<=q<procs and 0<=y<rows_per_proc+2 and 0<=x<cols}",
-                                     h2d_cuda_async, blur_input(y,x), &blur_dist);
+    xfer input_cpu_to_gpu;
+    if (procs == 1) {
+        input_cpu_to_gpu = computation::create_xfer(
+                "[procs, rows_per_proc, cols]->{input_cpu_to_gpu_os[q,y,x]: 0<=q<procs and 0<=y<rows_per_proc and 0<=x<cols}",
+                h2d_cuda_async, blur_input(y, x), &blur_dist);
+    } else {
+        input_cpu_to_gpu = computation::create_xfer(
+                "[procs, rows_per_proc, cols]->{input_cpu_to_gpu_os[q,y,x]: 0<=q<procs and 0<=y<rows_per_proc+2 and 0<=x<cols}",
+                h2d_cuda_async, blur_input(y, x), &blur_dist);
+    }
 
     // True because we need to insert a dummy access since the transfer has 3 dims and blur_input only has 2
     generator::update_producer_expr_name(&bx, "blur_input", "input_cpu_to_gpu_os", true);
@@ -200,7 +207,7 @@ int main() {
                                      d2h_cuda_sync, by(y,x), &blur_dist);
     // We want to insert a new computation here that computes bx of the two extra rows. This gives us recomputation
     // instead of communication, which is cheaper for us. The last proc doesn't need to do anything though.
-    computation bx_recompute("[rows_per_node, cols, procs]->{bx_recompute[q, y, x]: 0<=q<procs-1 and rows_per_node<=y<rows_per_node+2 and 0<=x<cols-2}", 
+    computation bx_recompute("[rows_per_node, cols, procs]->{bx_recompute[q, y, x]: 0<=q<procs-1 and rows_per_node<=y<rows_per_node+2 and 0<=x<cols-2}",
                              (((blur_input(y, x) + blur_input(y, (x + expr((C_LOOP_ITER_TYPE)1)))) +
                                blur_input(y, (x + expr((C_LOOP_ITER_TYPE)2)))) / expr((C_DATA_TYPE)3)),
                              true, T_DATA_TYPE, &blur_dist);
@@ -253,23 +260,23 @@ int main() {
                                 tiramisu::a_input, &blur_dist);
 
     // TODO change this to a temporary one an allocate ourselves
-    tiramisu::buffer buff_input_gpu("buff_input_gpu", {tiramisu::expr(rows_per_proc+2), tiramisu::expr(cols)}, T_DATA_TYPE,
+    tiramisu::buffer buff_input_gpu("buff_input_gpu", {bx_select_dim0, tiramisu::expr(cols)}, T_DATA_TYPE,
                                     tiramisu::a_temporary_gpu, &blur_dist);
 
     tiramisu::buffer buff_bx_gpu("buff_bx_gpu", {bx_select_dim0, tiramisu::expr(cols)},
-                             T_DATA_TYPE, tiramisu::a_temporary_gpu, &blur_dist);
+                                 T_DATA_TYPE, tiramisu::a_temporary_gpu, &blur_dist);
 
     tiramisu::buffer buff_by_gpu("buff_by_gpu", {by_select_dim0, tiramisu::expr(cols)},
-                             T_DATA_TYPE, tiramisu::a_temporary_gpu, &blur_dist);
+                                 T_DATA_TYPE, tiramisu::a_temporary_gpu, &blur_dist);
 
     tiramisu::buffer buff_by("buff_by", {by_select_dim0, tiramisu::expr(cols)},
-                                 T_DATA_TYPE, tiramisu::a_output, &blur_dist);
+                             T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
     tiramisu::buffer buff_bx_exchange_wait("buff_bx_exchange_wait", {2, cols}, tiramisu::p_wait_ptr,
                                            tiramisu::a_temporary, &blur_dist);
 
-    tiramisu::buffer buff_cpu_to_gpu_wait("buff_cpu_to_gpu_wait", {rows_per_proc+2}, tiramisu::p_wait_ptr,
-                                           tiramisu::a_temporary, &blur_dist);
+    tiramisu::buffer buff_cpu_to_gpu_wait("buff_cpu_to_gpu_wait", {bx_select_dim0}, tiramisu::p_wait_ptr,
+                                          tiramisu::a_temporary, &blur_dist);
 
     dummy.set_access("{dummy[q,y,x]->buff_bx_gpu[0,0]}"); // we will just overwrite this later
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
