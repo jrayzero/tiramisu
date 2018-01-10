@@ -2024,12 +2024,12 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
             std::pair<int, int> range = fct.gpu_ranges[comp_name];
             std::string kernel = "tiramisu_CUDA_kernel_" + comp_name;
             // now actually generate that backend code for both the loops and the computations
-            std::pair<std::string, std::vector<std::string>> kernel_fn_and_buffer_names =
+            std::tuple<std::string, std::vector<std::string>, std::vector<std::string>> kernel_fn_and_buffer_names =
                     generator::cuda_kernel_from_isl_node(fct, node, level,
                                                          tagged_stmts, kernel, range.first, range.second);
             std::vector<Halide::Expr> kernel_params;
             // create buffer parameters for calling the kernel
-            for (std::string buff_name : kernel_fn_and_buffer_names.second) {
+            for (std::string buff_name : std::get<1>(kernel_fn_and_buffer_names)) {
                 argument_t arg_type = fct.buffers_list[buff_name]->get_argument_type();
                 if (arg_type == tiramisu::a_temporary_gpu) { // this is already a halide_buffer_t *
                     Halide::Expr buff_var =
@@ -2042,9 +2042,14 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                     kernel_params.push_back(buff_var);
                 }
             }
+            for (std::string arg_name : std::get<2>(kernel_fn_and_buffer_names)) {
+                Halide::Expr var =
+                        Halide::Internal::Variable::make(halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()), arg_name);
+                kernel_params.push_back(var);
+            }
 
             result = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), kernel, kernel_params));
-            std::cerr << "Kernel filename: " << kernel_fn_and_buffer_names.first << std::endl;
+            std::cerr << "Kernel filename: " << std::get<0>(kernel_fn_and_buffer_names) << std::endl;
         } else if (convert_to_conditional) {
             DEBUG(3, tiramisu::str_dump("Converting for loop into a rank conditional."));
             Halide::Expr rank_var =

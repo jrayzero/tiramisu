@@ -28,6 +28,7 @@ std::vector<std::string> closure_buffers;
 std::vector<std::string> closure_buffers_no_type;
 // vars to pass into the wrapper
 std::vector<std::string> closure_vars;
+std::vector<std::string> closure_vars_no_type;
 
 std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_starting_level, int kernel_ending_level,
                                         bool convert_to_loop_type = false, bool map_iterator = false,
@@ -315,7 +316,7 @@ std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct
 }
 
 // put all the CUDA code for this kernel together
-std::vector<std::string> generate_kernel_file(std::string kernel_name, std::string kernel_fn,
+std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_file(std::string kernel_name, std::string kernel_fn,
                                               std::string kernel_wrapper_fn,
                                               std::string kernel_body, std::string kernel_wrapper_body,
                                               std::string fatbin_fn) {
@@ -331,6 +332,7 @@ std::vector<std::string> generate_kernel_file(std::string kernel_name, std::stri
     std::string kernel_wrapper_signature = "void " + kernel_name + "(";
     std::string kernel_params = "  void *kernel_args[] = {";
     std::vector<std::string> buffer_names;
+    std::vector<std::string> other_params;
     int idx = 0;
     for (std::string b : closure_buffers) {
         if (idx == 0) {
@@ -353,12 +355,18 @@ std::vector<std::string> generate_kernel_file(std::string kernel_name, std::stri
         idx++;
     }
     kernel_params += "};\n";
+    int idx2 = idx;
     for (std::string v : closure_vars) {
         if (idx == 0) {
             kernel_wrapper_signature += v;
         } else {
             kernel_wrapper_signature += ", " + v;
         }
+        idx++;
+    }
+    idx = idx2;
+    for (std::string v : closure_vars_no_type) {
+        other_params.push_back(v);
         idx++;
     }
     kernel_signature += ")";
@@ -378,7 +386,7 @@ std::vector<std::string> generate_kernel_file(std::string kernel_name, std::stri
                    << event_check << kernel_launch << event_record << "}\n\n";
     kernel.close();
     kernel_wrapper.close();
-    return buffer_names;
+    return std::pair<std::vector<std::string>, std::vector<std::string>>(buffer_names, other_params);
 }
 
 // compile the kernel file to an object file that can later be linked in
@@ -395,7 +403,7 @@ void compile_kernel_to_obj(std::string kernel_fn, std::string kernel_wrapper_fn)
     assert(ret == 0 && "Non-zero exit code for nvcc invocation");
 }
 
-std::pair<std::string, std::vector<std::string>> tiramisu::generator::cuda_kernel_from_isl_node(function &fct, isl_ast_node *node,
+std::tuple<std::string, std::vector<std::string>, std::vector<std::string>> tiramisu::generator::cuda_kernel_from_isl_node(function &fct, isl_ast_node *node,
                                                            int level, std::vector<std::string> &tagged_stmts, std::string kernel_name, int start_kernel_level, int end_kernel_level) {
     std::pair<std::string, std::string> bodies = generator::codegen_kernel_body(fct, node, level, start_kernel_level, end_kernel_level);
     std::string kernel_body = bodies.first;
@@ -403,10 +411,10 @@ std::pair<std::string, std::vector<std::string>> tiramisu::generator::cuda_kerne
     std::string kernel_fn = "/tmp/" + kernel_name + ".cu";
     std::string kernel_fatbin_fn = "/tmp/" + kernel_name + ".fatbin";
     std::string kernel_wrapper_fn = "/tmp/" + kernel_name + "_wrapper.cu";
-    std::vector<std::string> buffer_names =
+    std::pair<std::vector<std::string>, std::vector<std::string>> params =
             generate_kernel_file(kernel_name, kernel_fn, kernel_wrapper_fn, kernel_body, wrapper_body, kernel_fatbin_fn);
     compile_kernel_to_obj(kernel_fn, kernel_wrapper_fn);
-    std::pair<std::string, std::vector<std::string>> ret(kernel_fn, buffer_names);
+    std::tuple<std::string, std::vector<std::string>, std::vector<std::string>> ret(kernel_fn, params.first, params.second);
     return ret;
 }
 
@@ -497,13 +505,12 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
             }
         }
 
-
-
         if (!convert_to_loop_type) {
             result = "(int)" + name_str;
             if (capture_vars) {
                 if (std::find(closure_vars.begin(), closure_vars.end(), "int " + name_str) == closure_vars.end()) {
                     closure_vars.push_back("int " + name_str);
+                    closure_vars_no_type.push_back(name_str);
                 }
             }
         } else {
@@ -514,6 +521,7 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
                     closure_vars.end()) {
                     closure_vars.push_back(
                             c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " " + name_str);
+                    closure_vars_no_type.push_back(name_str);
                 }
             }
         }
