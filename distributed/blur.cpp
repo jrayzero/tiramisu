@@ -177,7 +177,7 @@ int main() {
     xfer_prop d2h_cuda_sync(T_DATA_TYPE, {SYNC, CUDA, GPU2CPU});
     xfer_prop d2h_cuda_async(T_DATA_TYPE, {ASYNC, CUDA, GPU2CPU}, 2);
 
-    xfer_prop kernel(T_DATA_TYPE, {ASYNC, CUDA}, 0);
+    xfer_prop kernel(T_DATA_TYPE, {ASYNC, CUDA}, 2);
 
     // Minimal communication scheme
 
