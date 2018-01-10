@@ -2023,11 +2023,28 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
             assert(comp_name != "");
             std::pair<int, int> range = fct.gpu_ranges[comp_name];
             std::string kernel = "tiramisu_CUDA_kernel_" + comp_name;
-            result = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), kernel, {/*Halide::Internal::Variable::make(Halide::Handle(), "cuda_vars")*/}));
             // now actually generate that backend code for both the loops and the computations
-            std::string kernel_fn = generator::cuda_kernel_from_isl_node(fct, node, level,
-                                                                         tagged_stmts, kernel, range.first, range.second);
-            std::cerr << "Kernel filename: " << kernel_fn << std::endl;
+            std::pair<std::string, std::vector<std::string>> kernel_fn_and_buffer_names =
+                    generator::cuda_kernel_from_isl_node(fct, node, level,
+                                                         tagged_stmts, kernel, range.first, range.second);
+            std::vector<Halide::Expr> kernel_params;
+            // create buffer parameters for calling the kernel
+            for (std::string buff_name : kernel_fn_and_buffer_names.second) {
+                argument_t arg_type = fct.buffers_list[buff_name]->get_argument_type();
+                if (arg_type == tiramisu::a_temporary_gpu) { // this is already a halide_buffer_t *
+                    Halide::Expr buff_var =
+                            Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), buff_name);
+                    kernel_params.push_back(buff_var);
+                } else { // need to pass with .buffer to get the halide_buffer_t
+                    Halide::Expr buff_var =
+                            Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(),
+                                                             buff_name + ".buffer");
+                    kernel_params.push_back(buff_var);
+                }
+            }
+
+            result = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), kernel, kernel_params));
+            std::cerr << "Kernel filename: " << kernel_fn_and_buffer_names.first << std::endl;
         } else if (convert_to_conditional) {
             DEBUG(3, tiramisu::str_dump("Converting for loop into a rank conditional."));
             Halide::Expr rank_var =
@@ -2044,7 +2061,9 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                                                  fortype, dev_api, halide_body);
             if (dev_api == Halide::DeviceAPI::CUDA && comm_prop_id != -2) {
                 // stick in a synchronization function that can be used if needed
-                result = Halide::Internal::Block::make(result, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cuda_kernel_event_record_and_wait", {comm_prop_id})));
+                result = Halide::Internal::Block::make(result,
+                                                       Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(),
+                                                                                                       "tiramisu_cuda_kernel_event_record_and_wait", {comm_prop_id})));
                 comm_prop_id = -2;
             }
         }
@@ -2298,17 +2317,17 @@ void function::gen_halide_stmt()
             }
             bytes *= halide_type_from_tiramisu_type(buf->get_elements_type()).bytes();
             stmt = Halide::Internal::LetStmt::make(buf->get_name(), make_comm_call(Halide::type_of<struct halide_buffer_t *>(), "tiramisu_cudad_malloc",
-                                                                            {bytes}), stmt);
-//            Halide::Expr gpu_buffer = Halide::Internal::Variable::make(Halide::Handle(),
-//                                                                       buf->get_name());
-//            stmt = Halide::Internal::Block::make(Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(),
-//                                                                                                 "tiramisu_cudad_malloc",
-//                                                                                                 {gpu_buffer, bytes})), stmt);
+                                                                                   {bytes}), stmt);
+            //            Halide::Expr gpu_buffer = Halide::Internal::Variable::make(Halide::Handle(),
+            //                                                                       buf->get_name());
+            //            stmt = Halide::Internal::Block::make(Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(),
+            //                                                                                                 "tiramisu_cudad_malloc",
+            //                                                                                                 {gpu_buffer, bytes})), stmt);
             // I still need this because I don't know how to declare the buffer without this halide allocate.
-//            stmt = Halide::Internal::Allocate::make(
-//                    buf->get_name(),
-//                    halide_type_from_tiramisu_type(buf->get_elements_type()),
-//                    {1}, Halide::Internal::const_true(), stmt);
+            //            stmt = Halide::Internal::Allocate::make(
+            //                    buf->get_name(),
+            //                    halide_type_from_tiramisu_type(buf->get_elements_type()),
+            //                    {1}, Halide::Internal::const_true(), stmt);
             buf->mark_as_allocated();
         }
     }

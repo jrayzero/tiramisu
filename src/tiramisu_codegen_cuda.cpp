@@ -38,6 +38,7 @@ std::string cuda_headers() {
     includes += "#include <iostream>\n";
     includes += "#include <cassert>\n";
     includes += "#include \"tiramisu/tiramisu_cuda_runtime.h\"\n";
+    includes += "#include \"HalideRuntime.h\"\n";
     return includes;
 }
 
@@ -314,8 +315,10 @@ std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct
 }
 
 // put all the CUDA code for this kernel together
-void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::string kernel_wrapper_fn,
-                          std::string kernel_body, std::string kernel_wrapper_body, std::string fatbin_fn) {
+std::vector<std::string> generate_kernel_file(std::string kernel_name, std::string kernel_fn,
+                                              std::string kernel_wrapper_fn,
+                                              std::string kernel_body, std::string kernel_wrapper_body,
+                                              std::string fatbin_fn) {
     std::ofstream kernel;
     kernel.open(kernel_fn);
     std::ofstream kernel_wrapper;
@@ -325,8 +328,9 @@ void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::s
     kernel_wrapper << cuda_headers() << std::endl;
     // kernel
     std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
-    std::string kernel_wrapper_signature = "void " + kernel_name + "(/*void *_cuda_vars,*/ ";
+    std::string kernel_wrapper_signature = "void " + kernel_name + "(";
     std::string kernel_params = "  void *kernel_args[] = {";
+    std::vector<std::string> buffer_names;
     int idx = 0;
     for (std::string b : closure_buffers) {
         if (idx == 0) {
@@ -338,12 +342,13 @@ void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::s
     }
     idx = 0;
     for (std::string b : closure_buffers_no_type) {
+        buffer_names.push_back(b);
         if (idx == 0) {
-            kernel_wrapper_signature += "CUdeviceptr " + b;
-            kernel_params += "&" + b;
+            kernel_wrapper_signature += "halide_buffer_t *" + b;
+            kernel_params += "&(" + b + "->device)";
         } else {
-            kernel_wrapper_signature += ", CUdeviceptr " + b;
-            kernel_params += ", &" + b;
+            kernel_wrapper_signature += ", halide_buffer_t *" + b;
+            kernel_params += ", &(" + b + "->device)";
         }
         idx++;
     }
@@ -357,15 +362,14 @@ void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::s
         idx++;
     }
     kernel_signature += ")";
-    kernel_wrapper_signature += ", CUstream kernel_stream, CUevent event /*make kernel_stream wait on this event*/, CUevent other_event)";
+    kernel_wrapper_signature += ", CUstream kernel_stream, CUevent event, CUevent other_event)";
     std::string kernel_code = "__global__\n";
     kernel_code +=  kernel_signature + " {\n";
     kernel_code += "  " + kernel_body + "\n}\n\n";
     kernel << kernel_code << std::endl;
     // wrapper function that the host calls
     std::string kernel_launch = "  assert(cuLaunchKernel(kernel, grid_width, grid_height, grid_depth, block_width, block_height, block_depth, 0 /*No shmem for now*/, kernel_stream, kernel_args, 0) == 0);\n";
-    std::string module_mgmt = "//  struct cuda_vars *cvars = (struct cuda_vars*)_cuda_vars;\n";
-    module_mgmt += "  CUmodule mod; CUfunction kernel;\n";
+    std::string module_mgmt = "  CUmodule mod; CUfunction kernel;\n";
     module_mgmt += "  assert(cuModuleLoad(&mod, \"" + fatbin_fn + "\") == 0);\n";
     module_mgmt += "  assert(cuModuleGetFunction(&kernel, mod, \"DEVICE_" + kernel_name + "\") == 0);\n";
     std::string event_check = "  if (event != NULL) { cuStreamWaitEvent(kernel_stream, event, 0); }\n";
@@ -374,23 +378,24 @@ void generate_kernel_file(std::string kernel_name, std::string kernel_fn, std::s
                    << event_check << kernel_launch << event_record << "}\n\n";
     kernel.close();
     kernel_wrapper.close();
+    return buffer_names;
 }
 
 // compile the kernel file to an object file that can later be linked in
 void compile_kernel_to_obj(std::string kernel_fn, std::string kernel_wrapper_fn) {
     // Generate a fat binary with a cubin file from the kernel
-    std::string cmd = "nvcc -I/Users/JRay/ClionProjects/tiramisu/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_fn + " --fatbin -odir /tmp/";
+    std::string cmd = "nvcc -I/Users/JRay/ClionProjects/tiramisu/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_fn + " --fatbin -odir /tmp/";
     std::cerr << "cmd: " << cmd << std::endl;
-//    int ret = system(cmd.c_str());
-//    assert(ret == 0 && "Non-zero exit code for nvcc invocation");
+    int ret = system(cmd.c_str());
+    assert(ret == 0 && "Non-zero exit code for nvcc invocation");
     // Compile the wrapper into an object file
-    cmd = "nvcc -I/Users/JRay/ClionProjects/tiramisu/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_wrapper_fn + " -odir /tmp/";
+    cmd = "nvcc -I/Users/JRay/ClionProjects/tiramisu/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_wrapper_fn + " -odir /tmp/";
     std::cerr << "cmd: " << cmd << std::endl;
-//    ret = system(cmd.c_str());
-//    assert(ret == 0 && "Non-zero exit code for nvcc invocation");
+    ret = system(cmd.c_str());
+    assert(ret == 0 && "Non-zero exit code for nvcc invocation");
 }
 
-std::string tiramisu::generator::cuda_kernel_from_isl_node(function &fct, isl_ast_node *node,
+std::pair<std::string, std::vector<std::string>> tiramisu::generator::cuda_kernel_from_isl_node(function &fct, isl_ast_node *node,
                                                            int level, std::vector<std::string> &tagged_stmts, std::string kernel_name, int start_kernel_level, int end_kernel_level) {
     std::pair<std::string, std::string> bodies = generator::codegen_kernel_body(fct, node, level, start_kernel_level, end_kernel_level);
     std::string kernel_body = bodies.first;
@@ -398,9 +403,11 @@ std::string tiramisu::generator::cuda_kernel_from_isl_node(function &fct, isl_as
     std::string kernel_fn = "/tmp/" + kernel_name + ".cu";
     std::string kernel_fatbin_fn = "/tmp/" + kernel_name + ".fatbin";
     std::string kernel_wrapper_fn = "/tmp/" + kernel_name + "_wrapper.cu";
-    generate_kernel_file(kernel_name, kernel_fn, kernel_wrapper_fn, kernel_body, wrapper_body, kernel_fatbin_fn);
+    std::vector<std::string> buffer_names =
+            generate_kernel_file(kernel_name, kernel_fn, kernel_wrapper_fn, kernel_body, wrapper_body, kernel_fatbin_fn);
     compile_kernel_to_obj(kernel_fn, kernel_wrapper_fn);
-    return kernel_fn;
+    std::pair<std::string, std::vector<std::string>> ret(kernel_fn, buffer_names);
+    return ret;
 }
 
 std::string c_type_from_tiramisu_type(tiramisu::primitive_t type) {

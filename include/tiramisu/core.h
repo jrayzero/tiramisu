@@ -3873,7 +3873,7 @@ protected:
             bool is_a_child_block = false);
 
   // This generates a cuda file containing the kernels that should be linked in later on when running the code. Returns the file name
-  static std::string cuda_kernel_from_isl_node(
+  static std::pair<std::string, std::vector<std::string>> cuda_kernel_from_isl_node(
             function &fct, isl_ast_node *node,
             int level, std::vector<std::string> &tagged_stmts, std::string kernel_name, int start, int end);
 

@@ -259,7 +259,6 @@ int main() {
     tiramisu::buffer buff_input("buff_input", {bx_select_dim0, tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);
 
-    // TODO change this to a temporary one an allocate ourselves
     tiramisu::buffer buff_input_gpu("buff_input_gpu", {bx_select_dim0, tiramisu::expr(cols)}, T_DATA_TYPE,
                                     tiramisu::a_temporary_gpu, &blur_dist);
 
