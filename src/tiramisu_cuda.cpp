@@ -52,8 +52,11 @@ inline void _tiramisu_cudad_memcpy_d2h(void *dst, CUdeviceptr src, size_t count)
 }
 
 inline void _tiramisu_cudad_memcpy_async_h2d(CUdeviceptr dst, const void *src, size_t count, CUstream stream, CUevent event) {
+  fprintf(stderr, "_tiramisu_cudad_memcpy_async_h2d\n");
     tiramisu_check_cudad_error("tiramisu_cudad_memcpy_async_h2d", cuMemcpyHtoDAsync(dst, src, count, stream));
+  fprintf(stderr, "_tiramisu_event record\n");
     tiramisu_cudad_event_record(event, stream);
+  fprintf(stderr, "done event record\n");
 }
 
 inline void _tiramisu_cudad_memcpy_async_d2h(void *dst, CUdeviceptr src, size_t count, CUstream stream, CUevent event) {
@@ -78,6 +81,7 @@ void tiramisu_cudad_stream_create(void *_stream_buff, int num_streams) {
         CUstream stream;
         tiramisu_check_cudad_error("tiramisu_cudad_stream_create", cuStreamCreate(&stream, 0));
         stream_buff[i] = stream;
+        fprintf(stderr, "stream created %d\n", stream_buff[i]);
     }
 
     //    halide_buffer_t *stream_buff = (halide_buffer_t*)malloc(sizeof(halide_buffer_t));
@@ -112,10 +116,8 @@ void tiramisu_cudad_event_record(CUevent event, CUstream stream) {
     tiramisu_check_cudad_error("tiramisu_cudad_event_record", cuEventRecord(event, stream));
 }
 
-void tiramisu_cudad_stream_wait_event(void *_stream, void *_event) {
-    CUstream stream = (CUstream)_stream;
-    CUevent event = (CUevent)_event;
-    tiramisu_check_cudad_error("tiramisu_cudad_stream_wait_event", cuStreamWaitEvent(stream, event, 0));
+  void tiramisu_cudad_stream_wait_event(void *stream_buff, void *event_buff) {    
+    tiramisu_check_cudad_error("tiramisu_cudad_stream_wait_event", cuStreamWaitEvent(((CUstream*)stream_buff)[0], ((CUevent*)event_buff)[0], 0));
 }
 
 //void tiramisu_cudad_malloc(halide_buffer_t *buff, size_t bytes) {
@@ -144,9 +146,15 @@ void tiramisu_cudad_memcpy_d2h(void *dst, halide_buffer_t *src, size_t count) {
     _tiramisu_cudad_memcpy_d2h(dst, (CUdeviceptr)(src->device), count);
 }
 
-void tiramisu_cudad_memcpy_async_h2d(halide_buffer_t *dst, const void *src, size_t count, halide_buffer_t _stream, void *event_buff) {
-    CUstream *stream = (CUstream*)_stream.host;
-    _tiramisu_cudad_memcpy_async_h2d((CUdeviceptr)(dst->device), src, count, stream[0], ((CUevent*)event_buff)[0]);
+  void tiramisu_cudad_memcpy_async_h2d(halide_buffer_t *dst, const void *src, size_t count, void *stream_buff, void *event_buff) {
+
+    CUevent event;
+    tiramisu_check_cudad_error("tiramisu_cudad_memcpy_async_h2d", cuEventCreate(&event, 0));
+    ((CUevent*)event_buff)[0] = event;
+    fprintf(stderr, "whyyyyy %p\n", stream_buff);
+    CUstream stream = ((CUstream*)stream_buff)[0];
+    fprintf(stderr, "whyyyyy2\n");
+    _tiramisu_cudad_memcpy_async_h2d((CUdeviceptr)(dst->device), src, count, stream, event);
 }
 
 //  void tiramisu_cudad_memcpy_async_h2d_buff(Halide::Runtime::Buffer<> *dst, const void *src, size_t count, void *stream, void *event_buff) {
@@ -154,9 +162,12 @@ void tiramisu_cudad_memcpy_async_h2d(halide_buffer_t *dst, const void *src, size
 //}
 
 
-void tiramisu_cudad_memcpy_async_d2h(void *dst, halide_buffer_t *src, size_t count, halide_buffer_t _stream, void *event_buff) {
-    CUstream *stream = (CUstream*)_stream.host;
-    _tiramisu_cudad_memcpy_async_d2h(dst, (CUdeviceptr)(src->device), count, stream[0], ((CUevent*)event_buff)[0]);
+void tiramisu_cudad_memcpy_async_d2h(void *dst, halide_buffer_t *src, size_t count, void *stream_buff, void *event_buff) {
+    fprintf(stderr, "tiramisu_cudad_memcpy_async_d2h\n");
+    CUevent event;
+    tiramisu_check_cudad_error("tiramisu_cudad_memcpy_async_d2h", cuEventCreate(&event, 0));
+    ((CUevent*)event_buff)[0] = event;
+    _tiramisu_cudad_memcpy_async_d2h(dst, (CUdeviceptr)(src->device), count, ((CUstream*)stream_buff)[0], event);
 }
 
 }
