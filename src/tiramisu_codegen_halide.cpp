@@ -2830,11 +2830,28 @@ void tiramisu::computation::create_halide_assignment()
                         wait_shape[i].stride = wait_stride;
                         wait_stride *= (int) wait_tiramisu_buffer->get_dim_sizes()[dim_idx].get_int_val();
                     }
+                } else {
+                    std::vector<isl_ast_expr *> empty_index_expr;
+                    Halide::Expr stride_expr = Halide::Expr(1);
+                    for (int i = 0; i < wait_tiramisu_buffer->get_dim_sizes().size(); i++)
+                    {
+                        int dim_idx = wait_tiramisu_buffer->get_dim_sizes().size() - i - 1;
+                        strides_vector.push_back(stride_expr);
+                        stride_expr = stride_expr * generator::halide_expr_from_tiramisu_expr(fct, empty_index_expr,
+                                                                                              wait_tiramisu_buffer->get_dim_sizes()[dim_idx],
+                                                                                              this);
+                    }
                 }
 
                 assert(this->wait_index_expr != NULL);
-                Halide::Expr wait_index = tiramisu::generator::linearize_access(wait_buf_dims, wait_shape,
-                                                                                this->wait_index_expr);
+                Halide::Expr wait_index;
+                if (wait_tiramisu_buffer->has_constant_extents()) {
+                     wait_index = tiramisu::generator::linearize_access(wait_buf_dims, wait_shape,
+                                                                                    this->wait_index_expr);
+                } else {
+                    wait_index = tiramisu::generator::linearize_access(wait_tiramisu_buffer->get_dim_sizes().size(),
+                                                                  strides_vector, this->wait_index_expr);
+                }
                 // Finally, index into the buffer
                 Halide::Type wait_type = halide_type_from_tiramisu_type(p_wait_ptr);
                 Halide::Expr result = Halide::Internal::Load::make(
