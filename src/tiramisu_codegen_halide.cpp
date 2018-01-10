@@ -2426,12 +2426,6 @@ void function::gen_halide_stmt()
                                                                           std::vector<Halide::Expr>(),
                                                                           Halide::Internal::Call::Extern));
         stmt = Halide::Internal::LetStmt::make("rank", mpi_rank, stmt);
-        halide_dimension_t shape;
-        shape.min = 0;
-        shape.stride = 1;
-        shape.extent =(uint64_t)xfer_prop::comm_prop_ids.size();
-
-
         //        stmt = Halide::Internal::LetStmt::make("streams", make_comm_call(Halide::type_of<struct halide_buffer_t *>(),
         //                                                                         "tiramisu_cudad_stream_create", {Halide::Expr((uint64_t)xfer_prop::comm_prop_ids.size())}), stmt);
         /*        Halide::Expr streams_buffer =
@@ -2444,7 +2438,7 @@ void function::gen_halide_stmt()
                                                       Halide::Internal::Call::Intrinsic);
         stmt = Halide::Internal::Block::make(Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(),
                                                                                              "tiramisu_cudad_stream_create",
-                                                                                             {streams_buffer})), stmt);
+                                                                                             {streams_buffer, Halide::Expr((uint64_t)xfer_prop::comm_prop_ids.size())})), stmt);
         stmt = Halide::Internal::Allocate::make("streams", Halide::Handle(),
                                                 {Halide::Expr((uint64_t)xfer_prop::comm_prop_ids.size())},
                                                 Halide::Internal::const_true(), stmt);
