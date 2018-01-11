@@ -8390,7 +8390,7 @@ void tiramisu::function::lift_cuda_comp(tiramisu::computation *comp) {
             os->rhs_access_type = tiramisu::o_buffer;
         }
 
-        os->library_call_args.resize(is_async ? 6 : 3);
+        os->library_call_args.resize(is_async ? 6 : 4);
         os->library_call_args[2] = num_elements * tiramisu::expr(tiramisu::o_cast, global::get_loop_iterator_data_type(), get_num_bytes(comp->get_data_type()));
         if (is_async) {
             // This additional RHS argument is for the stream

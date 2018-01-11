@@ -11,7 +11,6 @@
 #include "blur_params.h"
 #include "cuda.h"
 #include "Halide.h"
-#include "HalideRuntimeCuda.h"
 #include <math.h>
 
 int main() {
@@ -28,11 +27,10 @@ int main() {
 #ifdef GPU_ONLY
     std::cerr << "My rank is " << rank << std::endl;
     if (rank < NODES) {
-      halide_set_gpu_device(1);
+      tiramisu_init_cuda(1);
     } else {
-      halide_set_gpu_device(1);
+      tiramisu_init_cuda(1);
     }
-    // TODO build a tiramisu wrapper for this
 #endif
     
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
@@ -43,19 +41,19 @@ int main() {
     C_LOOP_ITER_TYPE rows_per_proc = (C_LOOP_ITER_TYPE)ROWS;
 #endif
 
-    Halide::Buffer<C_DATA_TYPE> buff_input = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc + 2);
+    Halide::Buffer<C_DATA_TYPE> buff_input = Halide::Buffer<C_DATA_TYPE>(COLS, (rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2);
 
 #ifdef DISTRIBUTE
     Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS, (rank == PROCS - 1) ? rows_per_proc : rows_per_proc);
     Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS, (rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2);   
     //    Halide::Buffer<C_DATA_TYPE> buff_wait = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc + 2);
 #ifdef GPU_ONLY
-    std::cerr << "Allocating buff_input on GPU" << std::endl;
-    buff_input.device_malloc(halide_cuda_device_interface());
-    std::cerr << "Allocating buff_bx on GPU" << std::endl;
-    buff_bx.device_malloc(halide_cuda_device_interface());
-    std::cerr << "Allocating input on GPU" << std::endl;
-    buff_output.device_malloc(halide_cuda_device_interface());
+    //    std::cerr << "Allocating buff_input on GPU" << std::endl;
+    //    buff_input.device_malloc(halide_cuda_device_interface());
+//    std::cerr << "Allocating buff_bx on GPU" << std::endl;
+    //    buff_bx.device_malloc(halide_cuda_device_interface());
+    //   std::cerr << "Allocating output on GPU" << std::endl;
+    //    buff_output.device_malloc(halide_cuda_device_interface());
 #endif
 #else
     Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc);   
@@ -68,7 +66,7 @@ int main() {
           buff_input(x,y) = (C_DATA_TYPE)(next++ % 1000);
         }
     }
-    if (rank < NODES) { // need to fill up the last two rows with the first two rows of next rank on the machine. We'll just assume we can algorithmically generate it here
+    if (rank < NODES && NODES != 1) { // need to fill up the last two rows with the first two rows of next rank on the machine. We'll just assume we can algorithmically generate it here
       next = 0;
       for (int y = rows_per_proc; y < rows_per_proc + 2; y++) {
         for (int x = 0; x < COLS; x++) {
@@ -89,16 +87,15 @@ int main() {
     blur_dist(buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer());
 #elif defined(GPU_ONLY)
     std::cerr << "Running once for warm up"  << std::endl;
-    blur_dist_gpu(buff_input.raw_buffer(), buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());//, buff_wait.raw_buffer());
-    buff_output.raw_buffer()->set_device_dirty(false);
-    exit(29);
+    blur_dist_gpu(buff_input.raw_buffer()/*, buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer()*/, buff_output.raw_buffer());//, buff_wait.raw_buffer());
+    //    buff_output.raw_buffer()->set_device_dirty(false);
 #endif
     
 #ifdef DISTRIBUTE
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
 #ifdef GPU_ONLY
-    cudaDeviceSynchronize();
+    assert(cuCtxSynchronize() == 0);
 #endif
     for (int i = 0; i < ITERS; i++) {
         if (rank == 0) {
@@ -111,11 +108,14 @@ int main() {
 #ifdef CPU_ONLY
         blur_dist(buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer());
 #elif defined(GPU_ONLY)        
-        blur_dist_gpu(buff_input.raw_buffer(), buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(), buff_output.raw_buffer());//, buff_wait.raw_buffer());
-        buff_output.raw_buffer()->set_device_dirty(false);
+        blur_dist_gpu(buff_input.raw_buffer(), /*buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(),*/ buff_output.raw_buffer());//, buff_wait.raw_buffer());
+        //        buff_output.raw_buffer()->set_device_dirty(false);
 #endif
 #ifdef DISTRIBUTE
         MPI_Barrier(MPI_COMM_WORLD);
+#endif
+#ifdef GPU_ONLY
+    assert(cuCtxSynchronize() == 0);        
 #endif
         auto end = std::chrono::high_resolution_clock::now();
         if (rank == 0) {
@@ -128,7 +128,7 @@ int main() {
             std::string output_fn = "./build/blur_dist_rank_" + std::to_string(rank) + ".txt";
             std::ofstream myfile;
             myfile.open(output_fn);
-            for (int y = 0; y < ((rank == PROCS - 1) ? (rows_per_proc - 2) : rows_per_proc); y++) {
+            for (int y = 0; y < /*((rank == PROCS - 1) ? */(rows_per_proc - 2) /*: rows_per_proc)*/; y++) {
               for (int x = 0; x < COLS - 2; x++) {
                   myfile << buff_output(x, y) << std::endl;
                 }
@@ -140,7 +140,9 @@ int main() {
         MPI_Barrier(MPI_COMM_WORLD);
 #endif
 #ifdef GPU_ONLY
-    cudaDeviceSynchronize();
+        //    cudaDeviceSynchronize();
+        std::cerr << "Calling synchronize" << std::endl;
+        assert(cuCtxSynchronize() == 0);
 #endif
     }
     

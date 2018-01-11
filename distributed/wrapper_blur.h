@@ -12,7 +12,7 @@ extern "C" {
 #endif
 
   int blur_dist(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
-  int blur_dist_gpu(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);//, halide_buffer_t *);
+  int blur_dist_gpu(halide_buffer_t *, halide_buffer_t *);//, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);//, halide_buffer_t *);
 
 #ifdef __cplusplus
 }  // extern "C"

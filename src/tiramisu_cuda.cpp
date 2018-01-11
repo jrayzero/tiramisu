@@ -133,16 +133,15 @@ void tiramisu_cudad_free(halide_buffer_t *buff) {
     _tiramisu_cudad_free((CUdeviceptr)(buff->device));
 }
 
-void tiramisu_cudad_memcpy_h2d(halide_buffer_t *dst, const void *src, size_t count) {
-    _tiramisu_cudad_memcpy_h2d((CUdeviceptr)(dst->device), src, count);
+  void tiramisu_cudad_memcpy_h2d(halide_buffer_t *dst, const void *src, size_t count, size_t dst_index) {
+    _tiramisu_cudad_memcpy_h2d((CUdeviceptr)(dst->device) + dst_index, src, count);
 }
 
-void tiramisu_cudad_memcpy_d2h(void *dst, halide_buffer_t *src, size_t count) {
-    _tiramisu_cudad_memcpy_d2h(dst, (CUdeviceptr)(src->device), count);
+  void tiramisu_cudad_memcpy_d2h(void *dst, halide_buffer_t *src, size_t count, size_t src_index) {
+    _tiramisu_cudad_memcpy_d2h(dst, (CUdeviceptr)(src->device) + src_index, count);
 }
 
   void tiramisu_cudad_memcpy_async_h2d(halide_buffer_t *dst, const void *src, size_t count, void *stream_buff, void *event_buff, size_t dst_index) {
-
     CUevent event;
     tiramisu_check_cudad_error("tiramisu_cudad_memcpy_async_h2d", cuEventCreate(&event, 0));
     ((CUevent*)event_buff)[0] = event;

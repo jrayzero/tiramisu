@@ -22,9 +22,9 @@ inline void _tiramisu_cudad_malloc(CUdeviceptr *device_ptr, size_t bytes);
 
 inline void _tiramisu_cudad_free(CUdeviceptr device_ptr);
 
-inline void _tiramisu_cudad_memcpy_h2d(CUdeviceptr dst, const void *src, size_t count);
+  inline void _tiramisu_cudad_memcpy_h2d(CUdeviceptr dst, const void *src, size_t count);
 
-inline void _tiramisu_cudad_memcpy_d2h(void *dst, CUdeviceptr src, size_t count);
+  inline void _tiramisu_cudad_memcpy_d2h(void *dst, CUdeviceptr src, size_t count);
   
 inline void _tiramisu_cudad_memcpy_async_h2d(CUdeviceptr dst, const void *src, size_t count,
                                              CUstream stream, CUevent event);
@@ -48,9 +48,9 @@ void tiramisu_cudad_stream_wait_event(void *_stream, void *_event);
 
 void tiramisu_cudad_free(halide_buffer_t *buff);
 
-void tiramisu_cudad_memcpy_h2d(halide_buffer_t *dst, const void *src, size_t count);
+  //void tiramisu_cudad_memcpy_h2d(halide_buffer_t *dst, const void *src, size_t count);
 
-void tiramisu_cudad_memcpy_d2h(void *dst, halide_buffer_t *src, size_t count);
+  //void tiramisu_cudad_memcpy_d2h(void *dst, halide_buffer_t *src, size_t count);
 
   //void tiramisu_cudad_memcpy_async_h2d(halide_buffer_t *dst, const void *src, size_t count,
   //                                     void *stream, void *event_buff);

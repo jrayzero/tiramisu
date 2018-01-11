@@ -2791,6 +2791,17 @@ void tiramisu::computation::create_halide_assignment()
                     call_stream = Halide::Internal::Call::make(Halide::Handle(), Halide::Internal::Call::address_of,
                                                                {call_stream}, Halide::Internal::Call::Intrinsic);
                     halide_call_args[3] = call_stream;
+                } if (this->library_call_name == "tiramisu_cudad_memcpy_h2d" || this->library_call_name == "tiramisu_cudad_memcpy_d2h") {
+                    for (int i = 0; i < this->library_call_args.size(); i++) {
+                        if (i != this->rhs_argument_idx && i != this->lhs_argument_idx && i != this->library_call_args.size() - 1 /*This would be index*/) {
+                          std::vector<isl_ast_expr *> dummy;
+                          if (this->library_call_args[i].defined) {
+                            halide_call_args[i] = generator::halide_expr_from_tiramisu_expr(this->fct, dummy,
+                                                                                            this->library_call_args[i],
+                                                                                                this);
+                          }
+                        }
+                    }
                 } else {
                     for (int i = 0; i < this->library_call_args.size(); i++) {
                         if (i != this->rhs_argument_idx && i != this->lhs_argument_idx &&
@@ -2812,8 +2823,8 @@ void tiramisu::computation::create_halide_assignment()
                         result = lhs_index;
                     } else if (this->lhs_access_type == tiramisu::o_buffer) { // want to just pass in the raw buffer
                         result = Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), lhs_tiramisu_buffer->get_name());// + ".buffer");
-                        if(this->library_call_name == "tiramisu_cudad_memcpy_async_h2d") {
-                            halide_call_args[halide_call_args.size() - 1] = lhs_index; // TODO Jess ahhhhhhhhhh
+                        if(this->library_call_name == "tiramisu_cudad_memcpy_async_h2d" || this->library_call_name == "tiramisu_cudad_memcpy_h2d") {
+                          halide_call_args[halide_call_args.size() - 1] = lhs_index * halide_type_from_tiramisu_type(this->get_data_type()).bytes(); // TODO Jess ahhhhhhhhhh
                         }
                     } else if (lhs_tiramisu_buffer->get_argument_type() != tiramisu::a_temporary && lhs_tiramisu_buffer->get_argument_type() != tiramisu::a_temporary_gpu) {
                         Halide::Buffer<> buffer = Halide::Buffer<>(
@@ -2857,10 +2868,10 @@ void tiramisu::computation::create_halide_assignment()
 
                         expr mod_rhs2(tiramisu::o_lin_index, old.get_name(), old.get_access(), old.get_data_type());
                         this->expression = mod_rhs2;
-                        if (this->library_call_name == "tiramisu_cudad_memcpy_async_d2h") {
+                        if (this->library_call_name == "tiramisu_cudad_memcpy_async_d2h" || this->library_call_name == "tiramisu_cudad_memcpy_d2h") {
                             halide_call_args[halide_call_args.size() - 1] = // just the index
                                     generator::halide_expr_from_tiramisu_expr(this->fct, this->get_index_expr(),
-                                                                              this->get_expr(), this);
+                                                                              this->get_expr(), this) * halide_type_from_tiramisu_type(this->get_data_type()).bytes();
                         }
 
                     } else {
