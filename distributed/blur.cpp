@@ -225,9 +225,9 @@ int main() {
     kernel_by_wait.tag_distribute_level(q);
     kernel_by_wait.set_schedule_this_comp(false);
 
-    //    input_cpu_to_gpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//, collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)rows)});
+    input_cpu_to_gpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//, collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)rows)});
     //    cpu_to_gpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//, collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)rows)});
-    //    gpu_to_cpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols-2)});
+    gpu_to_cpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols-2)});
     //    gpu_to_cpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols-2)});
 
     computation dummy("[procs]->{dummy[q, y, x]: 0<=q<procs and 0<=y<10 and 0<=x<10}", expr(0), true, T_DATA_TYPE, &blur_dist);
