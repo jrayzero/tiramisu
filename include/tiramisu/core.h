@@ -3891,6 +3891,10 @@ protected:
   static std::string cuda_expr_from_tiramisu_expr(const tiramisu::function *fct, std::vector<isl_ast_expr *> &index_expr,
                                                   const tiramisu::expr &tiramisu_expr, tiramisu::computation *comp, bool map_iterators = false);
 
+    static void get_closures_from_tiramisu_expr(const tiramisu::function *fct, std::vector<isl_ast_expr *> &index_expr,
+                                                const tiramisu::expr &tiramisu_expr, tiramisu::computation *comp,
+                                                bool map_iterators = false);
+
   static std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>> codegen_kernel_body(function &fct, isl_ast_node *node, int current_level,int kernel_starting_level, int kernel_ending_level);
 
     /**
