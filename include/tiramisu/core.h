@@ -81,6 +81,7 @@ isl_map *isl_map_add_free_var(const std::string &free_var_name, isl_map *map, is
 tiramisu::expr tiramisu_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, bool convert_to_loop_type = false);
 int loop_level_into_dynamic_dimension(int level);
 int loop_level_into_static_dimension(int level);
+Halide::Expr halide_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, bool convert_to_loop_type = false);
 
 /**
   * A class to represent functions in Tiramisu. A function in Tiramisu is composed of
@@ -3877,7 +3878,7 @@ protected:
             bool is_a_child_block = false);
 
   // This generates a cuda file containing the kernels that should be linked in later on when running the code. Returns the file name
-  static std::tuple<std::string, std::vector<std::string>, std::vector<std::string>> cuda_kernel_from_isl_node(
+  static std::tuple<std::string, std::vector<std::string>, std::vector<std::string>, std::vector<std::pair<std::string, Halide::Expr>>>  cuda_kernel_from_isl_node(
             function &fct, isl_ast_node *node,
             int level, std::vector<std::string> &tagged_stmts, std::string kernel_name, int start, int end);
 
@@ -3890,7 +3891,7 @@ protected:
   static std::string cuda_expr_from_tiramisu_expr(const tiramisu::function *fct, std::vector<isl_ast_expr *> &index_expr,
                                                   const tiramisu::expr &tiramisu_expr, tiramisu::computation *comp, bool map_iterators = false);
 
-  static std::pair<std::string, std::string> codegen_kernel_body(function &fct, isl_ast_node *node, int current_level,int kernel_starting_level, int kernel_ending_level);
+  static std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>> codegen_kernel_body(function &fct, isl_ast_node *node, int current_level,int kernel_starting_level, int kernel_ending_level);
 
     /**
      * Linearize a multidimensional access to a Halide buffer.

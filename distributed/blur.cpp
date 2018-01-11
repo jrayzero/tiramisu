@@ -236,11 +236,11 @@ int main() {
     gpu_to_cpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols-2)});
     //    gpu_to_cpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols-2)});
 
-    computation dummy("[procs]->{dummy[q, y, x]: 0<=q<procs and 0<=y<10 and 0<=x<10}", expr(0), true, T_DATA_TYPE, &blur_dist);
-    dummy.tag_distribute_level(q);
-    dummy.tag_gpu_level2(y,x);
+//    computation dummy("[procs]->{dummy[q, y, x]: 0<=q<procs and 0<=y<10 and 0<=x<10}", expr(0), true, T_DATA_TYPE, &blur_dist);
+//    dummy.tag_distribute_level(q);
+//    dummy.tag_gpu_level2(y,x);
 
-    dummy.before(*bx_exchange.s, computation::root);
+//    dummy.before(*bx_exchange.s, computation::root);
     bx_exchange.s->before(bx_exchange_wait, computation::root);
     bx_exchange_wait.before(*bx_exchange.r, computation::root);
     bx_exchange.r->before(*input_cpu_to_gpu.os, computation::root);
@@ -299,7 +299,7 @@ int main() {
     tiramisu::buffer buff_kernel_by_wait("buff_kernel_by_wait", {1}, tiramisu::p_wait_ptr,
                                           tiramisu::a_temporary, &blur_dist);
 
-    dummy.set_access("{dummy[q,y,x]->buff_bx_gpu[0,0]}"); // we will just overwrite this later
+//    dummy.set_access("{dummy[q,y,x]->buff_bx_gpu[0,0]}"); // we will just overwrite this later
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
 
     bx.set_access("{bx[y, x]->buff_bx_gpu[y, x]}");

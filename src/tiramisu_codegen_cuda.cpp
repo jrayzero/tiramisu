@@ -47,7 +47,7 @@ std::string cuda_headers() {
 
 tiramisu::expr generator::replace_original_indices_with_gpu_indices(tiramisu::computation *comp, tiramisu::expr exp,
                                                                     std::map<std::string, isl_ast_expr *> iterators_map) {
-
+assert(false);
     tiramisu::expr output_expr;
     if (exp.get_expr_type() == tiramisu::e_val) {
         output_expr = exp;
@@ -58,53 +58,104 @@ tiramisu::expr generator::replace_original_indices_with_gpu_indices(tiramisu::co
             // figure out how this var maps to the computation level
             //        int dim = comp->get_loop_level_numbers_from_dimension_names({exp.get_name()})[0];
             // this is the transformed name for the iterator
-            std::string dim_name = tiramisu_expr_from_isl_ast_expr(iterators_map[exp.get_name()]).get_name();
-            dim_name = dim_name.substr(1);
-            int dim = std::stoi(dim_name);
-            dim /= 2;
+
+            std::string s = tiramisu_expr_from_isl_ast_expr(iterators_map[exp.get_name()]).to_str();
             std::pair<int, int> range = comp->fct->gpu_ranges[comp->get_name()];
             int kernel_starting_level = range.first;
             int kernel_ending_level = range.second;
-            std::string new_iter_name = "";
-            if (dim >= kernel_starting_level && dim <= kernel_ending_level) { // this should be converted to a GPU variable
-                if (kernel_ending_level - kernel_starting_level == 1) { // 1 dimension
-                    if (dim == kernel_ending_level) {
-                        new_iter_name = "thread_x";
-                    } else {
-                        new_iter_name = "block_x";
-                    }
-                } else if (kernel_ending_level - kernel_starting_level == 3) { // 2 dimension
-                    if (dim == kernel_ending_level) {
-                        new_iter_name = "thread_x";
-                    } else if (dim == kernel_ending_level - 1) {
-                        new_iter_name = "thread_y";
-                    } else if (dim == kernel_ending_level - 2) {
-                        new_iter_name = "block_x";
-                    } else {
-                        new_iter_name = "block_y";
-                    }
-                } else if (kernel_ending_level - kernel_starting_level == 5) { // 3 dimension
-                    if (dim == kernel_ending_level) {
-                        new_iter_name = "thread_x";
-                    } else if (dim == kernel_ending_level - 1) {
-                        new_iter_name = "thread_y";
-                    } else if (dim == kernel_ending_level - 2) {
-                        new_iter_name = "thread_z";
-                    } else if (dim == kernel_ending_level - 3) {
-                        new_iter_name = "block_x";
-                    } else if (dim == kernel_ending_level - 4) {
-                        new_iter_name = "block_y";
-                    } else {
-                        new_iter_name = "block_z";
-                    }
-                }
-                tiramisu::var v(new_iter_name);
-                output_expr = tiramisu::expr(tiramisu::o_cast, global::get_loop_iterator_data_type(), v);
-            } else {
-                assert(false && "Need to add a closure var if this comes up, which this will come up if you have non-GPU loops outside the GPU loops ");
-                //          output_expr = tiramisu::expr(tiramisu::o_cast, global::get_loop_iterator_data_type(),
-                //                                       tiramisu_expr_from_isl_ast_expr(iterators_map[exp.get_name()], true));
-            }
+
+            // c1 = level 0
+            // c3 = level 1
+            // c5 = level 2
+            // c7 = level 3
+            std::string tx = "thread_x";
+            std::string ty = "thread_y";
+            std::string tz = "thread_z";
+            std::string bx = "block_x";
+            std::string by = "block_y";
+            std::string bz = "block_z";
+
+//            for (int dim = kernel_starting_level; dim <= kernel_ending_level; dim++) {
+//                std::string level_name = "c" + std::to_string(dim*2+1);
+//                if (kernel_ending_level - kernel_starting_level == 1) { // 1 dimension
+//                    if (dim == kernel_ending_level) {
+//                        find_and_replace(s, level_name, tx);
+//                    } else {
+//                        find_and_replace(s, level_name, bx);
+//                    }
+//                } else if (kernel_ending_level - kernel_starting_level == 3) { // 2 dimension
+//                    if (dim == kernel_ending_level) {
+//                        find_and_replace(s, level_name, tx);
+//                    } else if (dim == kernel_ending_level - 1) {
+//                        find_and_replace(s, level_name, ty);
+//                    } else if (dim == kernel_ending_level - 2) {
+//                        find_and_replace(s, level_name, bx);
+//                    } else {
+//                        find_and_replace(s, level_name, by);
+//                    }
+//                } else if (kernel_ending_level - kernel_starting_level == 5) { // 3 dimension
+//                    if (dim == kernel_ending_level) {
+//                        find_and_replace(s, level_name, tx);
+//                    } else if (dim == kernel_ending_level - 1) {
+//                        find_and_replace(s, level_name, ty);
+//                    } else if (dim == kernel_ending_level - 2) {
+//                        find_and_replace(s, level_name, tz);
+//                    } else if (dim == kernel_ending_level - 3) {
+//                        find_and_replace(s, level_name, bx);
+//                    } else if (dim == kernel_ending_level - 4) {
+//                        find_and_replace(s, level_name, by);
+//                    } else {
+//                        find_and_replace(s, level_name, bz);
+//                    }
+//                }
+//            }
+
+
+            //            std::string dim_name = tiramisu_expr_from_isl_ast_expr(iterators_map[exp.get_name()]).get_name();
+            //            dim_name = dim_name.substr(1);
+            //            int dim = std::stoi(dim_name);
+            //            dim /= 2;
+
+            //            std::string new_iter_name = "";
+            //            if (dim >= kernel_starting_level && dim <= kernel_ending_level) { // this should be converted to a GPU variable
+            //                if (kernel_ending_level - kernel_starting_level == 1) { // 1 dimension
+            //                    if (dim == kernel_ending_level) {
+            //                        new_iter_name = "thread_x";
+            //                    } else {
+            //                        new_iter_name = "block_x";
+            //                    }
+            //                } else if (kernel_ending_level - kernel_starting_level == 3) { // 2 dimension
+            //                    if (dim == kernel_ending_level) {
+            //                        new_iter_name = "thread_x";
+            //                    } else if (dim == kernel_ending_level - 1) {
+            //                        new_iter_name = "thread_y";
+            //                    } else if (dim == kernel_ending_level - 2) {
+            //                        new_iter_name = "block_x";
+            //                    } else {
+            //                        new_iter_name = "block_y";
+            //                    }
+            //                } else if (kernel_ending_level - kernel_starting_level == 5) { // 3 dimension
+            //                    if (dim == kernel_ending_level) {
+            //                        new_iter_name = "thread_x";
+            //                    } else if (dim == kernel_ending_level - 1) {
+            //                        new_iter_name = "thread_y";
+            //                    } else if (dim == kernel_ending_level - 2) {
+            //                        new_iter_name = "thread_z";
+            //                    } else if (dim == kernel_ending_level - 3) {
+            //                        new_iter_name = "block_x";
+            //                    } else if (dim == kernel_ending_level - 4) {
+            //                        new_iter_name = "block_y";
+            //                    } else {
+            //                        new_iter_name = "block_z";
+            //                    }
+            //                }
+            //                tiramisu::var v(new_iter_name);
+            //                output_expr = tiramisu::expr(tiramisu::o_cast, global::get_loop_iterator_data_type(), v);
+            //            } else {
+            //                assert(false && "Need to add a closure var if this comes up, which this will come up if you have non-GPU loops outside the GPU loops ");
+            //                //          output_expr = tiramisu::expr(tiramisu::o_cast, global::get_loop_iterator_data_type(),
+            //                //                                       tiramisu_expr_from_isl_ast_expr(iterators_map[exp.get_name()], true));
+            //            }
         } else {
             output_expr = exp;
         }
@@ -205,7 +256,7 @@ tiramisu::expr generator::replace_original_indices_with_gpu_indices(tiramisu::co
 
 
 // generate a kernel from the original isl node
-std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct, isl_ast_node *node, int current_level,
+std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>> generator::codegen_kernel_body(function &fct, isl_ast_node *node, int current_level,
                                                                    int kernel_starting_level, int kernel_ending_level) {
     if (isl_ast_node_get_type(node) == isl_ast_node_block) {
         // I think blocks would combine multiple computations in the loop
@@ -228,6 +279,8 @@ std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct
             isl_ast_expr *init = isl_ast_node_for_get_init(node);
             isl_ast_expr *cond = isl_ast_node_for_get_cond(node);
 
+            std::vector<std::pair<std::string, Halide::Expr>> iter_lets;
+
             isl_ast_expr *cond_upper_bound_isl_format = NULL;
             if (isl_ast_expr_get_op_type(cond) == isl_ast_op_lt) {
                 cond_upper_bound_isl_format = isl_ast_expr_get_op_arg(cond, 1);
@@ -241,6 +294,26 @@ std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct
             } else {
                 tiramisu::error("The for loop upper bound is not an isl_est_expr of type le or lt" , 1);
             }
+
+            Halide::Expr init_expr = halide_expr_from_isl_ast_expr(init, true);
+//            if (init_expr.get_data_type() != global::get_loop_iterator_data_type()) {
+//                init_expr =
+//                        Halide::Internal::Cast::make(
+//                                halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()),
+//                                init_expr);
+//            }
+            Halide::Expr cond_upper_bound_halide_format =
+                    (halide_expr_from_isl_ast_expr(cond_upper_bound_isl_format, true));
+//            if (cond_upper_bound_halide_format.type() !=
+//                halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()))
+//            {
+//                cond_upper_bound_halide_format =
+//                        Halide::Internal::Cast::make(
+//                                halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()),
+//                                cond_upper_bound_halide_format);
+//            }
+
+            iter_lets.push_back(std::pair<std::string, Halide::Expr>(iterator_str, cond_upper_bound_halide_format - init_expr));
             std::string cuda_extent =
                     cuda_expr_from_isl_ast_expr(cond_upper_bound_isl_format, kernel_starting_level, kernel_ending_level, true, false, true);
 
@@ -260,14 +333,19 @@ std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct
             } else if (kernel_ending_level - kernel_starting_level == 3) { // 2 dimension
                 if (current_level == kernel_ending_level) {
                     idx_computation = "int thread_x = threadIdx.x;\n";
+                    cuda_dim = "\n  int block_width = " + cuda_loop_extent + ";\n  int block_depth = 1;\n";
                 } else if (current_level == kernel_ending_level - 1) {
                     idx_computation = "int thread_y = threadIdx.y;\n";
+                    cuda_dim = "\n  int block_height = " + cuda_loop_extent + ";\n";
                 } else if (current_level == kernel_ending_level - 2) {
                     idx_computation = "int block_x = blockIdx.x;\n";
+                    cuda_dim = "\n  int grid_width = " + cuda_loop_extent + ";\n  int grid_depth = 1;\n";
                 } else {
                     idx_computation = "int block_y = blockIdx.y;\n";
+                    cuda_dim = "\n  int grid_height = " + cuda_loop_extent + ";\n";
                 }
             } else if (kernel_ending_level - kernel_starting_level == 5) { // 3 dimension
+                assert(false); // need to put in the block and grid parameters
                 if (current_level == kernel_ending_level) {
                     idx_computation = "int thread_x = threadIdx.x;\n";
                 } else if (current_level == kernel_ending_level - 1) {
@@ -292,11 +370,14 @@ std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct
             }
             isl_val_free(inc_val);
             isl_ast_node *body = isl_ast_node_for_get_body(node);
-            std::pair<std::string, std::string> bodies = tiramisu::generator::codegen_kernel_body(fct, body,
+            std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>>  bodies = tiramisu::generator::codegen_kernel_body(fct, body,
                                                                                                   current_level + 1, kernel_starting_level, kernel_ending_level);
-            std::string cuda_body = bodies.first;
+            for (auto x : std::get<2>(bodies)) {
+                iter_lets.push_back(x);
+            }
+            std::string cuda_body = std::get<0>(bodies);
             cuda_body = idx_computation + cuda_body;
-            return std::pair<std::string, std::string>(cuda_body, bodies.second + cuda_dim);//bodies.second);
+            return std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>> (cuda_body, std::get<1>(bodies) + cuda_dim, iter_lets);//bodies.second);
         }
     } else if (isl_ast_node_get_type(node) == isl_ast_node_user) {
         // TODO check for let statements!
@@ -310,7 +391,7 @@ std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct
         tiramisu::computation *comp = (tiramisu::computation *)isl_id_get_user(comp_id);
         isl_id_free(comp_id);
         std::string code = comp->create_kernel_assignment();
-        return std::pair<std::string, std::string>(code, "");
+        return std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>> (code, "", {});
     } else {
         std::cerr << "I don't know wtf this isl type is" << std::endl;
         exit(29);
@@ -319,9 +400,9 @@ std::pair<std::string, std::string> generator::codegen_kernel_body(function &fct
 
 // put all the CUDA code for this kernel together
 std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_file(std::string kernel_name, std::string kernel_fn,
-                                              std::string kernel_wrapper_fn,
-                                              std::string kernel_body, std::string kernel_wrapper_body,
-                                              std::string fatbin_fn) {
+                                                                                   std::string kernel_wrapper_fn,
+                                                                                   std::string kernel_body, std::string kernel_wrapper_body,
+                                                                                   std::string fatbin_fn) {
     std::ofstream kernel;
     kernel.open(kernel_fn);
     std::ofstream kernel_wrapper;
@@ -416,18 +497,18 @@ void compile_kernel_to_obj(std::string kernel_fn, std::string kernel_wrapper_fn)
     assert(ret == 0 && "Non-zero exit code for nvcc invocation");
 }
 
-std::tuple<std::string, std::vector<std::string>, std::vector<std::string>> tiramisu::generator::cuda_kernel_from_isl_node(function &fct, isl_ast_node *node,
-                                                           int level, std::vector<std::string> &tagged_stmts, std::string kernel_name, int start_kernel_level, int end_kernel_level) {
-    std::pair<std::string, std::string> bodies = generator::codegen_kernel_body(fct, node, level, start_kernel_level, end_kernel_level);
-    std::string kernel_body = bodies.first;
-    std::string wrapper_body = bodies.second;
+std::tuple<std::string, std::vector<std::string>, std::vector<std::string>, std::vector<std::pair<std::string, Halide::Expr>>> tiramisu::generator::cuda_kernel_from_isl_node(function &fct, isl_ast_node *node,
+                                                                                                                           int level, std::vector<std::string> &tagged_stmts, std::string kernel_name, int start_kernel_level, int end_kernel_level) {
+    std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>> bodies = generator::codegen_kernel_body(fct, node, level, start_kernel_level, end_kernel_level);
+    std::string kernel_body = std::get<0>(bodies);
+    std::string wrapper_body = std::get<1>(bodies);
     std::string kernel_fn = "/tmp/" + kernel_name + ".cu";
     std::string kernel_fatbin_fn = "/tmp/" + kernel_name + ".fatbin";
     std::string kernel_wrapper_fn = "/tmp/" + kernel_name + "_wrapper.cu";
     std::pair<std::vector<std::string>, std::vector<std::string>> params =
             generate_kernel_file(kernel_name, kernel_fn, kernel_wrapper_fn, kernel_body, wrapper_body, kernel_fatbin_fn);
     compile_kernel_to_obj(kernel_fn, kernel_wrapper_fn);
-    std::tuple<std::string, std::vector<std::string>, std::vector<std::string>> ret(kernel_fn, params.first, params.second);
+    std::tuple<std::string, std::vector<std::string>, std::vector<std::string>, std::vector<std::pair<std::string, Halide::Expr>>> ret(kernel_fn, params.first, params.second, std::get<2>(bodies));
     return ret;
 }
 
@@ -579,7 +660,7 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
                 assert(false);
                 break;
             case isl_ast_op_min:
-//                result = "(std::min(" + op0 + ", " + op1 + "))";
+                //                result = "(std::min(" + op0 + ", " + op1 + "))";
                 result = "(" + op0 + " < " + op1 + " ? " + op0 + " : " + op1 + ")";
                 break;
             case isl_ast_op_minus:
@@ -599,8 +680,8 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
                 break;
             case isl_ast_op_fdiv_q:
             case isl_ast_op_pdiv_q:
-              //                assert(false);
-              result = "(" + c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + ")(" + op0 + " / " + op1 + ")";
+                //                assert(false);
+                result = "(" + c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + ")(" + op0 + " / " + op1 + ")";
                 break;
             case isl_ast_op_zdiv_r:
             case isl_ast_op_pdiv_r:
@@ -758,19 +839,14 @@ std::string tiramisu::computation::create_kernel_assignment() {
         for (int i = 0; i < lhs_tiramisu_buffer->get_dim_sizes().size(); i++) {
             int dim_idx = lhs_tiramisu_buffer->get_dim_sizes().size() - i - 1;
             strides_vector.push_back(stride_expr);
+            tiramisu::expr xformed = replace_original_indices_with_transformed_indices(lhs_tiramisu_buffer->get_dim_sizes()[dim_idx],
+                                                                                       this->get_iterators_map());
+            std::string xformed_str = generator::cuda_expr_from_tiramisu_expr(this->get_function(), empty_index_expr, xformed,
+                                                                              this);
             if (i == 0) {
-                stride_expr = "(" + generator::cuda_expr_from_tiramisu_expr(this->get_function(), empty_index_expr,
-                                                                            generator::replace_original_indices_with_gpu_indices(this,
-                                                                                                                                 lhs_tiramisu_buffer->get_dim_sizes()[dim_idx],
-                                                                                                                                 this->get_iterators_map()),
-                                                                            this) + ")";
+                stride_expr = "(" + xformed_str + ")";
             } else {
-                stride_expr = "((" + stride_expr + ") * (" +
-                              generator::cuda_expr_from_tiramisu_expr(this->get_function(), empty_index_expr,
-                                                                      generator::replace_original_indices_with_gpu_indices(this,
-                                                                                                                           lhs_tiramisu_buffer->get_dim_sizes()[dim_idx],
-                                                                                                                           this->get_iterators_map()),
-                                                                      this) + "))";
+                stride_expr = "((" + stride_expr + ") * (" + xformed_str + "))";
             }
         }
     }
@@ -795,7 +871,7 @@ std::string tiramisu::computation::create_kernel_assignment() {
     // We do not need to transform the indices of expression (this->index_expr), because in Tiramisu we assume
     // that an access can only appear when accessing a computation. And that case should be handled in the following transformation
     // so no need to transform this->index_expr separately.
-    tiramisu::expr tiramisu_rhs = generator::replace_original_indices_with_gpu_indices(this, this->expression, this->get_iterators_map());
+    tiramisu::expr tiramisu_rhs = replace_original_indices_with_transformed_indices(this->expression, this->get_iterators_map());
     std::string rhs_expr = generator::cuda_expr_from_tiramisu_expr(this->get_function(), this->index_expr, tiramisu_rhs, this);
     std::string store_expr = lhs_buffer_name + "[" + lhs_index + "] = " + rhs_expr + ";";
     return store_expr;
