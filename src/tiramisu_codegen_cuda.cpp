@@ -313,7 +313,7 @@ std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::
 //                                cond_upper_bound_halide_format);
 //            }
 
-            iter_lets.push_back(std::pair<std::string, Halide::Expr>(iterator_str, cond_upper_bound_halide_format - init_expr));
+            iter_lets.push_back(std::pair<std::string, Halide::Expr>(iterator_str, /*cond_upper_bound_halide_format - */init_expr));
             std::string cuda_extent =
                     cuda_expr_from_isl_ast_expr(cond_upper_bound_isl_format, kernel_starting_level, kernel_ending_level, true, false, true);
 
@@ -403,13 +403,13 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
                                                                                    std::string kernel_wrapper_fn,
                                                                                    std::string kernel_body, std::string kernel_wrapper_body,
                                                                                    std::string fatbin_fn) {
-    std::ofstream kernel;
-    kernel.open(kernel_fn);
-    std::ofstream kernel_wrapper;
-    kernel_wrapper.open(kernel_wrapper_fn);
+  std::ofstream kernel;
+  kernel.open(kernel_fn);
+  std::ofstream kernel_wrapper;
+  kernel_wrapper.open(kernel_wrapper_fn);
     // headers
-    kernel << cuda_headers() << std::endl;
-    kernel_wrapper << cuda_headers() << std::endl;
+  kernel << cuda_headers() << std::endl;
+  kernel_wrapper << cuda_headers() << std::endl;
     // kernel
     std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
     std::string kernel_wrapper_signature = "extern \"C\" {\nvoid " + kernel_name + "(";
