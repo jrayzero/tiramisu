@@ -466,18 +466,18 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     kernel << kernel_code << std::endl;
     // wrapper function that the host calls
     std::string stream_convert = "  CUstream *kernel_stream = (CUstream*)_kernel_stream;\n";
-    std::string kernel_launch = stream_convert + "  fprintf(stderr, \"Launching kernel\\n\");\n  assert(cuLaunchKernel(kernel, grid_width, grid_height, grid_depth, block_width, block_height, block_depth, 0 /*No shmem for now*/, kernel_stream[0], kernel_args, 0) == 0);\n";
+    std::string kernel_launch = stream_convert + "  fprintf(stderr, \"grid width %d, grid height %d, grid depth %d, block width %d, block width %d, block depth %d\\n\", grid_width, grid_height, grid_depth, block_width, block_height, block_depth);\n  assert(cuLaunchKernel(kernel, grid_width, grid_height, grid_depth, block_width, block_height, block_depth, 0 /*No shmem for now*/, kernel_stream[0], kernel_args, 0) == 0);\n";
     std::string module_mgmt = "  CUmodule mod; CUfunction kernel;\n";
     module_mgmt += "  assert(cuModuleLoad(&mod, \"" + fatbin_fn + "\") == 0);\n";
     module_mgmt += "  CUresult func_err = cuModuleGetFunction(&kernel, mod, \"DEVICE_" + kernel_name + "\");\n";
     module_mgmt += "  if (func_err != CUDA_SUCCESS) { const char *cuda_err; cuGetErrorName(func_err, &cuda_err); fprintf(stderr, \"CUDA error for cuModuleGetFunction: %s\\n\", cuda_err); assert(false); }\n";
     std::string event_check = "  //if (event != NULL) { cuStreamWaitEvent(kernel_stream[0], event, 0); }\n";
-    std::string event_record = "  if(_kernel_event_buff) {\n    fprintf(stderr, \"creating event\\n\");\n    CUevent *kernel_event_buff = (CUevent*)_kernel_event_buff;\n";//"  //if (other_event != NULL) { cuEventRecord(other_event, kernel_stream); }\n";
-    event_record += "    CUevent event;\n    assert(cuEventCreate(&event, 0) == 0);\n    fprintf(stderr, \"recording\\n\");\n    assert(cuEventRecord(event, kernel_stream[0]) == 0);\n    kernel_event_buff[0] = event;\n  }\n";
-    kernel_wrapper << kernel_wrapper_signature << " {\nfprintf(stderr, \"In kernel wrapper: " << kernel_name << "\\n\");\n" << module_mgmt << kernel_params << kernel_wrapper_body
-                   << event_check << kernel_launch << event_record << "fprintf(stderr, \"Leaving kernel wrapper: " << kernel_name << "\\n\");\n" << "}\n";
-    kernel_wrapper << kernel_wrapper_signature_no_event << " {\nfprintf(stderr, \"In kernel wrapper: " << kernel_name << "\\n\");\n" << module_mgmt << kernel_params << kernel_wrapper_body
-                   << kernel_launch << "fprintf(stderr, \"Leaving kernel wrapper: " << kernel_name << "\\n\");\n" << "}\n}/*extern \"C\"*/\n";
+    std::string event_record = "  if(_kernel_event_buff) {\n    CUevent *kernel_event_buff = (CUevent*)_kernel_event_buff;\n";//"  //if (other_event != NULL) { cuEventRecord(other_event, kernel_stream); }\n";
+    event_record += "    CUevent event;\n    assert(cuEventCreate(&event, 0) == 0);\n    assert(cuEventRecord(event, kernel_stream[0]) == 0);\n    kernel_event_buff[0] = event;\n  }\n";
+    kernel_wrapper << kernel_wrapper_signature << " {\n" << module_mgmt << kernel_params << kernel_wrapper_body
+                   << event_check << kernel_launch << event_record << "\n}\n";
+    kernel_wrapper << kernel_wrapper_signature_no_event << " {\n" << module_mgmt << kernel_params << kernel_wrapper_body
+                   << kernel_launch << "\n}\n}/*extern \"C\"*/\n";
     kernel.close();
     kernel_wrapper.close();
     return std::pair<std::vector<std::string>, std::vector<std::string>>(buffer_names, other_params);

@@ -160,12 +160,16 @@ int main() {
     blur_dist.gen_halide_obj("./build/generated_blur_dist.o");
 #elif defined(GPU_ONLY)
 
-    var y1("y1"), y2("y2"), y3("y3"), y4("y4"), x1("x1"), x2("x2"), q("q");
+    var y1("y1"), y2("y2"), y3("y3"), y4("y4"), y5("y5"), y6("y6"), x1("x1"), x2("x2"), q("q");
+
     bx.split(y, rows_per_proc, y1, y2);
-    bx.split(y2, 500, y3, y4);
+    bx.split(y2, 50, y3, y4);
+    bx.split(y3, 10, y5, y6);
     bx.split(x, 2, x1, x2);
+
     by.split(y, rows_per_proc, y1, y2);
-    by.split(y2, 500, y3, y4);
+    by.split(y2, 50, y3, y4);
+    by.split(y3, 10, y5, y6);
     by.split(x, 2, x1, x2);
 
 
@@ -224,13 +228,10 @@ int main() {
     tiramisu::wait bx_exchange_wait(bx_exchange.s->operator()(q, y, x), bx_exchange.s->get_channel(), &blur_dist);
     tiramisu::wait cpu_to_gpu_wait(input_cpu_to_gpu.os->operator()(q, y, x), input_cpu_to_gpu.os->get_channel(), &blur_dist);
     tiramisu::wait gpu_to_cpu_wait(gpu_to_cpu.os->operator()(q, y, x), gpu_to_cpu.os->get_channel(), &blur_dist);
-    //    cpu_to_gpu_wait.set_schedule_this_comp(false);
-    //    gpu_to_cpu_wait.set_schedule_this_comp(false);
 
     tiramisu::wait kernel_by_wait("[procs]->{by_wait[q,y]: 0<=q<procs and 0<=y<1}", by(y, x), kernel, true, &blur_dist);
     kernel_by_wait.tag_distribute_level(q);
-    //    kernel_by_wait.set_schedule_this_comp(false);
-
+    
     input_cpu_to_gpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//, collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)rows)});
     cpu_to_gpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//, collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)rows)});
     gpu_to_cpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
@@ -263,9 +264,9 @@ int main() {
     cpu_to_gpu_wait.tag_distribute_level(q, false);
     gpu_to_cpu_wait.tag_distribute_level(q, false);
 
-    bx.tag_gpu_level2(y3, y4, x1, x2, 0);
+    bx.tag_gpu_level2(y6, y4, x1, x2, 0);
     bx_recompute.tag_gpu_level2(y, x, 0);
-    by.tag_gpu_level2(y3, y4, x1, x2, 0);
+    by.tag_gpu_level2(y6, y4, x1, x2, 0);
 
     tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1,
                                   tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc+2));
