@@ -381,7 +381,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     kernel_wrapper_signature_no_event += ", void *_kernel_stream)";
     std::string kernel_code = "extern \"C\" {\n__global__\n";
     kernel_code +=  kernel_signature + " {\n";
-    kernel_code += /*"  " + kernel_body +*/ "\n}\n}/*extern \"C\"*/\n";
+    kernel_code += "  " + kernel_body + "\n}\n}/*extern \"C\"*/\n";
     kernel << kernel_code << std::endl;
     // wrapper function that the host calls
     std::string stream_convert = "  CUstream *kernel_stream = (CUstream*)_kernel_stream;\n";

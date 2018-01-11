@@ -2105,9 +2105,9 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                 result2 = Halide::Internal::Call::make(Halide::Handle(1, wait_type.handle_type),
                                                        Halide::Internal::Call::address_of, {result2},
                                                        Halide::Internal::Call::Intrinsic);
-                kernel_params.push_back(result2);                
+                kernel_params.push_back(result2);
             } else {
-              kernel += "_no_event";
+                kernel += "_no_event";
             }
             result = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), kernel, kernel_params));
         } else if (convert_to_conditional) {
@@ -2775,7 +2775,7 @@ void tiramisu::computation::create_halide_assignment()
                 if (this->library_call_name == "tiramisu_cudad_memcpy_async_h2d" || this->library_call_name == "tiramisu_cudad_memcpy_async_d2h") {
                     for (int i = 0; i < this->library_call_args.size(); i++) {
                         if (i != this->rhs_argument_idx && i != this->lhs_argument_idx &&
-                            i != this->wait_argument_idx && i != 3 /*This would be the stream*/) {
+                            i != this->wait_argument_idx && i != 3 /*This would be the stream*/ && i != this->library_call_args.size() - 1 /*This would be index*/) {
                             std::vector<isl_ast_expr *> dummy;
                             if (this->library_call_args[i].defined) {
                                 halide_call_args[i] = generator::halide_expr_from_tiramisu_expr(this->fct, dummy,
@@ -2812,8 +2812,9 @@ void tiramisu::computation::create_halide_assignment()
                         result = lhs_index;
                     } else if (this->lhs_access_type == tiramisu::o_buffer) { // want to just pass in the raw buffer
                         result = Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), lhs_tiramisu_buffer->get_name());// + ".buffer");
-//                        result2 = lhs_index;
-//                        halide_call_args[3] = result2;
+                        if(this->library_call_name == "tiramisu_cudad_memcpy_async_h2d") {
+                            halide_call_args[halide_call_args.size() - 1] = lhs_index; // TODO Jess ahhhhhhhhhh
+                        }
                     } else if (lhs_tiramisu_buffer->get_argument_type() != tiramisu::a_temporary && lhs_tiramisu_buffer->get_argument_type() != tiramisu::a_temporary_gpu) {
                         Halide::Buffer<> buffer = Halide::Buffer<>(
                                 type,
@@ -2856,9 +2857,11 @@ void tiramisu::computation::create_halide_assignment()
 
                         expr mod_rhs2(tiramisu::o_lin_index, old.get_name(), old.get_access(), old.get_data_type());
                         this->expression = mod_rhs2;
-//                        halide_call_args[3] = // just the index
-//                                generator::halide_expr_from_tiramisu_expr(this->fct, this->get_index_expr(),
-//                                                                          this->get_expr(), this);
+                        if (this->library_call_name == "tiramisu_cudad_memcpy_async_d2h") {
+                            halide_call_args[halide_call_args.size() - 1] = // just the index
+                                    generator::halide_expr_from_tiramisu_expr(this->fct, this->get_index_expr(),
+                                                                              this->get_expr(), this);
+                        }
 
                     } else {
                         halide_call_args[rhs_argument_idx] =
@@ -2943,9 +2946,9 @@ void tiramisu::computation::create_halide_assignment()
             std::vector<Halide::Expr> halide_call_args;
             halide_call_args.resize(this->library_call_args.size());
             if (this->is_wait() && this->library_call_name == "tiramisu_cudad_stream_wait_event") { // process this separately for now
-              Halide::Expr e = Halide::Internal::Load::make(Halide::Handle(), "streams",
-                                                                   this->library_call_args[0].get_int32_value(), Halide::Buffer<>(),
-                                                            Halide::Internal::Parameter(), Halide::Internal::const_true());
+                Halide::Expr e = Halide::Internal::Load::make(Halide::Handle(), "streams",
+                                                              this->library_call_args[0].get_int32_value(), Halide::Buffer<>(),
+                                                              Halide::Internal::Parameter(), Halide::Internal::const_true());
                 e = Halide::Internal::Call::make(Halide::Handle(),
                                                  Halide::Internal::Call::address_of, {e},
                                                  Halide::Internal::Call::Intrinsic);
@@ -2962,20 +2965,20 @@ void tiramisu::computation::create_halide_assignment()
             }
             // Process the RHS
             if (this->rhs_argument_idx != -1) {
-              if (this->is_wait() && this->library_call_name == "tiramisu_cudad_stream_wait_event") { // process this separately for now
-                Halide::Expr e = Halide::Internal::Call::make(Halide::Handle(),
-                                                              Halide::Internal::Call::address_of, {generator::halide_expr_from_tiramisu_expr(this->get_function(),
-                                                                                                                                             this->get_index_expr(),
-                                                                                                                                             this->get_expr(),
-                                                                                                                                             this)},
-                                                              Halide::Internal::Call::Intrinsic);
-                halide_call_args[rhs_argument_idx] = e;
-              } else {
-                halide_call_args[rhs_argument_idx] = generator::halide_expr_from_tiramisu_expr(this->get_function(),
-                                                                                               this->get_index_expr(),
-                                                                                               this->get_expr(),
-                                                                                               this);
-              }
+                if (this->is_wait() && this->library_call_name == "tiramisu_cudad_stream_wait_event") { // process this separately for now
+                    Halide::Expr e = Halide::Internal::Call::make(Halide::Handle(),
+                                                                  Halide::Internal::Call::address_of, {generator::halide_expr_from_tiramisu_expr(this->get_function(),
+                                                                                                                                                 this->get_index_expr(),
+                                                                                                                                                 this->get_expr(),
+                                                                                                                                                 this)},
+                                                                  Halide::Internal::Call::Intrinsic);
+                    halide_call_args[rhs_argument_idx] = e;
+                } else {
+                    halide_call_args[rhs_argument_idx] = generator::halide_expr_from_tiramisu_expr(this->get_function(),
+                                                                                                   this->get_index_expr(),
+                                                                                                   this->get_expr(),
+                                                                                                   this);
+                }
             }
             if (this->wait_argument_idx != -1) {
                 assert(this->is_send() && "This should be a send operation.");
