@@ -2825,7 +2825,7 @@ void tiramisu::computation::create_halide_assignment()
                     call_stream = Halide::Internal::Call::make(Halide::Handle(), Halide::Internal::Call::address_of,
                                                                {call_stream}, Halide::Internal::Call::Intrinsic);
                     halide_call_args[3] = call_stream;
-                } if (this->library_call_name == "tiramisu_cudad_memcpy_h2d" || this->library_call_name == "tiramisu_cudad_memcpy_d2h") {
+                } else if (this->library_call_name == "tiramisu_cudad_memcpy_h2d" || this->library_call_name == "tiramisu_cudad_memcpy_d2h") {
                     for (int i = 0; i < this->library_call_args.size(); i++) {
                         if (i != this->rhs_argument_idx && i != this->lhs_argument_idx && i != this->library_call_args.size() - 1 /*This would be index*/) {
                           std::vector<isl_ast_expr *> dummy;
