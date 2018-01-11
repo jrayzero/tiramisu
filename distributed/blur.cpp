@@ -72,14 +72,11 @@ int main() {
     constant procs_const("procs", expr(procs), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     constant nodes_const("nodes", expr(nodes), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
-#ifdef DISTRIBUTE
+#ifdef CPU_ONLY
+    #ifdef DISTRIBUTE
     var y1("y1"), y2("y2"), q("q");
     bx.split(y, rows_per_proc, y1, y2);
     by.split(y, rows_per_proc, y1, y2);
-#endif
-
-#ifdef CPU_ONLY
-    #ifdef DISTRIBUTE
     xfer_prop sync_block(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
     xfer_prop async_block(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
     // transfer the computed rows from bx
@@ -162,6 +159,15 @@ int main() {
     blur_dist.gen_halide_stmt();
     blur_dist.gen_halide_obj("./build/generated_blur_dist.o");
 #elif defined(GPU_ONLY)
+
+    var y1("y1"), y2("y2"), y3("y3"), y4("y4"), x1("x1"), x2("x2"), q("q");
+    bx.split(y, rows_per_proc, y1, y2);
+    bx.split(y2, 500, y3, y4);
+    bx.split(x, 2, x1, x2);
+    by.split(y, rows_per_proc, y1, y2);
+    by.split(y2, 500, y3, y4);
+    by.split(x, 2, x1, x2);
+
 
     constant rows_per_proc_const("rows_per_proc", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     // rows_per_proc that we end up with after computation is done (last proc does 2 less rows)
@@ -257,9 +263,9 @@ int main() {
     cpu_to_gpu_wait.tag_distribute_level(q, false);
     gpu_to_cpu_wait.tag_distribute_level(q, false);
 
-    bx.tag_gpu_level2(y2, x, 0);
+    bx.tag_gpu_level2(y3, y4, x1, x2, 0);
     bx_recompute.tag_gpu_level2(y, x, 0);
-    by.tag_gpu_level2(y2, x, 0);
+    by.tag_gpu_level2(y3, y4, x1, x2, 0);
 
     tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1,
                                   tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc+2));

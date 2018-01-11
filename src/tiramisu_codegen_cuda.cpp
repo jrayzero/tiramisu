@@ -490,30 +490,28 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
                     name_str = "block_x";
                 }
             } else if (kernel_ending_level - kernel_starting_level == 3) { // 2 dimension
-                assert(false);
                 if (current_level == kernel_ending_level) {
-                    name_str = "thread_y";
-                } else if (current_level == kernel_ending_level - 1) {
                     name_str = "thread_x";
+                } else if (current_level == kernel_ending_level - 1) {
+                    name_str = "thread_y";
                 } else if (current_level == kernel_ending_level - 2) {
-                    name_str = "block_y";
-                } else {
                     name_str = "block_x";
+                } else {
+                    name_str = "block_y";
                 }
             } else if (kernel_ending_level - kernel_starting_level == 5) { // 3 dimension
-                assert(false);
                 if (current_level == kernel_ending_level) {
-                    name_str = "thread_z";
+                    name_str = "thread_x";
                 } else if (current_level == kernel_ending_level - 1) {
                     name_str = "thread_y";
                 } else if (current_level == kernel_ending_level - 2) {
-                    name_str = "thread_x";
+                    name_str = "thread_z";
                 } else if (current_level == kernel_ending_level - 3) {
-                    name_str = "block_z";
+                    name_str = "block_x";
                 } else if (current_level == kernel_ending_level - 4) {
                     name_str = "block_y";
                 } else {
-                    name_str = "block_x";
+                    name_str = "block_z";
                 }
             }
         }
@@ -601,7 +599,8 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
                 break;
             case isl_ast_op_fdiv_q:
             case isl_ast_op_pdiv_q:
-                assert(false);
+              //                assert(false);
+              result = "(" + c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + ")(" + op0 + " / " + op1 + ")";
                 break;
             case isl_ast_op_zdiv_r:
             case isl_ast_op_pdiv_r:

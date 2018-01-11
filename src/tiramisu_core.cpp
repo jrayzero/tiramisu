@@ -1243,6 +1243,28 @@ void computation::tag_gpu_level2(tiramisu::var L0_var, tiramisu::var L1_var, int
   DEBUG_INDENT(-4);
 }
 
+void computation::tag_gpu_level2(tiramisu::var L0_var, tiramisu::var L1_var, tiramisu::var L2_var, tiramisu::var L3_var, int comm_prop_id) {
+  DEBUG_FCT_NAME(3);
+  DEBUG_INDENT(4);
+
+  assert(L0_var.get_name().length() > 0);
+  assert(L1_var.get_name().length() > 0);
+  assert(L2_var.get_name().length() > 0);
+  assert(L3_var.get_name().length() > 0);
+  std::vector<int> dimensions =
+    this->get_loop_level_numbers_from_dimension_names({L0_var.get_name(), L1_var.get_name(), L2_var.get_name(), L3_var.get_name()});
+  this->check_dimensions_validity(dimensions);
+  int L0 = dimensions[0];
+  int L1 = dimensions[1];
+  int L2 = dimensions[2];
+  int L3 = dimensions[3];
+
+  this->get_function()->add_gpu_range(this->get_name(), L0 /*start level*/, L3 /*end level*/);
+  this->get_function()->add_gpu_comm_prop_id(this->get_name(), comm_prop_id);
+  
+  DEBUG_INDENT(-4);
+}
+
 void function::add_gpu_range(std::string comp_name, int start_level, int end_level) {
   assert(gpu_ranges.find(comp_name) == gpu_ranges.end() && "This computation already has been tagged with GPU levels.");
   this->gpu_ranges.emplace(comp_name, std::pair<int, int>(start_level, end_level));
