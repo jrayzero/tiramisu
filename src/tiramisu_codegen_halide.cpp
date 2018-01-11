@@ -2373,12 +2373,12 @@ void function::gen_halide_stmt()
 
             buf->mark_as_allocated();
         } else if (buf->get_argument_type() == tiramisu::a_temporary_gpu) {
-            Halide::Expr bytes = 0;
+            Halide::Expr bytes = 1;
             for (int i = buf->get_dim_sizes().size() - 1; i >= 0; --i)
             {
                 const auto sz = buf->get_dim_sizes()[i];
                 std::vector<isl_ast_expr *> ie = {};
-                bytes += generator::halide_expr_from_tiramisu_expr(this, ie, sz, nullptr);
+                bytes *= generator::halide_expr_from_tiramisu_expr(this, ie, sz, nullptr);
             }
             bytes *= halide_type_from_tiramisu_type(buf->get_elements_type()).bytes();
             stmt = Halide::Internal::LetStmt::make(buf->get_name(), make_comm_call(Halide::type_of<struct halide_buffer_t *>(), "tiramisu_cudad_malloc",
