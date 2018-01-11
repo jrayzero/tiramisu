@@ -41,21 +41,32 @@ int main() {
     C_LOOP_ITER_TYPE rows_per_proc = (C_LOOP_ITER_TYPE)ROWS;
 #endif
 
+#ifndef GPU_ONLY
     Halide::Buffer<C_DATA_TYPE> buff_input = Halide::Buffer<C_DATA_TYPE>(COLS, (rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2);
+#else 
+    halide_buffer_t buff_input;
+    C_DATA_TYPE *pinned_host;
+    size_t bytes = COLS * ((rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2) * sizeof(C_DATA_TYPE);
+    std::cerr << "bytes: " << bytes << std::endl;
+    assert(cuMemHostAlloc((void**)&pinned_host, bytes, CU_MEMHOSTALLOC_PORTABLE) == 0);
+    buff_input.host = (uint8_t*)pinned_host;
+#endif
 
 #ifdef DISTRIBUTE
-    Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS, (rank == PROCS - 1) ? rows_per_proc : rows_per_proc);
+#ifndef GPU_ONLY
+      Halide::Buffer<C_DATA_TYPE> buff_output = Halide::Buffer<C_DATA_TYPE>(COLS, (rank == PROCS - 1) ? rows_per_proc : rows_per_proc);
+#else
+      halide_buffer_t buff_output;
+      C_DATA_TYPE *pinned_host_out;
+      bytes = COLS * rows_per_proc * sizeof(C_DATA_TYPE);
+      std::cerr << "bytes: " << bytes << std::endl;
+      assert(cuMemHostAlloc((void**)&pinned_host_out, bytes, CU_MEMHOSTALLOC_PORTABLE) == 0);
+      buff_output.host = (uint8_t*)pinned_host_out;
+#endif
+#endif
     Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS, (rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2);   
     //    Halide::Buffer<C_DATA_TYPE> buff_wait = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc + 2);
-#ifdef GPU_ONLY
-    //    std::cerr << "Allocating buff_input on GPU" << std::endl;
-    //    buff_input.device_malloc(halide_cuda_device_interface());
-//    std::cerr << "Allocating buff_bx on GPU" << std::endl;
-    //    buff_bx.device_malloc(halide_cuda_device_interface());
-    //   std::cerr << "Allocating output on GPU" << std::endl;
-    //    buff_output.device_malloc(halide_cuda_device_interface());
-#endif
-#else
+#ifndef GPU_ONLY
     Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc);   
 #endif
 #ifdef CHECK_RESULTS
@@ -63,15 +74,22 @@ int main() {
     int next = 0;
     for (int y = 0; y < rows_per_proc; y++) {
         for (int x = 0; x < COLS; x++) {
+#ifndef GPU_ONLY
           buff_input(x,y) = (C_DATA_TYPE)(next++ % 1000);
+#else
+          pinned_host[y * COLS + x] = (C_DATA_TYPE)(next++ % 1000);
+#endif
         }
     }
     if (rank < NODES && NODES != 1) { // need to fill up the last two rows with the first two rows of next rank on the machine. We'll just assume we can algorithmically generate it here
       next = 0;
       for (int y = rows_per_proc; y < rows_per_proc + 2; y++) {
         for (int x = 0; x < COLS; x++) {
-          //          buff_input(x,y) = next++;
+#ifndef GPU_ONLY
           buff_input(x,y) = (C_DATA_TYPE)(next++ % 1000);
+#else
+          pinned_host[y * COLS + x] = (C_DATA_TYPE)(next++ % 1000);
+#endif
         }
       }      
     }
@@ -87,7 +105,7 @@ int main() {
     blur_dist(buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer());
 #elif defined(GPU_ONLY)
     std::cerr << "Running once for warm up"  << std::endl;
-    blur_dist_gpu(buff_input.raw_buffer()/*, buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer()*/, buff_output.raw_buffer());//, buff_wait.raw_buffer());
+    blur_dist_gpu(&buff_input/*, buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer()*/, &buff_output);//, buff_wait.raw_buffer());
     //    buff_output.raw_buffer()->set_device_dirty(false);
 #endif
     
@@ -108,7 +126,7 @@ int main() {
 #ifdef CPU_ONLY
         blur_dist(buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer());
 #elif defined(GPU_ONLY)        
-        blur_dist_gpu(buff_input.raw_buffer(), /*buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(),*/ buff_output.raw_buffer());//, buff_wait.raw_buffer());
+        blur_dist_gpu(&buff_input, /*buff_input.raw_buffer(), buff_bx.raw_buffer(), buff_output.raw_buffer(),*/ &buff_output);//, buff_wait.raw_buffer());
         //        buff_output.raw_buffer()->set_device_dirty(false);
 #endif
 #ifdef DISTRIBUTE
@@ -128,9 +146,13 @@ int main() {
             std::string output_fn = "./build/blur_dist_rank_" + std::to_string(rank) + ".txt";
             std::ofstream myfile;
             myfile.open(output_fn);
-            for (int y = 0; y < /*((rank == PROCS - 1) ? */(rows_per_proc - 2) /*: rows_per_proc)*/; y++) {
-              for (int x = 0; x < COLS - 2; x++) {
+            for (int y = 0; y < /*((rank == PROCS - 1) ? */(rows_per_proc) /*: rows_per_proc)*/; y++) {
+              for (int x = 0; x < COLS; x++) {
+#ifndef GPU_ONLY
                   myfile << buff_output(x, y) << std::endl;
+#else
+                  myfile << pinned_host_out[y * (COLS) + x] << std::endl;
+#endif
                 }
             }
             myfile.close();
@@ -140,7 +162,6 @@ int main() {
         MPI_Barrier(MPI_COMM_WORLD);
 #endif
 #ifdef GPU_ONLY
-        //    cudaDeviceSynchronize();
         std::cerr << "Calling synchronize" << std::endl;
         assert(cuCtxSynchronize() == 0);
 #endif
@@ -152,7 +173,7 @@ int main() {
         
 #if defined(CHECK_RESULTS) && defined(DISTRIBUTE)
  // combine the rank files together
-        C_DATA_TYPE *got = (C_DATA_TYPE*)malloc(sizeof(C_DATA_TYPE) * (ROWS - 2) * (COLS - 2));
+        C_DATA_TYPE *got = (C_DATA_TYPE*)malloc(sizeof(C_DATA_TYPE) * (ROWS) * (COLS));
         int idx = 0;
         for (int n = 0; n < PROCS; n++) {
             std::ifstream in_file;
@@ -180,7 +201,7 @@ int main() {
               C_DATA_TYPE should_be = std::floor((C_DATA_TYPE)((full_input(c,r) + full_input(c+1, r) + full_input(c+2, r) + full_input(c, r+1) +
                                                       full_input(c, r+2) + full_input(c+1, r+1) + full_input(c+1, r+2) + full_input(c+2, r+1) +
                                                                 full_input(c+2, r+2)) / (C_DATA_TYPE)9));
-              C_DATA_TYPE is = std::floor(got[idx++]);
+              C_DATA_TYPE is = std::floor(got[r * COLS + c/*idx++*/]);
               if (std::fabs(should_be - is) > 0.0f) {
                 std::cerr << "Mismatch at row " << r << " column " << c << ". Should be " << should_be << ", but is " << is << std::endl;
                 assert(false);
