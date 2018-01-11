@@ -287,7 +287,7 @@ std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::
             } else if (isl_ast_expr_get_op_type(cond) == isl_ast_op_le) {
                 // Create an expression of "1".
                 isl_val *one = isl_val_one(isl_ast_node_get_ctx(node));
-                // Add 1 to the ISL ast upper bound to transform it into a strinct bound.
+                // Add 1 to the ISL ast upper bound to transform it into a strict bound.
                 cond_upper_bound_isl_format = isl_ast_expr_add(
                         isl_ast_expr_get_op_arg(cond, 1),
                         isl_ast_expr_from_val(one));
@@ -426,23 +426,26 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         }
         idx++;
     }
-    kernel_params += "};\n";
     int idx2 = idx;
     for (std::string v : closure_vars) {
         if (idx == 0) {
             kernel_wrapper_signature += v;
             kernel_wrapper_signature_no_event += v;
+            kernel_signature += v;
         } else {
             kernel_wrapper_signature += ", " + v;
             kernel_wrapper_signature_no_event += ", " + v;
+            kernel_signature += ", " + v;
         }
         idx++;
     }
     idx = idx2;
     for (std::string v : closure_vars_no_type) {
         other_params.push_back(v);
+        kernel_params += ", (void*)" + v;
         idx++;
     }
+    kernel_params += "};\n";
     kernel_signature += ")";
     kernel_wrapper_signature += ", void *_kernel_stream, void *_kernel_event_buff)";
     kernel_wrapper_signature_no_event += ", void *_kernel_stream)";
@@ -554,57 +557,67 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
             std::string tmp_name = name_str.substr(1);
             int current_level = std::stoi(tmp_name);
             current_level /= 2;
-            if (kernel_ending_level - kernel_starting_level == 1) { // 1 dimension
-                if (current_level == kernel_ending_level) {
-                    name_str = "thread_x";
-                } else {
-                    name_str = "block_x";
-                }
-            } else if (kernel_ending_level - kernel_starting_level == 3) { // 2 dimension
-                if (current_level == kernel_ending_level) {
-                    name_str = "thread_x";
-                } else if (current_level == kernel_ending_level - 1) {
-                    name_str = "thread_y";
-                } else if (current_level == kernel_ending_level - 2) {
-                    name_str = "block_x";
-                } else {
-                    name_str = "block_y";
-                }
-            } else if (kernel_ending_level - kernel_starting_level == 5) { // 3 dimension
-                if (current_level == kernel_ending_level) {
-                    name_str = "thread_x";
-                } else if (current_level == kernel_ending_level - 1) {
-                    name_str = "thread_y";
-                } else if (current_level == kernel_ending_level - 2) {
-                    name_str = "thread_z";
-                } else if (current_level == kernel_ending_level - 3) {
-                    name_str = "block_x";
-                } else if (current_level == kernel_ending_level - 4) {
-                    name_str = "block_y";
-                } else {
-                    name_str = "block_z";
+            if (current_level >= kernel_starting_level && current_level <= kernel_ending_level) {
+                if (kernel_ending_level - kernel_starting_level == 1) { // 1 dimension
+                    if (current_level == kernel_ending_level) {
+                        name_str = "thread_x";
+                    } else {
+                        name_str = "block_x";
+                    }
+                } else if (kernel_ending_level - kernel_starting_level == 3) { // 2 dimension
+                    if (current_level == kernel_ending_level) {
+                        name_str = "thread_x";
+                    } else if (current_level == kernel_ending_level - 1) {
+                        name_str = "thread_y";
+                    } else if (current_level == kernel_ending_level - 2) {
+                        name_str = "block_x";
+                    } else {
+                        name_str = "block_y";
+                    }
+                } else if (kernel_ending_level - kernel_starting_level == 5) { // 3 dimension
+                    if (current_level == kernel_ending_level) {
+                        name_str = "thread_x";
+                    } else if (current_level == kernel_ending_level - 1) {
+                        name_str = "thread_y";
+                    } else if (current_level == kernel_ending_level - 2) {
+                        name_str = "thread_z";
+                    } else if (current_level == kernel_ending_level - 3) {
+                        name_str = "block_x";
+                    } else if (current_level == kernel_ending_level - 4) {
+                        name_str = "block_y";
+                    } else {
+                        name_str = "block_z";
+                    }
                 }
             }
         }
 
-        if (!convert_to_loop_type) {
-            result = "(int)" + name_str;
-            if (capture_vars) {
-                if (std::find(closure_vars.begin(), closure_vars.end(), "int " + name_str) == closure_vars.end()) {
-                    closure_vars.push_back("int " + name_str);
-                    closure_vars_no_type.push_back(name_str);
+        if (name_str != "thread_x" && name_str != "thread_y" && name_str != "thread_z" && name_str != "block_x" && name_str != "block_y" && name_str != "block_z") {
+            if (!convert_to_loop_type) {
+                result = "(int)" + name_str;
+                if (capture_vars) {
+                    if (std::find(closure_vars.begin(), closure_vars.end(), "int " + name_str) == closure_vars.end()) {
+                        closure_vars.push_back("int " + name_str);
+                        closure_vars_no_type.push_back(name_str);
+                    }
+                }
+            } else {
+                result = "(" + c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + ")" + name_str;
+                if (capture_vars) {
+                    if (std::find(closure_vars.begin(), closure_vars.end(),
+                                  c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " " + name_str) ==
+                        closure_vars.end()) {
+                        closure_vars.push_back(
+                                c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " " + name_str);
+                        closure_vars_no_type.push_back(name_str);
+                    }
                 }
             }
         } else {
-            result = "(" + c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + ")" + name_str;
-            if (capture_vars) {
-                if (std::find(closure_vars.begin(), closure_vars.end(),
-                              c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " " + name_str) ==
-                    closure_vars.end()) {
-                    closure_vars.push_back(
-                            c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " " + name_str);
-                    closure_vars_no_type.push_back(name_str);
-                }
+            if (!convert_to_loop_type) {
+                result = "(int)" + name_str;
+            } else {
+                result = "(" + c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + ")" + name_str;
             }
         }
 
@@ -720,7 +733,7 @@ std::string generator::linearize_access_cuda(int dims, const shape_t *shape, isl
     std::string index = "";
     for (int i = dims; i >= 1; i--) {
         isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i);
-        std::string operand_h = cuda_expr_from_isl_ast_expr(operand, kernel_starting_level, kernel_ending_level, true, true);
+        std::string operand_h = cuda_expr_from_isl_ast_expr(operand, kernel_starting_level, kernel_ending_level, true, true, true);
         if (i == dims) {
             index = "((" + operand_h + ") * (" + std::to_string(shape[dims-i].stride) + "))";
         } else {
@@ -767,7 +780,7 @@ std::string generator::linearize_access_cuda(int dims, std::vector<std::string> 
     for (int i = dims; i >= 1; i--)
     {
         isl_ast_expr *operand = isl_ast_expr_get_op_arg(index_expr, i); // skip the first op arg, which is just the name of the buffer
-        std::string operand_h = cuda_expr_from_isl_ast_expr(operand, kernel_starting_level, kernel_ending_level, true, true);
+        std::string operand_h = cuda_expr_from_isl_ast_expr(operand, kernel_starting_level, kernel_ending_level, true, true, true);
         if (i == dims) {
             index = "((" + operand_h + ") * (" + strides[dims-i] + "))";
         } else {

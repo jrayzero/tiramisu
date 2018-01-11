@@ -237,10 +237,6 @@ int main() {
     gpu_to_cpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
     gpu_to_cpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
 
-//    computation dummy("[procs]->{dummy[q, y, x]: 0<=q<procs and 0<=y<10 and 0<=x<10}", expr(0), true, T_DATA_TYPE, &blur_dist);
-//    dummy.tag_distribute_level(q);
-//    dummy.tag_gpu_level2(y,x);
-
 //    dummy.before(*bx_exchange.s, computation::root);
     bx_exchange.s->before(bx_exchange_wait, computation::root);
     bx_exchange_wait.before(*bx_exchange.r, computation::root);
