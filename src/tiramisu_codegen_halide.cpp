@@ -2907,6 +2907,7 @@ void tiramisu::computation::create_halide_assignment()
                                     generator::halide_expr_from_tiramisu_expr(this->fct, this->get_index_expr(),
                                                                               this->get_expr(), this) * halide_type_from_tiramisu_type(this->get_data_type()).bytes();
                         }
+                        this->set_expression(old);
 
                     } else {
                         halide_call_args[rhs_argument_idx] =
