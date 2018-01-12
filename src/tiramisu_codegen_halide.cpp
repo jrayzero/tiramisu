@@ -2381,8 +2381,27 @@ void function::gen_halide_stmt()
     stmt = tiramisu::generator::halide_stmt_from_isl_node(*this, this->get_isl_ast(), 0, generated_stmts);
 
     DEBUG(3, tiramisu::str_dump("The following Halide statement was generated:\n"); std::cout << stmt << std::endl);
-
+    std::vector<std::string> free_buffs;
     // Allocate buffers that are not passed as an argument to the function
+
+    std::cerr << stmt << std::endl;
+
+    for (const auto &b : this->get_buffers())
+    {
+        tiramisu::buffer *buf = b.second;
+        // Allocate only arrays that are not passed to the function as arguments.
+        if ((buf->get_argument_type() == tiramisu::a_temporary) &&
+            buf->get_auto_allocate() == true) {
+        } else if (buf->get_argument_type() == tiramisu::a_temporary_gpu) {
+            free_buffs.push_back(buf->get_name());
+        }
+    }
+
+    for (auto s : free_buffs) {
+      Halide::Expr gpu_buffer = Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), s);
+      stmt = Halide::Internal::Block::make(stmt, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cudad_free", {gpu_buffer})));
+    }
+    
     for (const auto &b : this->get_buffers())
     {
         tiramisu::buffer *buf = b.second;
@@ -2417,6 +2436,15 @@ void function::gen_halide_stmt()
             bytes *= Halide::cast(Halide::UInt(64), halide_type_from_tiramisu_type(buf->get_elements_type()).bytes());
             stmt = Halide::Internal::LetStmt::make(buf->get_name(), make_comm_call(Halide::type_of<struct halide_buffer_t *>(), "tiramisu_cudad_malloc",
                                                                                    {bytes}), stmt);
+
+            //            Halide::Expr gpu_buffer = Halide::Internal::Load::make(
+            //                                                                   Halide::Handle(), buf->get_name(), 0, Halide::Buffer<>(),
+            //                                                                       Halide::Internal::Parameter(), Halide::Internal::const_true());
+            //            gpu_buffer = Halide::Internal::Call::make(Halide::Handle(),
+            //                                                          Halide::Internal::Call::address_of, {gpu_buffer},
+            //                                                          Halide::Internal::Call::Intrinsic);
+            free_buffs.push_back(buf->get_name());
+
             //            Halide::Expr gpu_buffer = Halide::Internal::Variable::make(Halide::Handle(),
             //                                                                       buf->get_name());
             //            stmt = Halide::Internal::Block::make(Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(),
