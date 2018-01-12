@@ -250,16 +250,34 @@ int main() {
     gpu_to_cpu.os->collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)inner_split_factor)});
     gpu_to_cpu_wait.collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)inner_split_factor)});
 
-//    bx_exchange.s->before(bx_exchange_wait, computation::root);
-//    bx_exchange_wait.before(*bx_exchange.r, computation::root);
-//    bx_exchange.r->before(*input_cpu_to_gpu.os, computation::root);
-    input_cpu_to_gpu.os->before(cpu_to_gpu_wait, y2);//computation::root); // y2
-    cpu_to_gpu_wait.before(bx, y5);//computation::root); // y5
+////    bx_exchange.s->before(bx_exchange_wait, computation::root);
+////    bx_exchange_wait.before(*bx_exchange.r, computation::root);
+////    bx_exchange.r->before(*input_cpu_to_gpu.os, computation::root);
+//    input_cpu_to_gpu.os->before(cpu_to_gpu_wait, y2);//computation::root); // y2
+//    cpu_to_gpu_wait.before(bx, y5);//computation::root); // y5
+//    bx.before(bx_recompute, computation::root);
+//    bx_recompute.before(by, computation::root);
+//    by.before(kernel_by_wait, y);//computation::root);
+//    kernel_by_wait.before(*gpu_to_cpu.os, y2);
+//    gpu_to_cpu.os->before(gpu_to_cpu_wait, y3);
+
+    //    bx_exchange.s->before(bx_exchange_wait, computation::root);
+    //    bx_exchange_wait.before(*bx_exchange.r, computation::root);
+    //    bx_exchange.r->before(*input_cpu_to_gpu.os, computation::root);
+    input_cpu_to_gpu.os->before(cpu_to_gpu_wait, computation::root);//computation::root); // y2
+    cpu_to_gpu_wait.before(bx, computation::root);//computation::root); // y5
     bx.before(bx_recompute, computation::root);
     bx_recompute.before(by, computation::root);
-    by.before(kernel_by_wait, y);//computation::root);
-    kernel_by_wait.before(*gpu_to_cpu.os, y2);
-    gpu_to_cpu.os->before(gpu_to_cpu_wait, y3);
+    by.before(kernel_by_wait, computation::root);//computation::root);
+    kernel_by_wait.before(*gpu_to_cpu.os, computation::root);
+    gpu_to_cpu.os->before(gpu_to_cpu_wait, computation::root);
+
+    cpu_to_gpu_wait.set_schedule_this_comp(false);
+    gpu_to_cpu_wait.set_schedule_this_comp(false);
+    bx.set_schedule_this_comp(false);
+    bx_recompute.set_schedule_this_comp(false);
+    by.set_schedule_this_comp(false);
+    kernel_by_wait.set_schedule_this_comp(false);
 
 //    bx_exchange.s->tag_distribute_level(q, false);
 //    bx_exchange.r->tag_distribute_level(q, false);
