@@ -467,17 +467,32 @@ std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::
 }
 
 // put all the CUDA code for this kernel together
+// SUPERRRRR hacky right here
+std::vector<std::string> already_printed;
 std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_file(std::string kernel_name, std::string kernel_fn,
                                                                                    std::string kernel_wrapper_fn,
                                                                                    std::string kernel_body, std::string kernel_wrapper_body,
                                                                                    std::string fatbin_fn) {
+    // HAHAHA
+    bool skip1 = std::find(closure_vars_no_type.begin(), closure_vars_no_type.end(), "c1") != closure_vars_no_type.end();
+    bool skip2 = std::find(already_printed.begin(), already_printed.end(), kernel_name)  != already_printed.end();
+    bool skip = skip1 || skip2;
+    if (!skip2 && !skip1) {
+        already_printed.push_back(kernel_name);
+    }
     std::ofstream kernel;
-    kernel.open(kernel_fn);
+    if (!skip) {
+        kernel.open(kernel_fn);
+    }
     std::ofstream kernel_wrapper;
-    kernel_wrapper.open(kernel_wrapper_fn);
+    if (!skip) {
+        kernel_wrapper.open(kernel_wrapper_fn);
+    }
     // headers
-    kernel << cuda_headers() << std::endl;
-    kernel_wrapper << cuda_headers() << std::endl;
+    if (!skip) {
+        kernel << cuda_headers() << std::endl;
+        kernel_wrapper << cuda_headers() << std::endl;
+    }
     // kernel
     std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
     std::string kernel_wrapper_signature = "extern \"C\" {\nvoid " + kernel_name + "(";
@@ -544,7 +559,9 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     std::string kernel_code = "extern \"C\" {\n__global__\n";
     kernel_code +=  kernel_signature + " {\n  " + ptr_to_literal + "\n";
     kernel_code += "  " + kernel_body + "\n}\n}/*extern \"C\"*/\n";
-    kernel << kernel_code << std::endl;
+    if (!skip) {
+        kernel << kernel_code << std::endl;
+    }
     // wrapper function that the host calls
     std::string stream_convert = "  CUstream *kernel_stream = (CUstream*)_kernel_stream;\n";
     std::string kernel_launch = stream_convert + "  /*fprintf(stderr, \"grid width %d, grid height %d, grid depth %d, block width %d, block width %d, block depth %d\\n\", grid_width, grid_height, grid_depth, block_width, block_height, block_depth);*/\n  assert(cuLaunchKernel(kernel, grid_width, grid_height, grid_depth, block_width, block_height, block_depth, 0 /*No shmem for now*/, kernel_stream[0], kernel_args, 0) == 0);\n";
@@ -555,12 +572,16 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     std::string event_check = "  //if (event != NULL) { cuStreamWaitEvent(kernel_stream[0], event, 0); }\n";
     std::string event_record = "  if(_kernel_event_buff) {\n    CUevent *kernel_event_buff = (CUevent*)_kernel_event_buff;\n";//"  //if (other_event != NULL) { cuEventRecord(other_event, kernel_stream); }\n";
     event_record += "    CUevent event;\n    assert(cuEventCreate(&event, 0) == 0);\n    assert(cuEventRecord(event, kernel_stream[0]) == 0);\n    kernel_event_buff[0] = event;\n  }\n";
-    kernel_wrapper << kernel_wrapper_signature << " {\n" << module_mgmt << device_params << kernel_params << kernel_wrapper_body
-                   << event_check << kernel_launch << device_free << event_record << "\n}\n";
-    kernel_wrapper << kernel_wrapper_signature_no_event << " {\n" << module_mgmt << device_params << kernel_params << kernel_wrapper_body
-                   << kernel_launch << device_free << "\n}\n}/*extern \"C\"*/\n";
-    kernel.close();
-    kernel_wrapper.close();
+    if (!skip) {
+        kernel_wrapper << kernel_wrapper_signature << " {\n" << module_mgmt << device_params << kernel_params
+                       << kernel_wrapper_body
+                       << event_check << kernel_launch << device_free << event_record << "\n}\n";
+        kernel_wrapper << kernel_wrapper_signature_no_event << " {\n" << module_mgmt << device_params << kernel_params
+                       << kernel_wrapper_body
+                       << kernel_launch << device_free << "\n}\n}/*extern \"C\"*/\n";
+        kernel.close();
+        kernel_wrapper.close();
+    }
     closure_vars.clear();
     closure_vars_no_type.clear();
     closure_vars_ptr.clear();

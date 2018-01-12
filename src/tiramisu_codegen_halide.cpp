@@ -201,7 +201,6 @@ isl_ast_expr *create_isl_ast_index_expression(isl_ast_build *build,
         parts.clear();
         split_string(sched2, " ", parts);
         if (parts[parts.size() - 2] == "false") { // This is a dead loop probably. Super hacky--just leave it alone
-            std::cerr << sched2 << std::endl;
             schedule = orig_sched;
         }
     }
