@@ -209,8 +209,6 @@ int main() {
     }
     int inner_split_factor = 500;
     input_cpu_to_gpu.os->split(y, inner_split_factor, y2, y3);
-    //    input_cpu_to_gpu.os->split(y2, 10, y4, y5);
-    //    input_cpu_to_gpu.os->split(x, 2, x1, x2);
 
     // True because we need to insert a dummy access since the transfer has 3 dims and blur_input only has 2
     generator::update_producer_expr_name(&bx, "blur_input", "input_cpu_to_gpu_os", true);
@@ -219,6 +217,7 @@ int main() {
     xfer gpu_to_cpu =
             computation::create_xfer("[procs, rows_per_proc_after, cols]->{gpu_to_cpu_os[q,y,x]: 0<=q<procs and 0<=y<rows_per_proc_after and 0<=x<cols}",
                                      d2h_cuda_async, by(y,x), &blur_dist);
+    gpu_to_cpu.os->split(y, inner_split_factor, y2, y3);
     // We want to insert a new computation here that computes bx of the two extra rows. This gives us recomputation
     // instead of communication, which is cheaper for us. The last proc doesn't need to do anything though.
     computation bx_recompute("[rows_per_node, cols, procs]->{bx_recompute[q, y, x]: 0<=q<procs-1 and rows_per_node<=y<rows_per_node+2 and 0<=x<cols-2}",
@@ -230,16 +229,16 @@ int main() {
     tiramisu::wait cpu_to_gpu_wait(input_cpu_to_gpu.os->operator()(q, y, x), input_cpu_to_gpu.os->get_channel(), &blur_dist);
     cpu_to_gpu_wait.split(y, inner_split_factor, y2, y3);
     tiramisu::wait gpu_to_cpu_wait(gpu_to_cpu.os->operator()(q, y, x), gpu_to_cpu.os->get_channel(), &blur_dist);
+    gpu_to_cpu_wait.split(y, inner_split_factor, y2, y3);
 
-    tiramisu::wait kernel_by_wait("[procs, rows_per_node]->{by_wait[q,y]: 0<=q<procs and 0<=y<rows_per_node}", by(y, x), kernel, true, &blur_dist);
+    tiramisu::wait kernel_by_wait("[procs, rows_per_node]->{by_wait[q,y]: 0<=q<procs and 0<=y<rows_per_node/500}", by(y, x), kernel, true, &blur_dist);
     kernel_by_wait.tag_distribute_level(q);
     
     input_cpu_to_gpu.os->collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)inner_split_factor)});
     cpu_to_gpu_wait.collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)inner_split_factor)});
-    gpu_to_cpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
-    gpu_to_cpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
+    gpu_to_cpu.os->collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)inner_split_factor)});
+    gpu_to_cpu_wait.collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)inner_split_factor)});
 
-//    dummy.before(*bx_exchange.s, computation::root);
     bx_exchange.s->before(bx_exchange_wait, computation::root);
     bx_exchange_wait.before(*bx_exchange.r, computation::root);
     bx_exchange.r->before(*input_cpu_to_gpu.os, computation::root);
@@ -249,7 +248,7 @@ int main() {
     bx_recompute.before(by, computation::root);
     by.before(kernel_by_wait, computation::root);
     kernel_by_wait.before(*gpu_to_cpu.os, computation::root);
-    gpu_to_cpu.os->before(gpu_to_cpu_wait, computation::root);
+    gpu_to_cpu.os->before(gpu_to_cpu_wait, y2);//computation::root);
 
     bx_exchange.s->tag_distribute_level(q, false);
     bx_exchange.r->tag_distribute_level(q, false);
@@ -298,7 +297,6 @@ int main() {
     tiramisu::buffer buff_kernel_by_wait("buff_kernel_by_wait", {rows_per_proc/inner_split_factor}, tiramisu::p_wait_ptr,
                                           tiramisu::a_temporary, &blur_dist);
 
-//    dummy.set_access("{dummy[q,y,x]->buff_bx_gpu[0,0]}"); // we will just overwrite this later
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
 
     bx.set_access("{bx[y, x]->buff_bx_gpu[y, x]}");
