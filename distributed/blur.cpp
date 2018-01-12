@@ -163,18 +163,16 @@ int main() {
     var y1("y1"), y2("y2"), y3("y3"), y4("y4"), y5("y5"), y6("y6"), x1("x1"), x2("x2"), q("q");
 
     bx.split(y, rows_per_proc, y1, y2);
-    bx.split(y2, 50, y3, y4);
-    bx.split(y3, 10, y5, y6);
-    bx.split(x, 2, x1, x2);
+    //    bx.split(y2, 50, y3, y4);
+    //    bx.split(y3, 10, y5, y6);
+    bx.split(x, 50, x1, x2);
 
     by.split(y, rows_per_proc, y1, y2);
-    by.split(y2, 50, y3, y4);
-    by.split(y3, 10, y5, y6);
-    by.split(x, 2, x1, x2);
+    //    by.split(y2, 50, y3, y4);
+    //    by.split(y3, 10, y5, y6);
+    by.split(x, 50, x1, x2);
 
     constant rows_per_proc_const("rows_per_proc", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
-    // rows_per_proc that we end up with after computation is done (last proc does 2 less rows)
-    constant rows_per_proc_after_const("rows_per_proc_after", expr(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1, rows_per_proc, rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     constant rows_per_node_const("rows_per_node", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     constant procs_per_node_const("procs_per_node", expr(procs_per_node), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
@@ -188,113 +186,53 @@ int main() {
 
     xfer_prop kernel(T_DATA_TYPE, {ASYNC, CUDA}, 2);
 
-    // First, transfer border region between the procs.
-    /*xfer bx_exchange =
-            computation::create_xfer(
-                    "[cols, nodes]->{bx_exchange_s[q,y,x]: 1<=q<nodes and 0<=y<2 and 0<=x<cols and nodes>1}",
-                    "[cols, nodes]->{bx_exchange_r[q,y,x]: nodes<=q<nodes*2-1 and 0<=y<2 and 0<=x<cols and nodes>1}",
-                    q + nodes - (C_LOOP_ITER_TYPE)1, q - nodes + (C_LOOP_ITER_TYPE)1, h2h_mpi_async_nonblock, h2h_mpi_sync,
-                    blur_input(y, x), &blur_dist);*/
-
     // Need an  CPU-GPU transfer for each input
-    xfer input_cpu_to_gpu;
-    if (procs == 1) {
-        input_cpu_to_gpu = computation::create_xfer(
-                "[procs, rows_per_proc, cols]->{input_cpu_to_gpu_os[q,y,x]: 0<=q<procs and 0<=y<rows_per_proc and 0<=x<cols}",
-                h2d_cuda_async, blur_input(y, x), &blur_dist);
-    } else {
-        input_cpu_to_gpu = computation::create_xfer(
-                "[procs, rows_per_proc, cols]->{input_cpu_to_gpu_os[q,y,x]: 0<=q<procs and 0<=y<rows_per_proc+2 and 0<=x<cols}",
-                h2d_cuda_async, blur_input(y, x), &blur_dist);
-    }
-    int inner_split_factor = 500;
-    //    input_cpu_to_gpu.os->split(y, inner_split_factor, y2, y3);
-
-    // True because we need to insert a dummy access since the transfer has 3 dims and blur_input only has 2
-    generator::update_producer_expr_name(&bx, "blur_input", "input_cpu_to_gpu_os", true);
-
+    xfer input_cpu_to_gpu = computation::create_xfer(
+            "[procs, rows_per_proc, cols]->{input_cpu_to_gpu_os[y,x]: 0<=y<rows_per_proc and 0<=x<cols}",
+            h2d_cuda_async, blur_input(y, x), &blur_dist);
     // Transfer the computed data back to the CPU
     xfer gpu_to_cpu =
-            computation::create_xfer("[procs, rows_per_proc_after, cols]->{gpu_to_cpu_os[q,y,x]: 0<=q<procs and 0<=y<rows_per_proc_after and 0<=x<cols}",
-                                     d2h_cuda_async, by(y,x), &blur_dist);
-    //    gpu_to_cpu.os->split(y, inner_split_factor, y2, y3);
+            computation::create_xfer("[procs, rows_per_proc, cols]->{gpu_to_cpu_os[y,x]: 0<=y<rows_per_proc and 0<=x<cols}",
+                                     d2h_cuda_async, by(y, x), &blur_dist);
+
+    // True because we need to insert a dummy access since the transfer has 3 dims and blur_input only has 2
+    generator::update_producer_expr_name(&bx, "blur_input", "input_cpu_to_gpu_os", false);
+
+
+    input_cpu_to_gpu.os->split(y, rows_per_proc, y1, y2);
+    gpu_to_cpu.os->split(y, rows_per_proc, y1, y2);
     // We want to insert a new computation here that computes bx of the two extra rows. This gives us recomputation
     // instead of communication, which is cheaper for us. The last proc doesn't need to do anything though.
-    computation bx_recompute("[rows_per_node, cols, procs]->{bx_recompute[q, y, x]: 0<=q<procs-1 and rows_per_node<=y<rows_per_node+2 and 0<=x<cols}",
-                             (((blur_input(y, x) + blur_input(y, (x + expr((C_LOOP_ITER_TYPE)1)))) +
-                               blur_input(y, (x + expr((C_LOOP_ITER_TYPE)2)))) / expr((C_DATA_TYPE)3)),
-                             true, T_DATA_TYPE, &blur_dist);
-    bx_recompute.set_schedule_this_comp(false);
-    //bx_exchange.s->set_schedule_this_comp(false);
-//    bx_exchange.r->set_schedule_this_comp(false);
+    tiramisu::wait cpu_to_gpu_wait(input_cpu_to_gpu.os->operator()(y, x), input_cpu_to_gpu.os->get_channel(), &blur_dist);
+    cpu_to_gpu_wait.split(y, rows_per_proc, y1, y2);
+    tiramisu::wait gpu_to_cpu_wait(gpu_to_cpu.os->operator()(y, x), gpu_to_cpu.os->get_channel(), &blur_dist);
+    gpu_to_cpu_wait.split(y, rows_per_proc, y1, y2);
 
-//    tiramisu::wait bx_exchange_wait(bx_exchange.s->operator()(q, y, x), bx_exchange.s->get_channel(), &blur_dist);
-    tiramisu::wait cpu_to_gpu_wait(input_cpu_to_gpu.os->operator()(q, y, x), input_cpu_to_gpu.os->get_channel(), &blur_dist);
-    cpu_to_gpu_wait.split(y, inner_split_factor, y2, y3);
-    tiramisu::wait gpu_to_cpu_wait(gpu_to_cpu.os->operator()(q, y, x), gpu_to_cpu.os->get_channel(), &blur_dist);
-    gpu_to_cpu_wait.split(y, inner_split_factor, y2, y3);
-
-    tiramisu::wait kernel_by_wait("[procs, rows_per_node]->{by_wait[q,y,x]: 0<=q<procs and 0<=y<rows_per_node/500 and 0<=x<1}", by(y, x), kernel, true, &blur_dist);
-//    tiramisu::wait kernel_by_wait("[cols, rows]->{by_wait[y,x]: 0<=y<rows and 0<=x<cols}", by(y, x), kernel, true, &blur_dist);
-//    kernel_by_wait.set_schedule_this_comp(false);
-//    kernel_by_wait.split(y, rows_per_proc, y1, y2);
-//    kernel_by_wait.split(y2, 50, y3, y4);
-//    kernel_by_wait.split(y3, 10, y5, y6);
-//    kernel_by_wait.split(x, 2, x1, x2);
+    tiramisu::wait kernel_by_wait("[cols, rows]->{by_wait[y]: 0<=y<rows}", by(y, 0), kernel, true, &blur_dist);
+    kernel_by_wait.split(y, rows_per_proc, y1, y2);
+    bx.tag_gpu_level2(x1, x2, 0);
+    by.tag_gpu_level2(x1, x2, 0);
 
 
-    kernel_by_wait.tag_distribute_level(q, false);
-    
-    input_cpu_to_gpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//, collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//inner_split_factor)});
-    cpu_to_gpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//, collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//inner_split_factor)});
-    gpu_to_cpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//, collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//inner_split_factor)});
-    gpu_to_cpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//, collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});//inner_split_factor)});
+    bx.tag_distribute_level(y1, true);
+    by.tag_distribute_level(y1, true);
+    input_cpu_to_gpu.os->tag_distribute_level(y1, true);
+    gpu_to_cpu.os->tag_distribute_level(y1, true);
+    cpu_to_gpu_wait.tag_distribute_level(y1, true);
+    gpu_to_cpu_wait.tag_distribute_level(y1, true);
+    kernel_by_wait.tag_distribute_level(y1, true);
 
-////    bx_exchange.s->before(bx_exchange_wait, computation::root);
-////    bx_exchange_wait.before(*bx_exchange.r, computation::root);
-////    bx_exchange.r->before(*input_cpu_to_gpu.os, computation::root);
-//    input_cpu_to_gpu.os->before(cpu_to_gpu_wait, y2);//computation::root); // y2
-//    cpu_to_gpu_wait.before(bx, y5);//computation::root); // y5
-//    bx.before(bx_recompute, computation::root);
-//    bx_recompute.before(by, computation::root);
-//    by.before(kernel_by_wait, y);//computation::root);
-//    kernel_by_wait.before(*gpu_to_cpu.os, y2);
-//    gpu_to_cpu.os->before(gpu_to_cpu_wait, y3);
+    input_cpu_to_gpu.os->before(cpu_to_gpu_wait, y2);
+    cpu_to_gpu_wait.before(bx, y2);
+    bx.before(by, computation::root);
+    by.before(kernel_by_wait, y2);//computation::root);
+    kernel_by_wait.before(*gpu_to_cpu.os, y2);//computation::root);
+    gpu_to_cpu.os->before(gpu_to_cpu_wait, computation::root); // cause I'm not gonna use it again
 
-    //    bx_exchange.s->before(bx_exchange_wait, computation::root);
-    //    bx_exchange_wait.before(*bx_exchange.r, computation::root);
-    //    bx_exchange.r->before(*input_cpu_to_gpu.os, computation::root);
-    /*    input_cpu_to_gpu.os->before(cpu_to_gpu_wait, computation::root);//computation::root); // y2
-    cpu_to_gpu_wait.before(bx, computation::root);//computation::root); // y5
-    bx.before(bx_recompute, computation::root);
-    bx_recompute.before(by, computation::root);
-    by.before(kernel_by_wait, computation::root);//computation::root);
-    kernel_by_wait.before(*gpu_to_cpu.os, computation::root);
-    gpu_to_cpu.os->before(gpu_to_cpu_wait, computation::root);*/
-    input_cpu_to_gpu.os->before(bx, y6);
-    bx.before(*gpu_to_cpu.os, computation::root);
-
-    cpu_to_gpu_wait.set_schedule_this_comp(false);
-    gpu_to_cpu_wait.set_schedule_this_comp(false);
-    //    bx.set_schedule_this_comp(false);
-    bx_recompute.set_schedule_this_comp(false);
-    by.set_schedule_this_comp(false);
-    kernel_by_wait.set_schedule_this_comp(false);
-
-//    bx_exchange.s->tag_distribute_level(q, false);
-//    bx_exchange.r->tag_distribute_level(q, false);
-    input_cpu_to_gpu.os->tag_distribute_level(q, false);
-    bx.tag_distribute_level(y1);
-    bx_recompute.tag_distribute_level(q);
-    by.tag_distribute_level(y1);
-    gpu_to_cpu.os->tag_distribute_level(q, false);
-//    bx_exchange_wait.tag_distribute_level(q, false);
-    cpu_to_gpu_wait.tag_distribute_level(q, false);
-    gpu_to_cpu_wait.tag_distribute_level(q, false);
-
-    bx.tag_gpu_level2(y6, y4, x1, x2, 0);
-    bx_recompute.tag_gpu_level2(y, x, 0);
-    by.tag_gpu_level2(y6, y4, x1, x2, 0);
+    input_cpu_to_gpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
+    cpu_to_gpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
+    gpu_to_cpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
+    gpu_to_cpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
 
     tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1,
                                   tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc+2));
@@ -316,40 +254,30 @@ int main() {
     tiramisu::buffer buff_by("buff_by", {by_select_dim0, tiramisu::expr(cols)},
                              T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
-//    tiramisu::buffer buff_bx_exchange_wait("buff_bx_exchange_wait", {2, cols}, tiramisu::p_wait_ptr,
-//                                           tiramisu::a_temporary, &blur_dist);
-
     tiramisu::buffer buff_cpu_to_gpu_wait("buff_cpu_to_gpu_wait", {bx_select_dim0/*, tiramisu::expr(cols)*/}, tiramisu::p_wait_ptr,
                                           tiramisu::a_temporary, &blur_dist);
 
     tiramisu::buffer buff_gpu_to_cpu_wait("buff_gpu_to_cpu_wait", {by_select_dim0/*, tiramisu::expr(cols)*/}, tiramisu::p_wait_ptr,
                                           tiramisu::a_temporary, &blur_dist);
 
-    tiramisu::buffer buff_kernel_by_wait("buff_kernel_by_wait", {rows_per_proc/inner_split_factor}, tiramisu::p_wait_ptr,
-                                          tiramisu::a_temporary, &blur_dist);
+    tiramisu::buffer buff_kernel_by_wait("buff_kernel_by_wait", {rows_per_proc}, tiramisu::p_wait_ptr,
+                                         tiramisu::a_temporary, &blur_dist);
 
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
 
     bx.set_access("{bx[y, x]->buff_bx_gpu[y, x]}");
 
-    bx_recompute.set_access("{bx_recompute[q,y,x]->buff_bx_gpu[y,x]}");
-
     by.set_access("{by[y, x]->buff_by_gpu[y, x]}");
 
-//    bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_input[" + std::to_string(rows_per_proc) + " + y, x]}");
-//
-//    bx_exchange.s->set_wait_access("{bx_exchange_s[q,y,x]->buff_bx_exchange_wait[y,x]}");
+    input_cpu_to_gpu.os->set_access("{input_cpu_to_gpu_os[y,x]->buff_input_gpu[y,x]}");
 
-    input_cpu_to_gpu.os->set_access("{input_cpu_to_gpu_os[q,y,x]->buff_input_gpu[y,x]}");
+    input_cpu_to_gpu.os->set_wait_access("{input_cpu_to_gpu_os[y,x]->buff_cpu_to_gpu_wait[y]}");
 
-    input_cpu_to_gpu.os->set_wait_access("{input_cpu_to_gpu_os[q,y,x]->buff_cpu_to_gpu_wait[y]}");
+    gpu_to_cpu.os->set_access("{gpu_to_cpu_os[y,x]->buff_by[y,x]}");
 
-    gpu_to_cpu.os->set_access("{gpu_to_cpu_os[q,y,x]->buff_by[y,x]}");
+    gpu_to_cpu.os->set_wait_access("{gpu_to_cpu_os[y,x]->buff_gpu_to_cpu_wait[y]}");
 
-    gpu_to_cpu.os->set_wait_access("{gpu_to_cpu_os[q,y,x]->buff_gpu_to_cpu_wait[y]}");
-
-//    by.set_wait_access("{by[y,x]->buff_kernel_by_wait[y,x]}");
-    by.set_wait_access("{by[y,x]->buff_kernel_by_wait[y/" + std::to_string(inner_split_factor) + "]}");
+    by.set_wait_access("{by[y,x]->buff_kernel_by_wait[y]}");
 
     blur_dist.set_arguments({&buff_input, &buff_by});//, &buff_cpu_to_gpu_wait});
     blur_dist.lift_dist_comps();

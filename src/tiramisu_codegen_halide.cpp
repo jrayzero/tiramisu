@@ -181,14 +181,29 @@ isl_ast_expr *create_isl_ast_index_expression(isl_ast_build *build,
     DEBUG(3, tiramisu::str_dump("Schedule:", isl_map_to_str(schedule)));
 
     if (remove_level != -1) {
+        const char *name = isl_map_get_tuple_name(schedule, isl_dim_in);
+        const char *orig_dim_name = isl_map_get_dim_name(schedule, isl_dim_out, 0);
+        isl_map *orig_sched = isl_map_copy(schedule);
+        schedule = isl_map_remove_dims(schedule, isl_dim_in, 1, 1);
+        schedule = isl_map_insert_dims(schedule, isl_dim_in, 1, 1);
+        schedule = isl_map_set_tuple_name(schedule, isl_dim_in, name);
+
         int dim_idx = loop_level_into_dynamic_dimension(remove_level) - 1; // subtract 1 b/c this includes the duplicate dim
         std::string sched_str = isl_map_to_str(schedule);
-        std::string dim_name = isl_map_get_dim_name(schedule, isl_dim_in, dim_idx);
-        std::string new_constraint = " and " + dim_name + " = 0 }";
+        std::string dim_name = "i1";//isl_map_get_dim_name(schedule, isl_dim_in, dim_idx);
+        std::string new_constraint = " and " + dim_name + " = 0 and " + orig_dim_name + " = " + dim_name + "}";
         std::vector<std::string> parts;
         split_string(sched_str, "}", parts);
         sched_str = parts[0] + new_constraint;
         schedule = isl_map_read_from_str(isl_ast_build_get_ctx(build), sched_str.c_str());
+
+        std::string sched2 = isl_map_to_str(schedule);
+        parts.clear();
+        split_string(sched2, " ", parts);
+        if (parts[parts.size() - 2] == "false") { // This is a dead loop probably. Super hacky--just leave it alone
+            std::cerr << sched2 << std::endl;
+            schedule = orig_sched;
+        }
     }
 
     isl_map *map = isl_map_reverse(isl_map_copy(schedule));
@@ -1286,11 +1301,17 @@ std::map<std::string, isl_ast_expr *> generator::compute_iterators_map(tiramisu:
     isl_set *dom = isl_set_copy(comp->get_iteration_domain());
     isl_map *identity = isl_set_identity(isl_set_copy(dom));
     isl_map *schedule = isl_map_copy(comp->get_trimmed_union_of_schedules()); //isl_map_copy(isl_map_from_union_map(isl_ast_build_get_schedule(build)));
+
+    // TODO allow other levels besides 0
+    //    if (comp->should_drop_rank_iter()) {
+    //        schedule = isl_map_remove_dims(schedule, isl_dim_out, 1, 1);
+    //        schedule = isl_map_insert_dims(schedule, isl_dim_out, 1, 1);
+    //        schedule = isl_map_set_tuple_name(schedule, isl_dim_out, isl_map_get_tuple_name(schedule, isl_dim_in));
+    //    }
     identity = isl_map_apply_domain(identity, schedule);
 
     DEBUG(3, tiramisu::str_dump("Creating an isl_ast_index_expression for the access :",
                                 isl_map_to_str(identity)));
-    // TODO allow other levels besides 0
     isl_ast_expr *idx_expr = create_isl_ast_index_expression(build, identity, comp->should_drop_rank_iter() ? 0 : -1);
     DEBUG(3, tiramisu::str_dump("The created isl_ast_expr expression for the index expression is :",
                                 isl_ast_expr_to_str(idx_expr)));
@@ -2398,10 +2419,10 @@ void function::gen_halide_stmt()
     }
 
     for (auto s : free_buffs) {
-      Halide::Expr gpu_buffer = Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), s);
-      stmt = Halide::Internal::Block::make(stmt, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cudad_free", {gpu_buffer})));
+        Halide::Expr gpu_buffer = Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), s);
+        stmt = Halide::Internal::Block::make(stmt, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cudad_free", {gpu_buffer})));
     }
-    
+
     for (const auto &b : this->get_buffers())
     {
         tiramisu::buffer *buf = b.second;
@@ -2856,12 +2877,12 @@ void tiramisu::computation::create_halide_assignment()
                 } else if (this->library_call_name == "tiramisu_cudad_memcpy_h2d" || this->library_call_name == "tiramisu_cudad_memcpy_d2h") {
                     for (int i = 0; i < this->library_call_args.size(); i++) {
                         if (i != this->rhs_argument_idx && i != this->lhs_argument_idx && i != this->library_call_args.size() - 1 /*This would be index*/) {
-                          std::vector<isl_ast_expr *> dummy;
-                          if (this->library_call_args[i].defined) {
-                            halide_call_args[i] = generator::halide_expr_from_tiramisu_expr(this->fct, dummy,
-                                                                                            this->library_call_args[i],
+                            std::vector<isl_ast_expr *> dummy;
+                            if (this->library_call_args[i].defined) {
+                                halide_call_args[i] = generator::halide_expr_from_tiramisu_expr(this->fct, dummy,
+                                                                                                this->library_call_args[i],
                                                                                                 this);
-                          }
+                            }
                         }
                     }
                 } else {
@@ -2886,7 +2907,7 @@ void tiramisu::computation::create_halide_assignment()
                     } else if (this->lhs_access_type == tiramisu::o_buffer) { // want to just pass in the raw buffer
                         result = Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), lhs_tiramisu_buffer->get_name());// + ".buffer");
                         if(this->library_call_name == "tiramisu_cudad_memcpy_async_h2d" || this->library_call_name == "tiramisu_cudad_memcpy_h2d") {
-                          halide_call_args[halide_call_args.size() - 1] = lhs_index * halide_type_from_tiramisu_type(this->get_data_type()).bytes(); // TODO Jess ahhhhhhhhhh
+                            halide_call_args[halide_call_args.size() - 1] = lhs_index * halide_type_from_tiramisu_type(this->get_data_type()).bytes(); // TODO Jess ahhhhhhhhhh
                         }
                     } else if (lhs_tiramisu_buffer->get_argument_type() != tiramisu::a_temporary && lhs_tiramisu_buffer->get_argument_type() != tiramisu::a_temporary_gpu) {
                         Halide::Buffer<> buffer = Halide::Buffer<>(

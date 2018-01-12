@@ -261,8 +261,46 @@ std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::
                                                                                                                        int kernel_starting_level, int kernel_ending_level) {
     if (isl_ast_node_get_type(node) == isl_ast_node_block) {
         // I think blocks would combine multiple computations in the loop
-        std::cerr << "WTF is an isl block" << std::endl;
-        exit(29);
+        std::cerr << "Generating for block in kernel" << std::endl;
+        isl_ast_node_list *list = isl_ast_node_block_get_children(node);
+        std::string code;
+        for (int i = isl_ast_node_list_n_ast_node(list) - 1; i >= 0; i--)
+        {
+            isl_ast_node *child = isl_ast_node_list_get_ast_node(list, i);
+
+            std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>> res;
+
+            if ((isl_ast_node_get_type(child) == isl_ast_node_user) &&
+                ((get_computation_annotated_in_a_node(child)->get_expr().get_op_type() == tiramisu::o_allocate) ||
+                 (get_computation_annotated_in_a_node(child)->get_expr().get_op_type() == tiramisu::o_free)))
+            {
+                tiramisu::computation *comp = get_computation_annotated_in_a_node(child);
+                if (get_computation_annotated_in_a_node(child)->get_expr().get_op_type() == tiramisu::o_allocate)
+                {
+                    assert(false);
+                }
+                else
+                    assert(false);
+            }
+            else
+            {
+                DEBUG(3, tiramisu::str_dump("Generating block."));
+                // Generate a child block
+                res = tiramisu::generator::codegen_kernel_body(fct, child, current_level, kernel_starting_level, kernel_ending_level);
+                code += "\n" + std::get<0>(res) + "\n";
+            }
+            isl_ast_node_free(child);
+
+            code = "{\n" + code + "\n}\n";
+
+            //            if (result.defined()) {
+            //                result = Halide::Internal::Block::make(block, result);
+            //            } else {
+            //                result = block;
+            //            }
+        }
+        isl_ast_node_list_free(list);
+        return std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>> (code, "", {});
     } else if (isl_ast_node_get_type(node) == isl_ast_node_for) {
         std::string code = "";
         if (current_level > kernel_ending_level) {
@@ -379,6 +417,49 @@ std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::
         isl_id_free(comp_id);
         std::string code = comp->create_kernel_assignment();
         return std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>> (code, "", {});
+    } else if (isl_ast_node_get_type(node) == isl_ast_node_if) {
+        std::cerr << "generating cuda  if/else code" << std::endl;
+        isl_ast_expr *cond = isl_ast_node_if_get_cond(node);
+        isl_ast_node *if_stmt = isl_ast_node_if_get_then(node);
+        isl_ast_node *else_stmt = isl_ast_node_if_get_else(node);
+        if ((isl_ast_node_get_type(if_stmt) == isl_ast_node_user) &&
+            ((get_computation_annotated_in_a_node(if_stmt)->get_expr().get_op_type() == tiramisu::o_allocate))) {
+            assert(false);
+        } else {
+            //            Halide::Expr c = Halide::cast(Halide::Bool(), halide_expr_from_isl_ast_expr(cond, true));
+            std::string c = cuda_expr_from_isl_ast_expr(cond, kernel_starting_level, kernel_ending_level);
+
+            auto if_s =
+                    tiramisu::generator::codegen_kernel_body(fct, if_stmt, current_level, kernel_starting_level,
+                                                             kernel_ending_level);
+
+            std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>> else_s;
+            if (else_stmt != NULL) {
+                if ((isl_ast_node_get_type(else_stmt) == isl_ast_node_user) &&
+                    ((get_computation_annotated_in_a_node(else_stmt)->get_expr().get_op_type() == tiramisu::o_allocate))) {
+                    tiramisu::computation *comp = get_computation_annotated_in_a_node(else_stmt);
+                    if (get_computation_annotated_in_a_node(else_stmt)->get_expr().get_op_type() == tiramisu::o_allocate) {
+                        assert(false);
+                    }
+                } else {
+                    else_s = tiramisu::generator::codegen_kernel_body(fct, else_stmt, current_level,
+                                                                      kernel_starting_level, kernel_ending_level);
+                }
+            } else {
+                DEBUG(3, tiramisu::str_dump("Else statement is NULL."));
+            }
+            std::string code = "";
+            if (else_stmt != NULL) {
+                code = "if (" + c + ") {\n " + std::get<0>(if_s) + "\n} else {\n" + std::get<0>(else_s) + "\n}\n";
+            } else {
+                code = "if (" + c + ") {\n " + std::get<0>(if_s) + "\n}\n";
+            }
+
+            isl_ast_expr_free(cond);
+            isl_ast_node_free(if_stmt);
+            isl_ast_node_free(else_stmt);
+            return std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>>(code, "", {});
+        }
     } else {
         std::cerr << "I don't know wtf this isl type is" << std::endl;
         exit(29);
@@ -390,15 +471,15 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
                                                                                    std::string kernel_wrapper_fn,
                                                                                    std::string kernel_body, std::string kernel_wrapper_body,
                                                                                    std::string fatbin_fn) {
-  std::ofstream kernel;
-  kernel.open(kernel_fn);
-  std::ofstream kernel_wrapper;
-  kernel_wrapper.open(kernel_wrapper_fn);
-  // headers
-  kernel << cuda_headers() << std::endl;
-  kernel_wrapper << cuda_headers() << std::endl;
-  // kernel
-  std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
+    std::ofstream kernel;
+    kernel.open(kernel_fn);
+    std::ofstream kernel_wrapper;
+    kernel_wrapper.open(kernel_wrapper_fn);
+    // headers
+    kernel << cuda_headers() << std::endl;
+    kernel_wrapper << cuda_headers() << std::endl;
+    // kernel
+    std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
     std::string kernel_wrapper_signature = "extern \"C\" {\nvoid " + kernel_name + "(";
     std::string kernel_wrapper_signature_no_event = "void " + kernel_name + "_no_event(";
     std::string kernel_params = "  void *kernel_args[] = {";

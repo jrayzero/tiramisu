@@ -1393,7 +1393,7 @@ void tiramisu::computation::tag_distribute_level(int dist_dim)
     this->get_function()->_needs_rank_call = true;
     std::string old_dim_name = isl_map_get_dim_name(this->get_schedule(), isl_dim_out, dist_dim * 2 + 2);
     std::string new_dim_name = "d" + old_dim_name + "d";
-    this->out_dim_name_map.emplace(std::pair<std::string, std::string>(old_dim_name, new_dim_name));
+    this->out_dim_name_map.emplace(std::pair<std::string, std::string>(old_dim_name, old_dim_name));//new_dim_name));
 
     DEBUG_INDENT(-4);
 }

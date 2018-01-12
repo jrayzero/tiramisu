@@ -82,7 +82,7 @@ tiramisu::expr tiramisu_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, bool conv
 int loop_level_into_dynamic_dimension(int level);
 int loop_level_into_static_dimension(int level);
 Halide::Expr halide_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, bool convert_to_loop_type = false);
-
+tiramisu::computation *get_computation_annotated_in_a_node(isl_ast_node *node);
 /**
   * A class to represent functions in Tiramisu. A function in Tiramisu is composed of
   * a set of computations (tiramisu::computation).
@@ -1568,6 +1568,7 @@ private:
       * Except that the loop level in this case is identified using its number. This is
       * used mainly internally by Tiramisu while the other is designed to be user friendly.
       */
+public:
     void before(computation &consumer, int L);
 
     /**
