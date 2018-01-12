@@ -2479,6 +2479,12 @@ public:
 
     void set_schedule_this_comp(bool should_schedule);
 
+    /**
+     * Collapse all the iterations of a loop into one single iteration.
+     */
+    void full_loop_level_collapse(int level, tiramisu::expr collapse_from_iter);
+
+
 protected:
 
     /**
@@ -2486,10 +2492,6 @@ protected:
       */
     isl_ast_expr *wait_index_expr = nullptr;
 
-    /**
-     * Collapse all the iterations of a loop into one single iteration.
-     */
-    void full_loop_level_collapse(int level, tiramisu::expr collapse_from_iter);
 
     /**
      * Partially collapse the iterations of a loop. The part of the loop from collapse_from_iter to collapse_until_iter
