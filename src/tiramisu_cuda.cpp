@@ -13,16 +13,21 @@
 
 extern "C" {
 
+  struct cuda_vars cvars;
+
 // TODO load all at once into one module to reduce overhead of loading module everytime at runtime
 void *tiramisu_init_cuda(int device_num) {
-    struct cuda_vars *cvars = (struct cuda_vars*)malloc(sizeof(struct cuda_vars));
+  //   struct cuda_vars *cvars = (struct cuda_vars*)malloc(sizeof(struct cuda_vars));
     assert(cuInit(0) == 0);
-    assert(cuDeviceGet(&(cvars->device), device_num) == 0);
+    assert(cuDeviceGet(&(cvars.device), device_num) == 0);
     size_t memory;
-    cuDeviceTotalMem(&memory, cvars->device);
+    assert(cuDeviceTotalMem(&memory, cvars.device) == 0);
     fprintf(stderr, "Total memory on device %d is %lu\n", device_num, memory);
-    assert(cuCtxCreate(&(cvars[0].ctx), 0, cvars[0].device) == 0);
-    return (void*)cvars;
+    assert(cuCtxCreate(&(cvars.ctx), 0, cvars.device) == 0);
+    assert(cuModuleLoad(&cvars.mod1, "/tmp/tiramisu_CUDA_kernel_bx.fatbin") == 0);
+    assert(cuModuleLoad(&cvars.mod2, "/tmp/tiramisu_CUDA_kernel_by.fatbin") == 0);
+
+    return (void*)(&cvars);
 }
 
 inline void tiramisu_check_cudad_error(const char *wrapper_name, CUresult code) {
@@ -34,6 +39,10 @@ inline void tiramisu_check_cudad_error(const char *wrapper_name, CUresult code) 
         exit(29);
     }
 }
+
+   void tiramisu_cudad_ctx_sync() {
+    tiramisu_check_cudad_error("tiramisu_cudad_ctx_sync", cuCtxSynchronize());
+  }
 
 inline void _tiramisu_cudad_malloc(CUdeviceptr *device_ptr, size_t bytes) {
   tiramisu_check_cudad_error("tiramisu_cudad_malloc", cuMemAlloc(device_ptr, bytes));
@@ -126,7 +135,6 @@ struct halide_buffer_t *tiramisu_cudad_malloc(size_t bytes) {
     _tiramisu_cudad_malloc(&p, bytes);
     struct halide_buffer_t *buff = (halide_buffer_t*)malloc(sizeof(struct halide_buffer_t));
     buff->device = p;
-    fprintf(stderr, "gpu malloc %lu bytes at %p\n", bytes, (void*)p); 
     return buff;
 }
 

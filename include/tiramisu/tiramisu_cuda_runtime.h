@@ -7,9 +7,15 @@
 
 #include "cuda.h"
 
+extern "C" {
 struct cuda_vars {
     CUdevice device;
     CUcontext ctx;
+  CUmodule mod1;
+  CUmodule mod2;
 };
+
+extern struct cuda_vars cvars;
+}
 
 #endif //TIRAMISU_TIRAMISU_CUDA_RUNTIME_H

@@ -545,9 +545,10 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     int k = 0;
     for (std::string v : closure_vars_no_type) {
         other_params.push_back(v);
-        device_params += "\n  CUdeviceptr DEVICE_" + v + "; cuMemAlloc(&DEVICE_" + v + ", sizeof(" + v + ")); cuMemcpyHtoD(DEVICE_" + v + ", &" + v + ", sizeof(" + v + "));\n";
+        device_params += "\n  CUdeviceptr DEVICE_" + v + "; cuMemAlloc(&DEVICE_" + v + ", sizeof(" + v + ")); cuMemcpyHtoDAsync(DEVICE_" + v + ", &" + v + ", sizeof(" + v + "), kernel_stream[0]);\n";
         kernel_params += ", (void*)&DEVICE_" + v;
-        device_free += "\n  cuMemFree(DEVICE_" + v +");\n";
+        // Forces kernel synchronization
+        //        device_free += "\n  cuMemFree(DEVICE_" + v +");\n";
         ptr_to_literal += "\n  " + closure_vars[k] + " = *DEVICE_" + v + ";\n";
         idx++;
         k++;
@@ -564,19 +565,26 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     }
     // wrapper function that the host calls
     std::string stream_convert = "  CUstream *kernel_stream = (CUstream*)_kernel_stream;\n";
-    std::string kernel_launch = stream_convert + "  /*fprintf(stderr, \"grid width %d, grid height %d, grid depth %d, block width %d, block width %d, block depth %d\\n\", grid_width, grid_height, grid_depth, block_width, block_height, block_depth);*/\n  assert(cuLaunchKernel(kernel, grid_width, grid_height, grid_depth, block_width, block_height, block_depth, 0 /*No shmem for now*/, kernel_stream[0], kernel_args, 0) == 0);\n";
-    std::string module_mgmt = "  CUmodule mod; CUfunction kernel;\n";
-    module_mgmt += "  assert(cuModuleLoad(&mod, \"" + fatbin_fn + "\") == 0);\n";
+    std::string kernel_launch =  "  /*fprintf(stderr, \"grid width %d, grid height %d, grid depth %d, block width %d, block width %d, block depth %d\\n\", grid_width, grid_height, grid_depth, block_width, block_height, block_depth);*/\n  assert(cuLaunchKernel(kernel, grid_width, grid_height, grid_depth, block_width, block_height, block_depth, 0 /*No shmem for now*/, kernel_stream[0], kernel_args, 0) == 0);\n";
+    std::string module_mgmt = "";
+    if (kernel_name == "tiramisu_CUDA_kernel_bx") {
+      module_mgmt = "  CUmodule mod = cvars.mod1; CUfunction kernel;\n";
+    } else if (kernel_name == "tiramisu_CUDA_kernel_by") {
+      module_mgmt = "  CUmodule mod = cvars.mod2; CUfunction kernel;\n";
+    } else {
+      assert(false && "Need other kernels");
+    }
+    module_mgmt += "  /*assert(cuModuleLoad(&mod, \"" + fatbin_fn + "\") == 0);*/\n";
     module_mgmt += "  CUresult func_err = cuModuleGetFunction(&kernel, mod, \"DEVICE_" + kernel_name + "\");\n";
     module_mgmt += "  if (func_err != CUDA_SUCCESS) { const char *cuda_err; cuGetErrorName(func_err, &cuda_err); fprintf(stderr, \"CUDA error for cuModuleGetFunction: %s\\n\", cuda_err); assert(false); }\n";
     std::string event_check = "  //if (event != NULL) { cuStreamWaitEvent(kernel_stream[0], event, 0); }\n";
     std::string event_record = "  if(_kernel_event_buff) {\n    CUevent *kernel_event_buff = (CUevent*)_kernel_event_buff;\n";//"  //if (other_event != NULL) { cuEventRecord(other_event, kernel_stream); }\n";
     event_record += "    CUevent event;\n    assert(cuEventCreate(&event, 0) == 0);\n    assert(cuEventRecord(event, kernel_stream[0]) == 0);\n    kernel_event_buff[0] = event;\n  }\n";
     if (!skip) {
-        kernel_wrapper << kernel_wrapper_signature << " {\n" << module_mgmt << device_params << kernel_params
+      kernel_wrapper << kernel_wrapper_signature << " {\n" << stream_convert << module_mgmt << device_params << kernel_params
                        << kernel_wrapper_body
                        << event_check << kernel_launch << device_free << event_record << "\n}\n";
-        kernel_wrapper << kernel_wrapper_signature_no_event << " {\n" << module_mgmt << device_params << kernel_params
+      kernel_wrapper << kernel_wrapper_signature_no_event << " {\n" << stream_convert << module_mgmt << device_params << kernel_params
                        << kernel_wrapper_body
                        << kernel_launch << device_free << "\n}\n}/*extern \"C\"*/\n";
         kernel.close();
@@ -593,12 +601,12 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
 // compile the kernel file to an object file that can later be linked in
 void compile_kernel_to_obj(std::string kernel_fn, std::string kernel_wrapper_fn) {
     // Generate a fat binary with a cubin file from the kernel
-    std::string cmd = "nvcc --default-stream per-thread -I/Users/JRay/ClionProjects/tiramisu/include -I/data/hltemp/jray/tiramisu/include -I/data/hltemp/jray/tiramisu/Halide/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O0 --std=c++11 " + kernel_fn + " --fatbin -odir /tmp/";
+    std::string cmd = "nvcc --default-stream per-thread -I/Users/JRay/ClionProjects/tiramisu/include -I/data/hltemp/jray/tiramisu/include -I/data/hltemp/jray/tiramisu/Halide/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_fn + " --fatbin -odir /tmp/";
     std::cerr << "cmd: " << cmd << std::endl;
     int ret = system(cmd.c_str());
     assert(ret == 0 && "Non-zero exit code for nvcc invocation");
     //Compile the wrapper into an object file
-    cmd = "nvcc --default-stream per-thread -I/Users/JRay/ClionProjects/tiramisu/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -I/data/hltemp/jray/tiramisu/include -I/data/hltemp/jray/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O0 --std=c++11 " + kernel_wrapper_fn + " -odir /tmp/";
+    cmd = "nvcc --default-stream per-thread -I/Users/JRay/ClionProjects/tiramisu/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -I/data/hltemp/jray/tiramisu/include -I/data/hltemp/jray/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_wrapper_fn + " -odir /tmp/";
     std::cerr << "cmd: " << cmd << std::endl;
     ret = system(cmd.c_str());
     assert(ret == 0 && "Non-zero exit code for nvcc invocation");
