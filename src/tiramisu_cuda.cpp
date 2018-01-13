@@ -36,7 +36,6 @@ inline void tiramisu_check_cudad_error(const char *wrapper_name, CUresult code) 
 }
 
 inline void _tiramisu_cudad_malloc(CUdeviceptr *device_ptr, size_t bytes) {
-  fprintf(stderr, "gpu malloc %lu bytes\n", bytes);
   tiramisu_check_cudad_error("tiramisu_cudad_malloc", cuMemAlloc(device_ptr, bytes));
 }
 
@@ -127,6 +126,7 @@ struct halide_buffer_t *tiramisu_cudad_malloc(size_t bytes) {
     _tiramisu_cudad_malloc(&p, bytes);
     struct halide_buffer_t *buff = (halide_buffer_t*)malloc(sizeof(struct halide_buffer_t));
     buff->device = p;
+    fprintf(stderr, "gpu malloc %lu bytes at %p\n", bytes, (void*)p); 
     return buff;
 }
 

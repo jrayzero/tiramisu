@@ -200,7 +200,7 @@ isl_ast_expr *create_isl_ast_index_expression(isl_ast_build *build,
         std::string sched2 = isl_map_to_str(schedule);
         parts.clear();
         split_string(sched2, " ", parts);
-        if (parts[parts.size() - 2] == "false") { // This is a dead loop probably. Super hacky--just leave it alone
+        if (parts[parts.size() - 2] == "false" || (parts[parts.size() - 2] == "0" && parts[parts.size() - 3] == "=" && parts[parts.size() - 4] == "1")) { // This is a dead loop probably. Super hacky--just leave it alone
             schedule = orig_sched;
         }
     }

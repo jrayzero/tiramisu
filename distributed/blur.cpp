@@ -181,6 +181,7 @@ int main() {
     xfer_prop h2h_mpi_async_nonblock(T_DATA_TYPE, {ASYNC, NONBLOCK, MPI, CPU2CPU});
     xfer_prop h2d_cuda_sync(T_DATA_TYPE, {SYNC, CUDA, CPU2GPU});
     xfer_prop h2d_cuda_async(T_DATA_TYPE, {ASYNC, CUDA, CPU2GPU}, 1);
+    xfer_prop kernel_stream(T_DATA_TYPE, {ASYNC, CUDA}, 0);
     xfer_prop d2h_cuda_sync(T_DATA_TYPE, {SYNC, CUDA, GPU2CPU});
     xfer_prop d2h_cuda_async(T_DATA_TYPE, {ASYNC, CUDA, GPU2CPU}, 2);
 
@@ -203,7 +204,7 @@ int main() {
     gpu_to_cpu.os->split(y, rows_per_proc, y1, y2);
     // We want to insert a new computation here that computes bx of the two extra rows. This gives us recomputation
     // instead of communication, which is cheaper for us. The last proc doesn't need to do anything though.
-    tiramisu::wait cpu_to_gpu_wait(input_cpu_to_gpu.os->operator()(y, x), input_cpu_to_gpu.os->get_channel(), &blur_dist);
+    tiramisu::wait cpu_to_gpu_wait(input_cpu_to_gpu.os->operator()(y, x), kernel_stream, &blur_dist);
     cpu_to_gpu_wait.split(y, rows_per_proc, y1, y2);
     tiramisu::wait gpu_to_cpu_wait(gpu_to_cpu.os->operator()(y, x), gpu_to_cpu.os->get_channel(), &blur_dist);
     gpu_to_cpu_wait.split(y, rows_per_proc, y1, y2);
@@ -228,6 +229,13 @@ int main() {
     by.before(kernel_by_wait, y2);//computation::root);
     kernel_by_wait.before(*gpu_to_cpu.os, y2);//computation::root);
     gpu_to_cpu.os->before(gpu_to_cpu_wait, computation::root); // cause I'm not gonna use it again
+
+    //    gpu_to_cpu.os->set_schedule_this_comp(false);
+    //    kernel_by_wait.set_schedule_this_comp(false);
+    //    by.set_schedule_this_comp(false);
+    //    bx.set_schedule_this_comp(false);
+    //    gpu_to_cpu_wait.set_schedule_this_comp(false);
+    //    cpu_to_gpu_wait.set_schedule_this_comp(false);
 
     input_cpu_to_gpu.os->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
     cpu_to_gpu_wait.collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
@@ -262,6 +270,15 @@ int main() {
 
     tiramisu::buffer buff_kernel_by_wait("buff_kernel_by_wait", {rows_per_proc}, tiramisu::p_wait_ptr,
                                          tiramisu::a_temporary, &blur_dist);
+
+    //    kernel_by_wait.set_schedule_this_comp(false);
+    //    by.set_schedule_this_comp(false);
+    //    gpu_to_cpu.os->set_schedule_this_comp(false);
+    //    gpu_to_cpu_wait.set_schedule_this_comp(false);
+    //    cpu_to_gpu_wait.set_schedule_this_comp(false);
+    //    bx.set_schedule_this_comp(false);
+    //    input_cpu_to_gpu.os->set_schedule_this_comp(false);
+    
 
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
 

@@ -593,12 +593,12 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
 // compile the kernel file to an object file that can later be linked in
 void compile_kernel_to_obj(std::string kernel_fn, std::string kernel_wrapper_fn) {
     // Generate a fat binary with a cubin file from the kernel
-    std::string cmd = "nvcc --default-stream per-thread -I/Users/JRay/ClionProjects/tiramisu/include -I/data/hltemp/jray/tiramisu/include -I/data/hltemp/jray/tiramisu/Halide/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_fn + " --fatbin -odir /tmp/";
+    std::string cmd = "nvcc --default-stream per-thread -I/Users/JRay/ClionProjects/tiramisu/include -I/data/hltemp/jray/tiramisu/include -I/data/hltemp/jray/tiramisu/Halide/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O0 --std=c++11 " + kernel_fn + " --fatbin -odir /tmp/";
     std::cerr << "cmd: " << cmd << std::endl;
     int ret = system(cmd.c_str());
     assert(ret == 0 && "Non-zero exit code for nvcc invocation");
     //Compile the wrapper into an object file
-    cmd = "nvcc --default-stream per-thread -I/Users/JRay/ClionProjects/tiramisu/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -I/data/hltemp/jray/tiramisu/include -I/data/hltemp/jray/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_wrapper_fn + " -odir /tmp/";
+    cmd = "nvcc --default-stream per-thread -I/Users/JRay/ClionProjects/tiramisu/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -I/data/hltemp/jray/tiramisu/include -I/data/hltemp/jray/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O0 --std=c++11 " + kernel_wrapper_fn + " -odir /tmp/";
     std::cerr << "cmd: " << cmd << std::endl;
     ret = system(cmd.c_str());
     assert(ret == 0 && "Non-zero exit code for nvcc invocation");
