@@ -165,12 +165,12 @@ int main() {
     bx.split(y, rows_per_proc, y1, y2);
     //    bx.split(y2, 50, y3, y4);
     //    bx.split(y3, 10, y5, y6);
-    bx.split(x, 50, x1, x2);
+    bx.split(x, 1000, x1, x2);
 
     by.split(y, rows_per_proc, y1, y2);
     //    by.split(y2, 50, y3, y4);
     //    by.split(y3, 10, y5, y6);
-    by.split(x, 50, x1, x2);
+    by.split(x, 1000, x1, x2);
 
     constant rows_per_proc_const("rows_per_proc", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     constant rows_per_node_const("rows_per_node", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);

@@ -23,7 +23,7 @@ void *tiramisu_init_cuda(int device_num) {
     size_t memory;
     assert(cuDeviceTotalMem(&memory, cvars.device) == 0);
     fprintf(stderr, "Total memory on device %d is %lu\n", device_num, memory);
-    assert(cuCtxCreate(&(cvars.ctx), 0, cvars.device) == 0);
+    assert(cuCtxCreate(&(cvars.ctx), CU_CTX_SCHED_BLOCKING_SYNC, cvars.device) == 0);
     assert(cuModuleLoad(&cvars.mod1, "/tmp/tiramisu_CUDA_kernel_bx.fatbin") == 0);
     assert(cuModuleLoad(&cvars.mod2, "/tmp/tiramisu_CUDA_kernel_by.fatbin") == 0);
 

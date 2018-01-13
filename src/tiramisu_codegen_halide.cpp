@@ -1690,8 +1690,9 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                     DEBUG(3, tiramisu::str_dump("Adding a computation to vector of allocate stmts (for later construction)"));
                     allocate_stmts_vector.push_back(comp);
                 }
-                else
-                    block = Halide::Internal::Free::make(comp->get_name());
+                else {
+                  block = Halide::Internal::Free::make(comp->get_name());
+                }
             }
             else
             {
@@ -2455,25 +2456,7 @@ void function::gen_halide_stmt()
             bytes *= Halide::cast(Halide::UInt(64), halide_type_from_tiramisu_type(buf->get_elements_type()).bytes());
             stmt = Halide::Internal::LetStmt::make(buf->get_name(), make_comm_call(Halide::type_of<struct halide_buffer_t *>(), "tiramisu_cudad_malloc",
                                                                                    {bytes}), stmt);
-
-            //            Halide::Expr gpu_buffer = Halide::Internal::Load::make(
-            //                                                                   Halide::Handle(), buf->get_name(), 0, Halide::Buffer<>(),
-            //                                                                       Halide::Internal::Parameter(), Halide::Internal::const_true());
-            //            gpu_buffer = Halide::Internal::Call::make(Halide::Handle(),
-            //                                                          Halide::Internal::Call::address_of, {gpu_buffer},
-            //                                                          Halide::Internal::Call::Intrinsic);
             free_buffs.push_back(buf->get_name());
-
-            //            Halide::Expr gpu_buffer = Halide::Internal::Variable::make(Halide::Handle(),
-            //                                                                       buf->get_name());
-            //            stmt = Halide::Internal::Block::make(Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(),
-            //                                                                                                 "tiramisu_cudad_malloc",
-            //                                                                                                 {gpu_buffer, bytes})), stmt);
-            // I still need this because I don't know how to declare the buffer without this halide allocate.
-            //            stmt = Halide::Internal::Allocate::make(
-            //                    buf->get_name(),
-            //                    halide_type_from_tiramisu_type(buf->get_elements_type()),
-            //                    {1}, Halide::Internal::const_true(), stmt);
             buf->mark_as_allocated();
         }
     }
@@ -2509,10 +2492,6 @@ void function::gen_halide_stmt()
                                                                           std::vector<Halide::Expr>(),
                                                                           Halide::Internal::Call::Extern));
         stmt = Halide::Internal::LetStmt::make("rank", mpi_rank, stmt);
-        //        stmt = Halide::Internal::LetStmt::make("streams", make_comm_call(Halide::type_of<struct halide_buffer_t *>(),
-        //                                                                         "tiramisu_cudad_stream_create", {Halide::Expr((uint64_t)xfer_prop::comm_prop_ids.size())}), stmt);
-        /*        Halide::Expr streams_buffer =
-                Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), "streams.buffer");*/
         Halide::Expr streams_buffer = Halide::Internal::Load::make(
                 Halide::Handle(), "streams", 0, Halide::Buffer<>(),
                 Halide::Internal::Parameter(), Halide::Internal::const_true());
@@ -2529,7 +2508,7 @@ void function::gen_halide_stmt()
 
     // Add producer tag
     stmt = Halide::Internal::ProducerConsumer::make_produce("", stmt);
-
+    std::cerr << stmt << std::endl;
     this->halide_stmt = stmt;
 
     DEBUG(3, tiramisu::str_dump("\n\nGenerated Halide stmt before lowering:"));
@@ -3700,7 +3679,7 @@ void function::gen_halide_obj(const std::string &obj_file_name, Halide::Target::
 
     m.compile(Halide::Outputs().object(obj_file_name));
     m.compile(Halide::Outputs().c_header(obj_file_name + ".h"));
-    m.compile(Halide::Outputs().c_source(obj_file_name + ".c"));
+    //    m.compile(Halide::Outputs().c_source(obj_file_name + ".c"));
     m.compile(Halide::Outputs().llvm_assembly(obj_file_name + ".ll"));
 }
 
