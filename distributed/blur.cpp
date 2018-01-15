@@ -68,7 +68,6 @@ int main() {
     // Layer II common
     // -------------------------------------------------------
 
-
     constant procs_const("procs", expr(procs), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     constant nodes_const("nodes", expr(nodes), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
@@ -105,10 +104,10 @@ int main() {
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(rows_per_proc), tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);
 
-    tiramisu::buffer buff_bx("buff_bx", {bx_select_dim0, tiramisu::expr(cols)},// - 2)},
+    tiramisu::buffer buff_bx("buff_bx", {bx_select_dim0, tiramisu::expr(cols)},
                                  T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
-    tiramisu::buffer buff_by("buff_by", {by_select_dim0, tiramisu::expr(cols)},// - 2)},
+    tiramisu::buffer buff_by("buff_by", {by_select_dim0, tiramisu::expr(cols)},
                                  T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
@@ -137,12 +136,12 @@ int main() {
     by.tag_vector_level(x2, 8);
 #endif
 
-    bx.before(by, x1);//computation::root);
+    bx.before(by, x1);
 
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(rows_per_proc), tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);
 
-    tiramisu::buffer buff_bx("buff_bx", {rows, tiramisu::expr(cols)},// - 2)},
+    tiramisu::buffer buff_bx("buff_bx", {rows, tiramisu::expr(cols)},
                              T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
     tiramisu::buffer buff_by("buff_by", {rows, tiramisu::expr(cols)}, // both were -2 here
@@ -206,7 +205,7 @@ int main() {
     tiramisu::wait cpu_to_gpu_wait(input_cpu_to_gpu.os->operator()(y, x), kernel_stream, &blur_dist);
     cpu_to_gpu_wait.split(y, rows_per_proc, y1, y2);
     cpu_to_gpu_wait.split(y2, offset, y3, y4);
-    tiramisu::wait gpu_to_cpu_wait(gpu_to_cpu.os->operator()(y, x), input_cpu_to_gpu.os->get_channel(), &blur_dist);
+    tiramisu::wait gpu_to_cpu_wait("[procs, rows_per_proc, cols]->{gpu_to_cpu_os_wait[y,x]: " + std::to_string(offset) + "<=y<rows_per_proc and 0<=x<cols}", gpu_to_cpu.os->operator()(y-offset, x), input_cpu_to_gpu.os->get_channel(), true, &blur_dist);
     gpu_to_cpu_wait.split(y, rows_per_proc, y1, y2);
     gpu_to_cpu_wait.split(y2, offset, y3, y4);
 //    gpu_to_cpu_wait.set_schedule_this_comp(false);// don't actually need this waitopop
@@ -226,12 +225,13 @@ int main() {
     gpu_to_cpu_wait.tag_distribute_level(y1, true);
     kernel_by_wait.tag_distribute_level(y1, true);
 
+    gpu_to_cpu_wait.before(*input_cpu_to_gpu.os, y4);
     input_cpu_to_gpu.os->before(cpu_to_gpu_wait, y4);
     cpu_to_gpu_wait.before(bx, y4);
     bx.before(by, y3);
     by.before(kernel_by_wait, y4);
     kernel_by_wait.before(*gpu_to_cpu.os, y4);
-    gpu_to_cpu.os->before(gpu_to_cpu_wait, y4);
+    //    gpu_to_cpu.os->before(gpu_to_cpu_wait, y4);
 
     input_cpu_to_gpu.os->collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
     cpu_to_gpu_wait.collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
