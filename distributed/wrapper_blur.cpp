@@ -24,11 +24,12 @@ int mpi_init() {
 }
 
 void init_gpu(int rank) {
-  if (rank < NODES) {
-    tiramisu_init_cuda(1);
-  } else {
-    tiramisu_init_cuda(1);
-  }
+  //  if (rank < NODES) {
+  //    tiramisu_init_cuda(1);
+  //  } else {
+  //    tiramisu_init_cuda(1);
+  //}
+  tiramisu_init_cuda(rank % 4);
 }
 
 void reset_gpu() {
