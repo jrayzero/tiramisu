@@ -84,7 +84,7 @@ int main() {
     halide_buffer_t buff_input;
     C_DATA_TYPE *pinned_host;
 #ifdef CHECK_RESULTS
-    size_t bytes = COLS * ((rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2) * sizeof(C_DATA_TYPE);
+    size_t bytes = COLS * rows_per_proc * sizeof(C_DATA_TYPE);//((rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2) * sizeof(C_DATA_TYPE);
 #else
     // simulate using a circular buffer. we copy one row at a time anyway
     size_t bytes = COLS * sizeof(C_DATA_TYPE);
@@ -102,23 +102,23 @@ int main() {
     std::cerr << "Pinning output" << std::endl;
     assert(cuMemHostAlloc((void**)&pinned_host_out, bytes, CU_MEMHOSTALLOC_PORTABLE) == 0);
     buff_output.host = (uint8_t*)pinned_host_out;
-    Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS, (rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2);   
+    Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc);//(rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2);   
 #ifdef CHECK_RESULTS
     std::cerr << "Filling buff_input"  << std::endl;
     int next = 0;
-    for (size_t y = 0; y < (size_t)rows_per_proc; y++) {
+    for (size_t y = 0; y < (size_t)rows_per_proc-2; y++) {
       for (size_t x = 0; x < (size_t)COLS; x++) {
         pinned_host[y * (size_t)COLS + x] = (C_DATA_TYPE)(next++ % 1000);
       }
     }
-    if (rank < NODES && NODES != 1) { // need to fill up the last two rows with the first two rows of next rank on the machine. We'll just assume we can algorithmically generate it here
+    //    if (rank < NODES && NODES != 1) { // need to fill up the last two rows with the first two rows of next rank on the machine. We'll just assume we can algorithmically generate it here
       next = 0;
-      for (size_t y = rows_per_proc; y < (size_t)(rows_per_proc + 2); y++) {
+      for (size_t y = rows_per_proc-2; y < (size_t)(rows_per_proc); y++) {
         for (size_t x = 0; x < COLS; x++) {
           pinned_host[y * (size_t)COLS + x] = (C_DATA_TYPE)(next++ % 1000);
         }
       }      
-    }
+      //    }
 #endif // otherwise, don't really care about the actual values b/c we aren't concerned with the filling time
     MPI_Barrier(MPI_COMM_WORLD);
     assert(cuCtxSynchronize() == 0);
@@ -141,7 +141,7 @@ int main() {
       std::string output_fn = "./build/blur_dist_rank_" + std::to_string(rank) + ".txt";
       std::ofstream myfile;
       myfile.open(output_fn);
-      for (size_t y = 0; y < (size_t)rows_per_proc; y++) {
+      for (size_t y = 0; y < ((rank == PROCS - 1) ? (size_t)rows_per_proc-2 : (size_t)rows_per_proc); y++) {
         for (size_t x = 0; x < (size_t)COLS; x++) {
           myfile << pinned_host_out[y * (size_t)COLS + x] << std::endl;
         }

@@ -169,8 +169,6 @@ int main() {
     by.split(x, 1000, x1, x2);
 
     constant rows_per_proc_const("rows_per_proc", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
-    constant rows_per_node_const("rows_per_node", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
-    constant procs_per_node_const("procs_per_node", expr(procs_per_node), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
     xfer_prop h2h_mpi_sync(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
     xfer_prop h2h_mpi_async(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
@@ -185,11 +183,11 @@ int main() {
 
     // Need an  CPU-GPU transfer for each input
     xfer input_cpu_to_gpu = computation::create_xfer(
-            "[procs, rows_per_proc, cols]->{input_cpu_to_gpu_os[y,x]: 0<=y<rows_per_proc and 0<=x<cols}",
+            "[procs, rows_per_proc, cols, rows]->{input_cpu_to_gpu_os[y,x]: 0<=y<rows and 0<=x<cols}",
             h2d_cuda_async, blur_input(y, x), &blur_dist);
     // Transfer the computed data back to the CPU
     xfer gpu_to_cpu =
-            computation::create_xfer("[procs, rows_per_proc, cols]->{gpu_to_cpu_os[y,x]: 0<=y<rows_per_proc and 0<=x<cols}",
+            computation::create_xfer("[procs, rows_per_proc, cols, rows]->{gpu_to_cpu_os[y,x]: 0<=y<rows and 0<=x<cols}",
                                      d2h_cuda_async, by(y, x), &blur_dist);
 
     // True because we need to insert a dummy access since the transfer has 3 dims and blur_input only has 2
@@ -231,31 +229,26 @@ int main() {
     bx.before(by, y3);
     by.before(kernel_by_wait, y4);
     kernel_by_wait.before(*gpu_to_cpu.os, y4);
-    //    gpu_to_cpu.os->before(gpu_to_cpu_wait, y4);
 
     input_cpu_to_gpu.os->collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
     cpu_to_gpu_wait.collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
     gpu_to_cpu.os->collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
     gpu_to_cpu_wait.collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
 
-    tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1,
-                                  tiramisu::expr(offset), tiramisu::expr(cols+2));
-    tiramisu::expr by_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1,
-                                  tiramisu::expr(offset), tiramisu::expr(cols));
 #ifdef CHECK_RESULTS
-    tiramisu::buffer buff_input("buff_input", {bx_select_dim0, tiramisu::expr(cols)}, T_DATA_TYPE,
+    tiramisu::buffer buff_input("buff_input", {offset, tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);
 #else
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);
 #endif
-    tiramisu::buffer buff_input_gpu("buff_input_gpu", {bx_select_dim0, tiramisu::expr(cols)}, T_DATA_TYPE,
+    tiramisu::buffer buff_input_gpu("buff_input_gpu", {offset, tiramisu::expr(cols)}, T_DATA_TYPE,
                                     tiramisu::a_temporary_gpu, &blur_dist);
 
-    tiramisu::buffer buff_bx_gpu("buff_bx_gpu", {bx_select_dim0, tiramisu::expr(cols)},
+    tiramisu::buffer buff_bx_gpu("buff_bx_gpu", {offset, tiramisu::expr(cols)},
                                  T_DATA_TYPE, tiramisu::a_temporary_gpu, &blur_dist);
 
-    tiramisu::buffer buff_by_gpu("buff_by_gpu", {by_select_dim0, tiramisu::expr(cols)},
+    tiramisu::buffer buff_by_gpu("buff_by_gpu", {offset, tiramisu::expr(cols)},
                                  T_DATA_TYPE, tiramisu::a_temporary_gpu, &blur_dist);
 
 #ifdef CHECK_RESULTS
