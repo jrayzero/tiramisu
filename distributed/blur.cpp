@@ -206,10 +206,10 @@ int main() {
     tiramisu::wait cpu_to_gpu_wait(input_cpu_to_gpu.os->operator()(y, x), kernel_stream, &blur_dist);
     cpu_to_gpu_wait.split(y, rows_per_proc, y1, y2);
     cpu_to_gpu_wait.split(y2, offset, y3, y4);
-    tiramisu::wait gpu_to_cpu_wait(gpu_to_cpu.os->operator()(y, x), gpu_to_cpu.os->get_channel(), &blur_dist);
+    tiramisu::wait gpu_to_cpu_wait(gpu_to_cpu.os->operator()(y, x), input_cpu_to_gpu.os->get_channel(), &blur_dist);
     gpu_to_cpu_wait.split(y, rows_per_proc, y1, y2);
     gpu_to_cpu_wait.split(y2, offset, y3, y4);
-    gpu_to_cpu_wait.set_schedule_this_comp(false);// don't actually need this waitopop
+//    gpu_to_cpu_wait.set_schedule_this_comp(false);// don't actually need this waitopop
 
     tiramisu::wait kernel_by_wait("[cols, rows]->{by_wait[y]: 0<=y<rows}", by(y, 0), kernel, true, &blur_dist);
     kernel_by_wait.split(y, rows_per_proc, y1, y2);
@@ -226,12 +226,12 @@ int main() {
     gpu_to_cpu_wait.tag_distribute_level(y1, true);
     kernel_by_wait.tag_distribute_level(y1, true);
 
-    input_cpu_to_gpu.os->before(cpu_to_gpu_wait, y4);//computation::root);//y1);
-    cpu_to_gpu_wait.before(bx, y4);//computation::root);//y1);
+    input_cpu_to_gpu.os->before(cpu_to_gpu_wait, y4);
+    cpu_to_gpu_wait.before(bx, y4);
     bx.before(by, y3);
-    by.before(kernel_by_wait, y4);//computation::root);//y1);
-    kernel_by_wait.before(*gpu_to_cpu.os, y4);//computation::root);//y1);
-    gpu_to_cpu.os->before(gpu_to_cpu_wait, y4);//computation::root); 
+    by.before(kernel_by_wait, y4);
+    kernel_by_wait.before(*gpu_to_cpu.os, y4);
+    gpu_to_cpu.os->before(gpu_to_cpu_wait, y4);
 
     input_cpu_to_gpu.os->collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
     cpu_to_gpu_wait.collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
