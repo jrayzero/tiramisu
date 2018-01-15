@@ -18,7 +18,7 @@
 
 #define CHECK_RESULTS
 
-//#ifdef CHECK_RESULTS
+#ifdef CHECK_RESULTS
 #define ROWS 2000
 #define COLS 45000
 #else
