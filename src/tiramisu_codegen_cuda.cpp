@@ -543,10 +543,12 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         idx++;
     }
     idx = idx2;
+    kernel_wrapper_signature += ", void *_kernel_stream, void *_kernel_event_buff";
+    kernel_wrapper_signature_no_event += ", void *_kernel_stream";
     if (p > 0) { // there are literals to pass in
         //        kernel_signature += ", void* literals";
-        kernel_wrapper_signature += ", halide_buffer_t *literals";
-        kernel_wrapper_signature_no_event += ", halide_buffer_t *literals"; // have to pass in the correct address for the row
+        kernel_wrapper_signature += ", halide_buffer_t *literals)";
+        kernel_wrapper_signature_no_event += ", halide_buffer_t *literals)"; // have to pass in the correct address for the row
     }
 
     std::string device_params = "";
@@ -566,8 +568,6 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     }
     kernel_params += "};\n";
     kernel_signature += ")";
-    kernel_wrapper_signature += ", void *_kernel_stream, void *_kernel_event_buff)";
-    kernel_wrapper_signature_no_event += ", void *_kernel_stream)";
     std::string kernel_code = "extern \"C\" {\n__global__\n";
     kernel_code +=  kernel_signature + " {\n  " + ptr_to_literal + "\n";
     kernel_code += "  " + kernel_body + "\n}\n}/*extern \"C\"*/\n";
