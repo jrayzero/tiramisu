@@ -46,7 +46,7 @@ int main() {
     // -------------------------------------------------------
     // Layer I
     // -------------------------------------------------------
-    int offset = 20000;
+    C_LOOP_ITER_TYPE offset = 200;
     var y(T_LOOP_ITER_TYPE, "y"), x(T_LOOP_ITER_TYPE, "x");
     constant rows_const("rows", expr(rows), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     constant cols_const("cols", expr(cols), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
@@ -209,6 +209,7 @@ int main() {
     tiramisu::wait gpu_to_cpu_wait(gpu_to_cpu.os->operator()(y, x), gpu_to_cpu.os->get_channel(), &blur_dist);
     gpu_to_cpu_wait.split(y, rows_per_proc, y1, y2);
     gpu_to_cpu_wait.split(y2, offset, y3, y4);
+    gpu_to_cpu_wait.set_schedule_this_comp(false);// don't actually need this waitopop
 
     tiramisu::wait kernel_by_wait("[cols, rows]->{by_wait[y]: 0<=y<rows}", by(y, 0), kernel, true, &blur_dist);
     kernel_by_wait.split(y, rows_per_proc, y1, y2);
@@ -238,9 +239,9 @@ int main() {
     gpu_to_cpu_wait.collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
 
     tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1,
-                                  tiramisu::expr(offset), tiramisu::expr(offset+2));
+                                  tiramisu::expr(offset), tiramisu::expr(cols+2));
     tiramisu::expr by_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1,
-                                  tiramisu::expr(offset), tiramisu::expr(offset));
+                                  tiramisu::expr(offset), tiramisu::expr(cols));
 #ifdef CHECK_RESULTS
     tiramisu::buffer buff_input("buff_input", {bx_select_dim0, tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);
@@ -302,7 +303,7 @@ int main() {
     blur_dist.gen_time_space_domain();
     blur_dist.gen_isl_ast();
     blur_dist.gen_halide_stmt();
-    blur_dist.gen_halide_obj("./build/generated_blur_dist.o");//, {Halide::Target::CUDA});//, Halide::Target::Debug});
+    blur_dist.gen_halide_obj("/tmp/generated_blur_dist.o");//, {Halide::Target::CUDA});//, Halide::Target::Debug});
 #endif
 
     blur_dist.dump_halide_stmt();
