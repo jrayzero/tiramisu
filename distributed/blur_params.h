@@ -11,15 +11,21 @@
 //#define GPU_LOAD_FACTOR 80 // put 80% of the data onto the GPU
 #define DISTRIBUTE
 #define PARALLEL
-
+ 
 #define REQ MPI_THREAD_FUNNELED
 #define PRINT_ITER_0
 #define ITERS 1
 
-//#define CHECK_RESULTS
+#define CHECK_RESULTS
 
-#define ROWS 1000 //00
-#define COLS 50000 //00 //100000
+//#ifdef CHECK_RESULTS
+#define ROWS 2000
+#define COLS 45000
+#else
+#define ROWS 20000
+#define COLS 4500000 
+#endif
+
 #if defined(CPU_ONLY) || defined(HYBRID)
 #define T_LOOP_ITER_TYPE tiramisu::p_int64
 #define C_LOOP_ITER_TYPE int64_t
