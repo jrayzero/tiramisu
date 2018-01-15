@@ -41,6 +41,8 @@ class xfer_prop;
 struct transfer;
 struct xfer;
 
+extern std::map<std::string, int> literals_per_kernel;
+
 struct HalideCodegenOutput
 {
     std::map<std::string, tiramisu::computation *> computation_list;

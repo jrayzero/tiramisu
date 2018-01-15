@@ -468,6 +468,7 @@ std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::
 
 // put all the CUDA code for this kernel together
 // SUPERRRRR hacky right here
+std::map<std::string, int> literals_per_kernel;
 std::vector<std::string> already_printed;
 std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_file(std::string kernel_name, std::string kernel_fn,
                                                                                    std::string kernel_wrapper_fn,
@@ -495,7 +496,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     }
     // kernel
     std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
-    std::string kernel_wrapper_signature = "extern \"C\" {\nvoid " + kernel_name + "(";
+    std::string kernel_wrapper_signature = "extern \"C\" {  static size_t " + kernel_name + "_kernel_count = 0;\n  \nvoid " + kernel_name + "(";
     std::string kernel_wrapper_signature_no_event = "void " + kernel_name + "_no_event(";
     std::string kernel_params = "  void *kernel_args[] = {";
     std::vector<std::string> buffer_names;
@@ -525,6 +526,9 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     }
     int idx2 = idx;
     int p = 0;
+    if (!skip) {
+        literals_per_kernel.emplace(std::pair<std::string, int>(kernel_name, closure_vars.size()));
+    }
     for (std::string v : closure_vars) {
         if (idx == 0) {
             kernel_wrapper_signature += v;
@@ -539,15 +543,22 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         idx++;
     }
     idx = idx2;
+    if (p > 0) { // there are literals to pass in
+        //        kernel_signature += ", void* literals";
+        kernel_wrapper_signature += ", halide_buffer_t *literals";
+        kernel_wrapper_signature_no_event += ", halide_buffer_t *literals"; // have to pass in the correct address for the row
+    }
+
     std::string device_params = "";
     std::string device_free = "";
     std::string ptr_to_literal = "";
     int k = 0;
     for (std::string v : closure_vars_no_type) {
         other_params.push_back(v);
-        device_params += "\n  CUdeviceptr DEVICE_" + v + "; cuMemAlloc(&DEVICE_" + v + ", sizeof(" + v + ")); cuMemcpyHtoDAsync(DEVICE_" + v + ", &" + v + ", sizeof(" + v + "), kernel_stream[0]);\n";
+        //        device_params += "\n  CUdeviceptr DEVICE_" + v + "; cuMemAlloc(&DEVICE_" + v + ", sizeof(" + v + ")); cuMemcpyHtoDAsync(DEVICE_" + v + ", &" + v + ", sizeof(" + v + "), kernel_stream[0]);\n";
+        device_params += "\n  CUdeviceptr DEVICE_" + v + " = literals->device + sizeof(" + v + ")*(" + std::to_string(k) + " + " + kernel_name + "_kernel_count)" + "; cuMemcpyHtoDAsync(DEVICE_" + v + ", &" + v + ", sizeof(" + v + "), kernel_stream[0]);\n";
         kernel_params += ", (void*)&DEVICE_" + v;
-        // Forces kernel synchronization
+        // Forces kernel synchronization, don't use
         //        device_free += "\n  cuMemFree(DEVICE_" + v +");\n";
         ptr_to_literal += "\n  " + closure_vars[k] + " = *DEVICE_" + v + ";\n";
         idx++;
@@ -564,15 +575,15 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         kernel << kernel_code << std::endl;
     }
     // wrapper function that the host calls
-    std::string stream_convert = "  CUstream *kernel_stream = (CUstream*)_kernel_stream;\n";
+    std::string stream_convert = "   CUstream *kernel_stream = (CUstream*)_kernel_stream;\n";
     std::string kernel_launch =  "  /*fprintf(stderr, \"grid width %d, grid height %d, grid depth %d, block width %d, block width %d, block depth %d\\n\", grid_width, grid_height, grid_depth, block_width, block_height, block_depth);*/\n  assert(cuLaunchKernel(kernel, grid_width, grid_height, grid_depth, block_width, block_height, block_depth, 0 /*No shmem for now*/, kernel_stream[0], kernel_args, 0) == 0);\n";
     std::string module_mgmt = "";
     if (kernel_name == "tiramisu_CUDA_kernel_bx") {
-      module_mgmt = "  CUmodule mod = cvars.mod1; CUfunction kernel;\n";
+        module_mgmt = "  CUmodule mod = cvars.mod1; CUfunction kernel;\n";
     } else if (kernel_name == "tiramisu_CUDA_kernel_by") {
-      module_mgmt = "  CUmodule mod = cvars.mod2; CUfunction kernel;\n";
+        module_mgmt = "  CUmodule mod = cvars.mod2; CUfunction kernel;\n";
     } else {
-      assert(false && "Need other kernels");
+        assert(false && "Need other kernels");
     }
     module_mgmt += "  /*assert(cuModuleLoad(&mod, \"" + fatbin_fn + "\") == 0);*/\n";
     module_mgmt += "  CUresult func_err = cuModuleGetFunction(&kernel, mod, \"DEVICE_" + kernel_name + "\");\n";
@@ -581,12 +592,12 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     std::string event_record = "  if(_kernel_event_buff) {\n    CUevent *kernel_event_buff = (CUevent*)_kernel_event_buff;\n";//"  //if (other_event != NULL) { cuEventRecord(other_event, kernel_stream); }\n";
     event_record += "    CUevent event;\n    assert(cuEventCreate(&event, 0) == 0);\n    assert(cuEventRecord(event, kernel_stream[0]) == 0);\n    kernel_event_buff[0] = event;\n  }\n";
     if (!skip) {
-      kernel_wrapper << kernel_wrapper_signature << " {\n" << stream_convert << module_mgmt << device_params << kernel_params
+        kernel_wrapper << kernel_wrapper_signature << " {\n" << stream_convert << module_mgmt << device_params << kernel_params
                        << kernel_wrapper_body
-                       << event_check << kernel_launch << device_free << event_record << "\n}\n";
-      kernel_wrapper << kernel_wrapper_signature_no_event << " {\n" << stream_convert << module_mgmt << device_params << kernel_params
+                       << event_check << kernel_launch << device_free << event_record << kernel_name <<  "_kernel_count++;\n}\n";
+        kernel_wrapper << kernel_wrapper_signature_no_event << " {\n" << stream_convert << module_mgmt << device_params << kernel_params
                        << kernel_wrapper_body
-                       << kernel_launch << device_free << "\n}\n}/*extern \"C\"*/\n";
+                       << kernel_launch << device_free << kernel_name << "_kernel_count++;\n}\n}/*extern \"C\"*/\n";
         kernel.close();
         kernel_wrapper.close();
     }
@@ -807,12 +818,11 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
                 break;
             case isl_ast_op_fdiv_q:
             case isl_ast_op_pdiv_q:
-                //                assert(false);
                 result = "(" + c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + ")(" + op0 + " / " + op1 + ")";
                 break;
             case isl_ast_op_zdiv_r:
             case isl_ast_op_pdiv_r:
-                assert(false);
+                result = "(" + op0 + " % " + op1 + ")";
                 break;
             case isl_ast_op_select:
             case isl_ast_op_cond:

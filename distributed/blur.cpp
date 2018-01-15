@@ -274,7 +274,12 @@ int main() {
 
     tiramisu::buffer buff_kernel_by_wait("buff_kernel_by_wait", {rows_per_proc}, tiramisu::p_wait_ptr,
                                          tiramisu::a_temporary, &blur_dist);
-    
+
+    tiramisu::buffer buff_bx_literals("buff_bx_literals", {rows_per_proc, 3}, T_LOOP_ITER_TYPE, tiramisu::a_temporary_gpu,
+                                      &blur_dist);
+    tiramisu::buffer buff_by_literals("buff_by_literals", {rows_per_proc, 3}, T_LOOP_ITER_TYPE, tiramisu::a_temporary_gpu,
+                                      &blur_dist);
+
 #ifdef CHECK_RESULTS
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
 #else

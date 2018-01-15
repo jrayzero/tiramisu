@@ -2152,10 +2152,15 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                                                        Halide::Internal::Call::address_of, {result2},
                                                        Halide::Internal::Call::Intrinsic);
                 kernel_params.push_back(result2);
+                // Add on the buffer for holding literals
+                // TODO we assume that the buffer name is buff_<comp_name>_literals, which is awful
+
             } else {
                 kernel += "_no_event";
             }
-
+            Halide::Expr var = Halide::Internal::Variable::make(
+                    halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()), "buff_" + comp_name + "_literals");
+            kernel_params.push_back(var);
             result = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), kernel, kernel_params));
             for (auto n : std::get<3>(kernel_fn_and_buffer_names)) {
                 std::string let_name = n.first + "_" + kernel;
