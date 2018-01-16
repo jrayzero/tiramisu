@@ -589,6 +589,8 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         module_mgmt = "  CUmodule mod = cvars.mod1; CUfunction kernel;\n";
     } else if (kernel_name == "tiramisu_CUDA_kernel_by") {
         module_mgmt = "  CUmodule mod = cvars.mod2; CUfunction kernel;\n";
+    } else if (kernel_name == "tiramisu_CUDA_kernel_recompute") {
+        module_mgmt = "  CUmodule mod = cvars.mod3; CUfunction kernel;\n";
     } else {
         assert(false && "Need other kernels");
     }
