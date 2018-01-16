@@ -250,7 +250,6 @@ blur_dist.set_arguments({&buff_input, &buff_bx, &buff_by});*/
     tiramisu::wait gpu_to_cpu_wait("[procs, rows_per_proc, cols]->{gpu_to_cpu_os_wait[y,x]: " + std::to_string(offset) + "<=y<rows_per_proc and 0<=x<cols}", gpu_to_cpu.os->operator()(y-offset, x), input_cpu_to_gpu.os->get_channel(), true, &blur_dist);
     gpu_to_cpu_wait.split(y, rows_per_proc, y1, y2);
     gpu_to_cpu_wait.split(y2, offset, y3, y4);
-//    gpu_to_cpu_wait.set_schedule_this_comp(false);// don't actually need this waitopop
 
     tiramisu::wait kernel_by_wait("[cols, rows]->{by_wait[y]: 0<=y<rows}", by(y, 0), kernel, true, &blur_dist);
     kernel_by_wait.split(y, rows_per_proc, y1, y2);
@@ -280,7 +279,7 @@ blur_dist.set_arguments({&buff_input, &buff_bx, &buff_by});*/
     gpu_to_cpu_wait.collapse_many({collapser(3, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols)});
 
 #ifdef CHECK_RESULTS
-    tiramisu::buffer buff_input("buff_input", {offset, tiramisu::expr(cols)}, T_DATA_TYPE,
+    tiramisu::buffer buff_input("buff_input", {rows_per_proc, tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);
 #else
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(cols)}, T_DATA_TYPE,
