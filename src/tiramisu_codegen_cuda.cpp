@@ -486,19 +486,26 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         kernel.open(kernel_fn);
     }
     std::ofstream kernel_wrapper;
+    std::ofstream kernel_wrapper_header;
     if (!skip) {
         kernel_wrapper.open(kernel_wrapper_fn);
+        kernel_wrapper_header.open(kernel_fn + ".h");
     }
     // headers
     if (!skip) {
         kernel << cuda_headers() << std::endl;
-        kernel_wrapper << cuda_headers() << std::endl;
+        kernel_wrapper << cuda_headers() << "#include \"" + kernel_fn + ".h\""<< std::endl;
     }
     // kernel
     std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
     std::string kernel_wrapper_signature = "extern \"C\" {  static size_t " + kernel_name + "_kernel_count = 0;\n  \nvoid " + kernel_name + "(";
     std::string kernel_wrapper_signature_no_event = "void " + kernel_name + "_no_event(";
     std::string kernel_params = "  void *kernel_args[] = {";
+    std::string clear_static_var = "\nvoid clear_static_var_" + kernel_name + "() { " + kernel_name + "_kernel_count = 0; }\n";
+    if (!skip) {
+      kernel_wrapper_header << "extern \"C\" { \nvoid clear_static_var_" + kernel_name + "(); }\n" << std::endl;
+      kernel_wrapper_header.close();
+    }
     std::vector<std::string> buffer_names;
     std::vector<std::string> other_params;
     int idx = 0;
@@ -597,7 +604,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
                        << event_check << kernel_launch << device_free << event_record << kernel_name <<  "_kernel_count++;\n}\n";
         kernel_wrapper << kernel_wrapper_signature_no_event << " {\n" << stream_convert << module_mgmt << device_params << kernel_params
                        << kernel_wrapper_body
-                       << kernel_launch << device_free << kernel_name << "_kernel_count++;\n}\n}/*extern \"C\"*/\n";
+                       << kernel_launch << device_free << kernel_name << "_kernel_count++;\n}" << clear_static_var << "\n}/*extern \"C\"*/\n";
         kernel.close();
         kernel_wrapper.close();
     }

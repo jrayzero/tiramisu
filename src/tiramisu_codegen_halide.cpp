@@ -2421,10 +2421,12 @@ void function::gen_halide_stmt()
             free_buffs.push_back(buf->get_name());
         }
     }
+    if (use_gpu) {
       stmt = Halide::Internal::Block::make(stmt, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cudad_ctx_sync", {})));
-    for (auto s : free_buffs) {
+      for (auto s : free_buffs) {
         Halide::Expr gpu_buffer = Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), s);
         stmt = Halide::Internal::Block::make(stmt, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cudad_free", {gpu_buffer})));
+      }
     }
 
     for (const auto &b : this->get_buffers())

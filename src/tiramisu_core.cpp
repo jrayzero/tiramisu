@@ -20,7 +20,7 @@ namespace tiramisu
 std::map<std::string, computation *> computations_list;
 bool global::auto_data_mapping;
 primitive_t global::loop_iterator_type;
-
+  bool use_gpu = false;
 
 // Used for the generation of new variable names.
 const var computation::root = var("root");
@@ -1226,6 +1226,7 @@ std::string generate_new_variable_name()
 }
 
 void computation::tag_gpu_level2(tiramisu::var L0_var, tiramisu::var L1_var, int comm_prop_id) {
+  use_gpu = true;
   DEBUG_FCT_NAME(3);
   DEBUG_INDENT(4);
 
@@ -1244,6 +1245,7 @@ void computation::tag_gpu_level2(tiramisu::var L0_var, tiramisu::var L1_var, int
 }
 
 void computation::tag_gpu_level2(tiramisu::var L0_var, tiramisu::var L1_var, tiramisu::var L2_var, tiramisu::var L3_var, int comm_prop_id) {
+  use_gpu = true;
   DEBUG_FCT_NAME(3);
   DEBUG_INDENT(4);
 
