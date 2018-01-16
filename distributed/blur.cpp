@@ -72,8 +72,8 @@ int main() {
     constant nodes_const("nodes", expr(nodes), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
 #ifdef CPU_ONLY
-    #ifdef DISTRIBUTE
-    var y1("y1"), y2("y2"), q("q");
+#ifdef DISTRIBUTE
+    var y1("y1"), y2("y2"), y3("y3"), y4("y4"), x1("x1"), x2("x2"), q("q");
     bx.split(y, rows_per_proc, y1, y2);
     by.split(y, rows_per_proc, y1, y2);
     xfer_prop sync_block(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
@@ -92,6 +92,23 @@ int main() {
     bx.tag_distribute_level(y1);
     by.tag_distribute_level(y1);
 
+#ifdef PARALLEL
+    assert(false);
+    var y5("y5"), y6("y6");
+    bx.tile(y2, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
+    by.tile(y2, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
+    bx.split(y3, 100, y5, y6);
+    by.split(y3, 100, y5, y6);
+    //    bx.tag_parallel_level(y3);
+    //    by.tag_parallel_level(y3);
+#else
+    //    bx.tile(y2, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
+    //    by.tile(y2, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
+    //    bx.tag_vector_level(x2, 8);
+    //    by.tag_vector_level(x2, 8);
+#endif
+
+
     bx_exchange.s->tag_distribute_level(q, false);
     bx_exchange.r->tag_distribute_level(q, false);
 
@@ -101,28 +118,47 @@ int main() {
     tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1, tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc));
     tiramisu::expr by_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1, tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc));
 
-    tiramisu::buffer buff_input("buff_input", {tiramisu::expr(rows_per_proc), tiramisu::expr(cols)}, T_DATA_TYPE,
+#ifdef CHECK_RESULTS
+    tiramisu::buffer buff_input("buff_input", {offset, tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);
+#else
+    tiramisu::buffer buff_input("buff_input", {tiramisu::expr(cols)}, T_DATA_TYPE,
+                                tiramisu::a_input, &blur_dist);
+#endif
 
     tiramisu::buffer buff_bx("buff_bx", {bx_select_dim0, tiramisu::expr(cols)},
                                  T_DATA_TYPE, tiramisu::a_output, &blur_dist);
 
-    tiramisu::buffer buff_by("buff_by", {by_select_dim0, tiramisu::expr(cols)},
-                                 T_DATA_TYPE, tiramisu::a_output, &blur_dist);
+#ifdef CHECK_RESULTS
+    tiramisu::buffer buff_by("buff_by", {rows_per_proc, tiramisu::expr(cols)},
+                             T_DATA_TYPE, tiramisu::a_output, &blur_dist);
+#else
+    tiramisu::buffer buff_by("buff_by", {tiramisu::expr(cols)},
+                             T_DATA_TYPE, tiramisu::a_output, &blur_dist);
+#endif
 
+
+#ifdef CHECK_RESULTS
     blur_input.set_access("{blur_input[i1, i0]->buff_input[i1, i0]}");
+#else
+    blur_input.set_access("{blur_input[i1, i0]->buff_input[i0]}");
+#endif
+#ifdef CHECK_RESULTS
+    by.set_access("{by[y, x]->buff_by[y, x]}");
+#else
+    by.set_access("{by[y, x]->buff_by[y]}");
+#endif
 
     bx.set_access("{bx[y, x]->buff_bx[y, x]}");
-    by.set_access("{by[y, x]->buff_by[y, x]}");
 
     bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_bx[" + std::to_string(rows_per_proc) + " + y, x]}");
 
     blur_dist.lift_dist_comps();
     blur_dist.set_arguments({&buff_input, &buff_bx, &buff_by});
-#else
+    /*    #else
     var y1(T_LOOP_ITER_TYPE, "y1"), y2(T_LOOP_ITER_TYPE, "y2"), x1(T_LOOP_ITER_TYPE, "x1"), x2(T_LOOP_ITER_TYPE, "x2");
-    var y3(T_LOOP_ITER_TYPE, "y3"), y4(T_LOOP_ITER_TYPE, "y4");
-#ifdef PARALLEL
+    var y3(T_LOOP_ITER_TYPE, "y3"), y4(T_LOOP_ITER_TYPE, "y4")
+      #ifdef PARALLEL
     bx.split(y, 13500, y3, y4);
     by.split(y, 13500, y3, y4);
     bx.tile(y4, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y1, x1, y2, x2);
@@ -134,7 +170,7 @@ int main() {
     by.tile(y, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y1, x1, y2, x2);
     bx.tag_vector_level(x2, 8);
     by.tag_vector_level(x2, 8);
-#endif
+    #endif
 
     bx.before(by, x1);
 
@@ -159,7 +195,7 @@ int main() {
 #else
     by.set_access("{by[y, x]->buff_by[y]}");
 #endif
-    blur_dist.set_arguments({&buff_input, &buff_bx, &buff_by});
+blur_dist.set_arguments({&buff_input, &buff_bx, &buff_by});*/
 #endif
     blur_dist.gen_time_space_domain();
     blur_dist.gen_isl_ast();

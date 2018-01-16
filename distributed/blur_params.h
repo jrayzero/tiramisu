@@ -5,20 +5,20 @@
 #ifndef TIRAMISU_BLUR_PARAMS_H
 #define TIRAMISU_BLUR_PARAMS_H
 
-#define CPU_ONLY
-//#define GPU_ONLY
+//#define CPU_ONLY
+#define GPU_ONLY
 #define DISTRIBUTE
 //#define PARALLEL
  
 #define REQ MPI_THREAD_FUNNELED
 #define PRINT_ITER_0
-#define ITERS 10
+#define ITERS 1
 
-//#define CHECK_RESULTS
+#define CHECK_RESULTS
 
 #ifdef CHECK_RESULTS
-#define ROWS 4000
-#define COLS 45000
+#define ROWS 20000//4000
+#define COLS 480//0
 #else
 #define ROWS 20000
 #define COLS 4500000 
