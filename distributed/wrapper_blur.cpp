@@ -13,6 +13,13 @@
 #include "cuda.h"
 #include "Halide.h"
 #include <math.h>
+#ifdef GPU_ONLY
+#include "/tmp/tiramisu_CUDA_kernel_bx.cu.h"
+#include "/tmp/tiramisu_CUDA_kernel_by.cu.h"
+#endif
+
+extern void clear_static_var_tiramisu_CUDA_kernel_bx();
+extern void clear_static_var_tiramisu_CUDA_kernel_by();
 
 int mpi_init() {
   int provided = -1;
@@ -29,7 +36,11 @@ void init_gpu(int rank) {
   //  } else {
   //    tiramisu_init_cuda(1);
   //}
-  tiramisu_init_cuda(rank % 4);
+  if (PROCS == 2 && rank == 1) {
+    tiramisu_init_cuda(2);
+  } else {
+    tiramisu_init_cuda(rank % 4);
+  }
 }
 
 void reset_gpu() {
@@ -76,7 +87,7 @@ void check_results() {
 int main() {
 #ifdef GPU_ONLY
   int rank = mpi_init();
-
+    std::cerr << "Running CPU version" << std::endl;
   std::vector<std::chrono::duration<double,std::milli>> duration_vector;
   C_LOOP_ITER_TYPE rows_per_proc = (C_LOOP_ITER_TYPE)ceil(ROWS/PROCS); 
 
@@ -103,7 +114,6 @@ int main() {
     std::cerr << "Pinning output" << std::endl;
     assert(cuMemHostAlloc((void**)&pinned_host_out, bytes, CU_MEMHOSTALLOC_PORTABLE) == 0);
     buff_output.host = (uint8_t*)pinned_host_out;
-    Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc);//(rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2);   
 #ifdef CHECK_RESULTS
     std::cerr << "Filling buff_input"  << std::endl;
     int next = 0;
@@ -153,9 +163,12 @@ int main() {
     MPI_Barrier(MPI_COMM_WORLD);
     std::cerr << "Calling synchronize" << std::endl;
     assert(cuCtxSynchronize() == 0);
-    cuMemFreeHost(pinned_host);
-    cuMemFreeHost(pinned_host_out);
+    assert(cuMemFreeHost(pinned_host) == 0);
+    assert(cuMemFreeHost(pinned_host_out) == 0);
+    clear_static_var_tiramisu_CUDA_kernel_bx();
+    clear_static_var_tiramisu_CUDA_kernel_by();
     reset_gpu();
+    MPI_Barrier(MPI_COMM_WORLD);
   }
     
   if (rank == 0) {
@@ -168,6 +181,98 @@ int main() {
   }
   std::cerr << "DONE with rank " << rank << std::endl;
   MPI_Finalize();
+#else // CPU version
+  int rank = mpi_init();
+  if (rank == 0) {
+    std::cerr << "Running CPU version" << std::endl;
+  }
+  std::vector<std::chrono::duration<double,std::milli>> duration_vector;
+  C_LOOP_ITER_TYPE rows_per_proc = (C_LOOP_ITER_TYPE)ceil(ROWS/PROCS); 
+
+  for (int i = 0; i < ITERS; i++) {
+    halide_buffer_t buff_input;
+    C_DATA_TYPE *pinned_host;
+#ifdef CHECK_RESULTS
+    size_t bytes = COLS * rows_per_proc * sizeof(C_DATA_TYPE);//((rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2) * sizeof(C_DATA_TYPE);
+#else
+    // simulate using a circular buffer. we copy one row at a time anyway
+    size_t bytes = COLS * sizeof(C_DATA_TYPE);
+#endif
+    std::cerr << "Pinning input" << std::endl;
+    pinned_host = (C_DATA_TYPE*)malloc(bytes);
+    buff_input.host = (uint8_t*)pinned_host;
+    halide_buffer_t buff_output;
+    C_DATA_TYPE *pinned_host_out;
+#ifdef CHECK_RESULTS
+    bytes = COLS * rows_per_proc * sizeof(C_DATA_TYPE);
+#else
+    bytes = COLS * sizeof(C_DATA_TYPE);
+#endif
+    std::cerr << "Pinning output" << std::endl;
+    pinned_host_out = (C_DATA_TYPE*)malloc(bytes);
+    buff_output.host = (uint8_t*)pinned_host_out;
+    Halide::Buffer<C_DATA_TYPE> buff_bx = Halide::Buffer<C_DATA_TYPE>(COLS, rows_per_proc);//(rank == PROCS - 1) ? rows_per_proc : rows_per_proc + 2);   
+#ifdef CHECK_RESULTS
+    std::cerr << "Filling buff_input"  << std::endl;
+    int next = 0;
+    for (size_t y = 0; y < (size_t)rows_per_proc-2; y++) {
+      for (size_t x = 0; x < (size_t)COLS; x++) {
+        pinned_host[y * (size_t)COLS + x] = (C_DATA_TYPE)(next++ % 1000);
+      }
+    }
+    //    if (rank < NODES && NODES != 1) { // need to fill up the last two rows with the first two rows of next rank on the machine. We'll just assume we can algorithmically generate it here
+      next = 0;
+      for (size_t y = rows_per_proc-2; y < (size_t)(rows_per_proc); y++) {
+        for (size_t x = 0; x < COLS; x++) {
+          pinned_host[y * (size_t)COLS + x] = (C_DATA_TYPE)(next++ % 1000);
+        }
+      }      
+      //    }
+#endif // otherwise, don't really care about the actual values b/c we aren't concerned with the filling time
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (rank == 0) {
+      std::cerr << "Starting iter: " << i << std::endl;
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    auto start = std::chrono::high_resolution_clock::now();
+    blur_dist(&buff_input, &buff_bx, &buff_output);
+    MPI_Barrier(MPI_COMM_WORLD);
+    auto end = std::chrono::high_resolution_clock::now();
+    if (rank == 0) {
+      std::chrono::duration<double,std::milli> duration = end - start;
+      duration_vector.push_back(duration);
+      std::cerr << "Iteration " << i << " done in " << duration.count() << "ms." << std::endl;
+    }
+#if defined(CHECK_RESULTS) && defined(DISTRIBUTE)
+    if (i == 0) {
+      std::string output_fn = "./build/blur_dist_rank_" + std::to_string(rank) + ".txt";
+      std::ofstream myfile;
+      myfile.open(output_fn);
+      for (size_t y = 0; y < ((rank == PROCS - 1) ? (size_t)rows_per_proc-2 : (size_t)rows_per_proc); y++) {
+        for (size_t x = 0; x < (size_t)COLS; x++) {
+          myfile << pinned_host_out[y * (size_t)COLS + x] << std::endl;
+        }
+      }
+      myfile.close();
+    }
+#endif
+    MPI_Barrier(MPI_COMM_WORLD);
+    free(pinned_host);
+    free(pinned_host_out);
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+    
+  if (rank == 0) {
+    print_time("performance_CPU.csv", "blur_dist", {"Tiramisu_dist"}, {median(duration_vector)});
+    std::cout.flush();
+        
+#ifdef CHECK_RESULTS
+    check_results();
+#endif
+  }
+  std::cerr << "DONE with rank " << rank << std::endl;
+  MPI_Finalize();
+
 #endif
   return 0;
 
