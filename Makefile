@@ -64,7 +64,8 @@ TUTO_RUN = \
 
 DBLUR_KERNEL_OBJ = \
 	/tmp/tiramisu_CUDA_kernel_bx_wrapper.o \
-	/tmp/tiramisu_CUDA_kernel_by_wrapper.o
+	/tmp/tiramisu_CUDA_kernel_by_wrapper.o \
+	/tmp/tiramisu_CUDA_kernel_recompute_wrapper.o
 
 #####################################################
 
