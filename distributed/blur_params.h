@@ -5,21 +5,19 @@
 #ifndef TIRAMISU_BLUR_PARAMS_H
 #define TIRAMISU_BLUR_PARAMS_H
 
-//#define CPU_ONLY
-#define GPU_ONLY
-//#define HYBRID
-//#define GPU_LOAD_FACTOR 80 // put 80% of the data onto the GPU
+#define CPU_ONLY
+//#define GPU_ONLY
 #define DISTRIBUTE
-#define PARALLEL
+//#define PARALLEL
  
 #define REQ MPI_THREAD_FUNNELED
 #define PRINT_ITER_0
-#define ITERS 1
+#define ITERS 10
 
-#define CHECK_RESULTS
+//#define CHECK_RESULTS
 
 #ifdef CHECK_RESULTS
-#define ROWS 2000
+#define ROWS 4000
 #define COLS 45000
 #else
 #define ROWS 20000

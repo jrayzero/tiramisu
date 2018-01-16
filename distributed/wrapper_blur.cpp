@@ -53,7 +53,7 @@ void check_results() {
     int idx = 0;
     for (int n = 0; n < PROCS; n++) {
       std::ifstream in_file;
-      in_file.open("./build/blur_dist_rank_" + std::to_string(n) + ".txt");
+      in_file.open("/tmp/blur_dist_rank_" + std::to_string(n) + ".txt");
       std::string line;
       while(std::getline(in_file, line)) {
         got[idx++] = (C_DATA_TYPE)std::stof(line);
@@ -149,7 +149,7 @@ int main() {
     }
 #if defined(CHECK_RESULTS) && defined(DISTRIBUTE)
     if (i == 0) {
-      std::string output_fn = "./build/blur_dist_rank_" + std::to_string(rank) + ".txt";
+      std::string output_fn = "/tmp/blur_dist_rank_" + std::to_string(rank) + ".txt";
       std::ofstream myfile;
       myfile.open(output_fn);
       for (size_t y = 0; y < ((rank == PROCS - 1) ? (size_t)rows_per_proc-2 : (size_t)rows_per_proc); y++) {
@@ -235,7 +235,7 @@ int main() {
     }
     MPI_Barrier(MPI_COMM_WORLD);
     auto start = std::chrono::high_resolution_clock::now();
-    blur_dist(&buff_input, &buff_bx, &buff_output);
+    blur_dist(&buff_input, buff_bx.raw_buffer(), &buff_output);
     MPI_Barrier(MPI_COMM_WORLD);
     auto end = std::chrono::high_resolution_clock::now();
     if (rank == 0) {
@@ -245,7 +245,7 @@ int main() {
     }
 #if defined(CHECK_RESULTS) && defined(DISTRIBUTE)
     if (i == 0) {
-      std::string output_fn = "./build/blur_dist_rank_" + std::to_string(rank) + ".txt";
+      std::string output_fn = "/tmp/blur_dist_rank_" + std::to_string(rank) + ".txt";
       std::ofstream myfile;
       myfile.open(output_fn);
       for (size_t y = 0; y < ((rank == PROCS - 1) ? (size_t)rows_per_proc-2 : (size_t)rows_per_proc); y++) {

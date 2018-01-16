@@ -42,6 +42,7 @@ struct transfer;
 struct xfer;
 
 extern std::map<std::string, int> literals_per_kernel;
+extern bool use_gpu;
 
 struct HalideCodegenOutput
 {
