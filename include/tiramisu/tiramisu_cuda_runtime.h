@@ -11,8 +11,9 @@ extern "C" {
 struct cuda_vars {
     CUdevice device;
     CUcontext ctx;
-  CUmodule mod1;
-  CUmodule mod2;
+    CUmodule mod1;
+    CUmodule mod2;
+    CUmodule mod3;
 };
 
 extern struct cuda_vars cvars;
