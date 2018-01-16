@@ -8,8 +8,8 @@ CXX = mpicxx -m64
 NVCC = nvcc
 CXXFLAGS = -g -std=c++11 -O3 -Wall -Wno-sign-compare -fno-rtti -fvisibility=hidden -march=corei7-avx -mtune=corei7-avx -fopenmp -DNODES=${MPI_NODES} -DPROCS=${MPI_PROCS} #-DUSE_HALIDE_DEV_COPIES
 NVCCFLAGS = -ccbin ${NVCC_CLANG} -g -std=c++11 -Xcompiler -Wall -Xcompiler -fPIC -Xcompiler -Wno-sign-compare -Xcompiler -fno-rtti -Xcompiler -fvisibility=hidden -Xcompiler -march=corei7-avx -Xcompiler -mtune=corei7-avx
-INCLUDES = -Iinclude/ -I${ISL_INCLUDE_DIRECTORY} -I${HALIDE_SOURCE_DIRECTORY}/include -I${HALIDE_SOURCE_DIRECTORY}/tools -I${HALIDE_SOURCE_DIRECTORY}/src/runtime -Ibuild/ -I3rdParty/isl/include -I/data/scratch/jray/anaconda2/include/ -I/usr/local/cuda-7.5/targets/x86_64-linux/include/
-LIBRARIES = -Lbuild/ -L${ISL_LIB_DIRECTORY} -L3rdParty/isl/.libs -lisl -lgmp -L${HALIDE_LIB_DIRECTORY} -L/usr/local/cuda-7.5/targets/x86_64-linux/lib/ -lHalide -lmpi_cxx -ldl -lpthread -lz -lcuda -lcudart `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
+INCLUDES = -Iinclude/ -I${ISL_INCLUDE_DIRECTORY} -I${HALIDE_SOURCE_DIRECTORY}/include -I${HALIDE_SOURCE_DIRECTORY}/tools -I${HALIDE_SOURCE_DIRECTORY}/src/runtime -Ibuild/ -I/tmp/ -I3rdParty/isl/include -I/data/scratch/jray/anaconda2/include/ -I/usr/local/cuda-7.5/targets/x86_64-linux/include/ -I/usr/local/cuda-9.1/targets/x86_64-linux/include/
+LIBRARIES = -L/tmp/build/ -L${ISL_LIB_DIRECTORY} -L3rdParty/isl/.libs -lisl -lgmp -L${HALIDE_LIB_DIRECTORY} -L/usr/local/cuda-7.5/targets/x86_64-linux/lib/ -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/ -lHalide -lmpi_cxx -ldl -lpthread -lz -lcuda -lcudart `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
 HEADER_FILES = \
 	include/tiramisu/core.h \
 	include/tiramisu/debug.h \
@@ -20,17 +20,17 @@ HEADER_FILES = \
 	include/tiramisu/tiramisu_mpi.h
 
 OBJ = \
-	build/tiramisu_expr.o \
-	build/tiramisu_core.o \
-	build/tiramisu_codegen_halide.o \
-	build/tiramisu_codegen_c.o \
-	build/tiramisu_debug.o \
-	build/tiramisu_utils.o \
-	build/tiramisu_codegen_halide_lowering.o \
-	build/tiramisu_codegen_from_halide.o \
-	build/tiramisu_cuda.o \
-	build/tiramisu_mpi.o \
-	build/tiramisu_codegen_cuda.o
+	/tmp/tiramisu_expr.o \
+	/tmp/tiramisu_core.o \
+	/tmp/tiramisu_codegen_halide.o \
+	/tmp/tiramisu_codegen_c.o \
+	/tmp/tiramisu_debug.o \
+	/tmp/tiramisu_utils.o \
+	/tmp/tiramisu_codegen_halide_lowering.o \
+	/tmp/tiramisu_codegen_from_halide.o \
+	/tmp/tiramisu_cuda.o \
+	/tmp/tiramisu_mpi.o \
+	/tmp/tiramisu_codegen_cuda.o
 
 TUTO_GEN = \
 	build/tutorial_01_fct_generator \
@@ -63,9 +63,7 @@ TUTO_RUN = \
 	run_tutorial_10
 
 DBLUR_KERNEL_OBJ = \
-	/tmp/tiramisu_CUDA_kernel_dummy_wrapper.o \
 	/tmp/tiramisu_CUDA_kernel_bx_wrapper.o \
-	/tmp/tiramisu_CUDA_kernel_bx_recompute_wrapper.o \
 	/tmp/tiramisu_CUDA_kernel_by_wrapper.o
 
 #####################################################
@@ -388,9 +386,9 @@ builddir:
 # Build the Tiramisu library object files.  The list of these files is in $(OBJ).
 #build/tiramisu_cuda.o: src/tiramisu_cuda.cu $(HEADER_FILES)
 #	$(NVCC) ${NVCCFLAGS} ${INCLUDES} -c $< -odir build/
-build/tiramisu_%.o: src/tiramisu_%.cpp $(HEADER_FILES)
+/tmp/tiramisu_%.o: src/tiramisu_%.cpp $(HEADER_FILES)
 	$(CXX) -fPIC ${CXXFLAGS} ${INCLUDES} -c $< -o $@
-build/tiramisu_codegen_%.o: src/tiramisu_codegen_%.cpp $(HEADER_FILES)
+/tmp/tiramisu_codegen_%.o: src/tiramisu_codegen_%.cpp $(HEADER_FILES)
 	$(CXX) -fPIC ${CXXFLAGS} ${INCLUDES} -c $< -o $@
 
 
@@ -404,7 +402,7 @@ build/tiramisu_codegen_%.o: src/tiramisu_codegen_%.cpp $(HEADER_FILES)
 tutorials: $(OBJ) $(TUTO_GEN) $(TUTO_BIN) $(TUTO_RUN)
 build/tutorial_%_fct_generator: tutorials/tutorial_%.cpp
 	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
-	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $@
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build $@
 build/generated_fct_tutorial_%.o: build/tutorial_%_fct_generator
 
 build/tutorial_%: tutorials/wrapper_tutorial_%.cpp build/tutorial_%_fct_generator build/generated_fct_tutorial_%.o tutorials/wrapper_tutorial_%.h ${OBJ} ${HEADER_FILES}
@@ -413,12 +411,12 @@ run_tutorial_%: build/tutorial_%
 	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $< 
 
 ## distributed tests
-dblur: $(OBJ) build/blur_generator build/blur
-build/blur_generator: distributed/blur.cpp 
+dblur: $(OBJ) /tmp/blur_generator /tmp/blur
+/tmp/blur_generator: distributed/blur.cpp 
 	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
-	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $@
-build/generated_blur_dist.o: build/blur_generator
-build/blur: distributed/wrapper_blur.cpp build/blur_generator build/generated_blur_dist.o distributed/wrapper_blur.h ${OBJ} ${DBLUR_KERNEL_OBJ} ${HEADER_FILES} distributed/blur_params.h
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}//tmp/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}//tmp/ $@
+/tmp/generated_blur_dist.o: /tmp/blur_generator
+/tmp/blur: distributed/wrapper_blur.cpp /tmp/blur_generator /tmp/generated_blur_dist.o distributed/wrapper_blur.h ${OBJ} ${DBLUR_KERNEL_OBJ} ${HEADER_FILES} distributed/blur_params.h
 	$(CXX) ${CXXFLAGS} ${OBJ} ${DBLUR_KERNEL_OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
 
 dsimple: $(OBJ) build/simple_generator build/simple
