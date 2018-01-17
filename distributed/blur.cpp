@@ -37,10 +37,10 @@ int main() {
 
     C_LOOP_ITER_TYPE rows = ROWS;
     C_LOOP_ITER_TYPE cols = COLS;
-    C_LOOP_ITER_TYPE nodes = NODES;
+    //   C_LOOP_ITER_TYPE nodes = NODES;
     C_LOOP_ITER_TYPE procs = PROCS;
-    assert(procs % nodes == 0);
-    C_LOOP_ITER_TYPE procs_per_node = procs / nodes;
+//    assert(procs % nodes == 0);
+    //   C_LOOP_ITER_TYPE procs_per_node = procs / nodes;
     C_LOOP_ITER_TYPE rows_per_proc = rows / procs;
 
     // -------------------------------------------------------
@@ -69,7 +69,7 @@ int main() {
     // -------------------------------------------------------
 
     constant procs_const("procs", expr(procs), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
-    constant nodes_const("nodes", expr(nodes), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
+    //    constant nodes_const("nodes", expr(nodes), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
 #ifdef CPU_ONLY
 #ifdef DISTRIBUTE
@@ -78,25 +78,15 @@ int main() {
     by.split(y, rows_per_proc, y1, y2);
     xfer_prop sync_block(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
     xfer_prop async_block(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
-    // transfer the computed rows from bx
-    /*    xfer bx_exchange = computation::create_xfer("[procs, cols]->{bx_exchange_s[q,y,x]: 1<=q<procs and 0<=y<2 and 0<=x<cols and procs>1}",
-                                                "[procs, cols]->{bx_exchange_r[q,y,x]: 0<=q<procs-1 and 0<=y<2 and 0<=x<cols and procs>1}",
-                                                q-(C_LOOP_ITER_TYPE)1, q+(C_LOOP_ITER_TYPE)1, async_block, sync_block,
-                                                bx(y,x), &blur_dist);
-    */
-    //    bx_exchange.os->set_schedule_this_comp(false);
-    //    bx.before(*bx_exchange.s, computation::root);
-    //    bx_exchange.s->before(*bx_exchange.r, computation::root);
-    //    bx_exchange.r->before(by, computation::root);
-    bx.before(by, computation::root);
 
+    bx.before(by, computation::root);
     bx.tag_distribute_level(y1);
     by.tag_distribute_level(y1);
 
 #ifdef PARALLEL
     var y5("y5"), y6("y6");
-    bx.tile(y2, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
-    by.tile(y2, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
+    bx.tile(y2, x, (C_LOOP_ITER_TYPE)100, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
+    by.tile(y2, x, (C_LOOP_ITER_TYPE)100, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
     bx.split(y3, 10, y5, y6);
     by.split(y3, 10, y5, y6);
     bx.tag_vector_level(x2, 8);
@@ -104,18 +94,11 @@ int main() {
     bx.tag_parallel_level(y5);
     by.tag_parallel_level(y5);
 #else
-    //    bx.tile(y2, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
-    //    by.tile(y2, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
-    //    bx.tag_vector_level(x2, 8);
-    //    by.tag_vector_level(x2, 8);
+    bx.tile(y2, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
+    by.tile(y2, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
+    bx.tag_vector_level(x2, 8);
+    by.tag_vector_level(x2, 8);
 #endif
-
-
-    //    bx_exchange.s->tag_distribute_level(q, false);
-    //    bx_exchange.r->tag_distribute_level(q, false);
-
-    //    bx_exchange.s->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)2)});
-    //    bx_exchange.r->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)2)});
 
     tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1, tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc));
     tiramisu::expr by_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1, tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc));

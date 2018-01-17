@@ -31,16 +31,28 @@ int mpi_init() {
 }
 
 void init_gpu(int rank) {
-  //  if (rank < NODES) {
+  //  if (rank == 0) {
+  //    tiramisu_init_cuda(1);
+  //  } else if (rank == 1) {
   //    tiramisu_init_cuda(1);
   //  } else {
-  //    tiramisu_init_cuda(1);
-  //}
-  if (PROCS == 2 && rank == 1) {
+  //    tiramisu_init_cuda(0);
+  //  }
+  if (rank == 4)
+    tiramisu_init_cuda(0);
+  else if (rank == 5)
+    tiramisu_init_cuda(2);
+  else if (rank == 6)
+    tiramisu_init_cuda(4);
+  else if (rank == 7)
+    tiramisu_init_cuda(6);
+  else
+    tiramisu_init_cuda(rank);
+  /*  if (PROCS == 2 && rank == 1) {
     tiramisu_init_cuda(2);
   } else {
     tiramisu_init_cuda(rank % 4);
-  }
+    }*/
 }
 
 void reset_gpu() {
@@ -87,9 +99,11 @@ void check_results() {
 int main() {
 #ifdef GPU_ONLY
   int rank = mpi_init();
-    std::cerr << "Running CPU version" << std::endl;
   std::vector<std::chrono::duration<double,std::milli>> duration_vector;
   C_LOOP_ITER_TYPE rows_per_proc = (C_LOOP_ITER_TYPE)ceil(ROWS/PROCS); 
+  if (rank == 0) {
+    std::cerr << "rows per proc: " << rows_per_proc << std::endl;
+  }
 
   for (int i = 0; i < ITERS; i++) {
     init_gpu(rank);    

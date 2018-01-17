@@ -26,7 +26,7 @@ void *tiramisu_init_cuda(int device_num) {
     assert(cuCtxCreate(&(cvars.ctx), CU_CTX_SCHED_BLOCKING_SYNC, cvars.device) == 0);
     assert(cuModuleLoad(&cvars.mod1, "/tmp/tiramisu_CUDA_kernel_bx.fatbin") == 0);
     assert(cuModuleLoad(&cvars.mod2, "/tmp/tiramisu_CUDA_kernel_by.fatbin") == 0);
-    assert(cuModuleLoad(&cvars.mod3, "/tmp/tiramisu_CUDA_kernel_recompute.fatbin") == 0);
+    //    assert(cuModuleLoad(&cvars.mod3, "/tmp/tiramisu_CUDA_kernel_recompute.fatbin") == 0);
 
     return (void*)(&cvars);
 }
