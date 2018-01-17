@@ -1890,7 +1890,6 @@ void tiramisu::computation::separate_at(var _level, std::vector<tiramisu::expr> 
     for (auto comp : this->get_updates()) {
         comp->rename_computation(comp->get_name() + "_" + std::to_string(ctr++));
     }
-    this->set_schedule_this_comp(false);
     DEBUG_INDENT(-4);
 }
 

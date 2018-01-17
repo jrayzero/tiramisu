@@ -102,7 +102,6 @@ std::vector<tiramisu::computation *> generator::get_computation_by_node(tiramisu
     isl_ast_expr_free(expr);
     isl_ast_expr_free(arg);
     isl_id_free(id);
-    std::cerr << "computation name is " << computation_name << std::endl;
     std::vector<tiramisu::computation *> comp = fct->get_computation_by_name(computation_name);
 
     assert((comp.size() > 0) && "Computation not found for this node.");
@@ -641,8 +640,6 @@ void generator::traverse_expr_and_extract_accesses(const tiramisu::function *fct
         // only interested in getting the space of those computations and we assume
         // in Tiramisu that all the computations that have the same name, have the same
         // space.
-        std::cerr << "exp.name() " << exp.get_name() << std::endl;
-        std::cerr << "comp->name() " << comp->get_name() << std::endl;
         std::vector<tiramisu::computation *> computations_vector = fct->get_computation_by_name(exp.get_name());
 
         // Since we modify the names of update computations but do not modify the
@@ -1358,7 +1355,6 @@ isl_ast_node *generator::stmt_code_generator(isl_ast_node *node, isl_ast_build *
 
 
     // Find the name of the computation associated to this AST leaf node.
-    isl_ast_node_dump(node);
     std::vector<tiramisu::computation *> comp_vec = generator::get_computation_by_node(func, node);
     assert(!comp_vec.empty() && "get_computation_by_node() returned an empty vector!");
     isl_union_map *sched = isl_ast_build_get_schedule(build);
@@ -2081,7 +2077,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                 // SUPER HACKY
                 bool is_iter = false;
                 for (int r = range.first*2+1; r <= range.second*2+1; r++) {
-                    if (arg_name == "c" + std::to_string(r)) {
+                    if (arg_name == "c" + std::to_string(r) || arg_name == "c" + std::to_string(r) + "_0") { // hahahaha
                         is_iter = true;
                         break;
                     }

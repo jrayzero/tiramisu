@@ -13,11 +13,11 @@
 
 extern "C" {
 
-  struct cuda_vars cvars;
+struct cuda_vars cvars;
 
 // TODO load all at once into one module to reduce overhead of loading module everytime at runtime
 void *tiramisu_init_cuda(int device_num) {
-  //   struct cuda_vars *cvars = (struct cuda_vars*)malloc(sizeof(struct cuda_vars));
+    //   struct cuda_vars *cvars = (struct cuda_vars*)malloc(sizeof(struct cuda_vars));
     assert(cuInit(0) == 0);
     assert(cuDeviceGet(&(cvars.device), device_num) == 0);
     size_t memory;
@@ -26,7 +26,9 @@ void *tiramisu_init_cuda(int device_num) {
     assert(cuCtxCreate(&(cvars.ctx), CU_CTX_SCHED_BLOCKING_SYNC, cvars.device) == 0);
     assert(cuModuleLoad(&cvars.mod1, "/tmp/tiramisu_CUDA_kernel_bx.fatbin") == 0);
     assert(cuModuleLoad(&cvars.mod2, "/tmp/tiramisu_CUDA_kernel_by.fatbin") == 0);
-    //    assert(cuModuleLoad(&cvars.mod3, "/tmp/tiramisu_CUDA_kernel_recompute.fatbin") == 0);
+//    assert(cuModuleLoad(&cvars.mod3, "/tmp/tiramisu_CUDA_kernel_recompute.fatbin") == 0);
+    assert(cuModuleLoad(&cvars.mod4, "/tmp/tiramisu_CUDA_kernel_bx_0.fatbin") == 0);
+    assert(cuModuleLoad(&cvars.mod5, "/tmp/tiramisu_CUDA_kernel_by_0.fatbin") == 0);
 
     return (void*)(&cvars);
 }
@@ -41,12 +43,12 @@ inline void tiramisu_check_cudad_error(const char *wrapper_name, CUresult code) 
     }
 }
 
-   void tiramisu_cudad_ctx_sync() {
+void tiramisu_cudad_ctx_sync() {
     tiramisu_check_cudad_error("tiramisu_cudad_ctx_sync", cuCtxSynchronize());
-  }
+}
 
 inline void _tiramisu_cudad_malloc(CUdeviceptr *device_ptr, size_t bytes) {
-  tiramisu_check_cudad_error("tiramisu_cudad_malloc", cuMemAlloc(device_ptr, bytes));
+    tiramisu_check_cudad_error("tiramisu_cudad_malloc", cuMemAlloc(device_ptr, bytes));
 }
 
 inline void _tiramisu_cudad_free(CUdeviceptr device_ptr) {
@@ -121,7 +123,7 @@ void tiramisu_cudad_event_record(CUevent event, CUstream stream) {
     tiramisu_check_cudad_error("tiramisu_cudad_event_record", cuEventRecord(event, stream));
 }
 
-  void tiramisu_cudad_stream_wait_event(void *stream_buff, void *event_buff) {    
+void tiramisu_cudad_stream_wait_event(void *stream_buff, void *event_buff) {
     tiramisu_check_cudad_error("tiramisu_cudad_stream_wait_event", cuStreamWaitEvent(((CUstream*)stream_buff)[0], ((CUevent*)event_buff)[0], 0));
 }
 
@@ -143,15 +145,15 @@ void tiramisu_cudad_free(halide_buffer_t *buff) {
     _tiramisu_cudad_free((CUdeviceptr)(buff->device));
 }
 
-  void tiramisu_cudad_memcpy_h2d(halide_buffer_t *dst, const void *src, size_t count, size_t dst_index) {
+void tiramisu_cudad_memcpy_h2d(halide_buffer_t *dst, const void *src, size_t count, size_t dst_index) {
     _tiramisu_cudad_memcpy_h2d((CUdeviceptr)(dst->device) + dst_index, src, count);
 }
 
-  void tiramisu_cudad_memcpy_d2h(void *dst, halide_buffer_t *src, size_t count, size_t src_index) {
+void tiramisu_cudad_memcpy_d2h(void *dst, halide_buffer_t *src, size_t count, size_t src_index) {
     _tiramisu_cudad_memcpy_d2h(dst, (CUdeviceptr)(src->device) + src_index, count);
 }
 
-  void tiramisu_cudad_memcpy_async_h2d(halide_buffer_t *dst, const void *src, size_t count, void *stream_buff, void *event_buff, size_t dst_index) {
+void tiramisu_cudad_memcpy_async_h2d(halide_buffer_t *dst, const void *src, size_t count, void *stream_buff, void *event_buff, size_t dst_index) {
     CUevent event;
     tiramisu_check_cudad_error("tiramisu_cudad_memcpy_async_h2d", cuEventCreate(&event, 0));
     ((CUevent*)event_buff)[0] = event;

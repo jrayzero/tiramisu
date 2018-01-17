@@ -14,6 +14,8 @@ struct cuda_vars {
     CUmodule mod1;
     CUmodule mod2;
     CUmodule mod3;
+    CUmodule mod4;
+    CUmodule mod5;
 };
 
 extern struct cuda_vars cvars;

@@ -12,7 +12,7 @@
 #define PARALLEL
 
 #ifdef COOP
-#define GPU_PERCENTAGE 0.80
+#define GPU_PERCENTAGE 8
 #endif
 
 //#define CHECK_RESULTS
