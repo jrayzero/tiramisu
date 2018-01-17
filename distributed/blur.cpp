@@ -40,7 +40,6 @@ int main() {
     C_LOOP_ITER_TYPE rows = ROWS;
     C_LOOP_ITER_TYPE cols = COLS;
     C_LOOP_ITER_TYPE procs = PROCS;
-    C_LOOP_ITER_TYPE rows_per_proc = rows / procs;
 
     // -------------------------------------------------------
     // Layer I
@@ -70,6 +69,8 @@ int main() {
     constant procs_const("procs", expr(procs), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
 #ifdef CPU_ONLY
+    C_LOOP_ITER_TYPE rows_per_proc = rows / procs;
+    constant rows_per_proc_const("rows_per_proc", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 #ifdef DISTRIBUTE
     var y1("y1"), y2("y2"), y3("y3"), y4("y4"), x1("x1"), x2("x2"), q("q");
     bx.split(y, rows_per_proc, y1, y2);
@@ -141,7 +142,8 @@ int main() {
     blur_dist.gen_halide_stmt();
     blur_dist.gen_halide_obj("/tmp/generated_blur_dist.o");
 #elif defined(GPU_ONLY)
-
+    C_LOOP_ITER_TYPE rows_per_proc = rows / procs;
+    constant rows_per_proc_const("rows_per_proc", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
     var y1("y1"), y2("y2"), y3("y3"), y4("y4"), y5("y5"), y6("y6"), x1("x1"), x2("x2"), q("q");
     bx.split(y, rows_per_proc, y1, y2);
     bx.split(y2, offset, y3, y4);
@@ -150,8 +152,6 @@ int main() {
     by.split(y, rows_per_proc, y1, y2);
     by.split(y2, offset, y3, y4);
     by.split(x, 1000, x1, x2);
-
-    constant rows_per_proc_const("rows_per_proc", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
 
     xfer_prop h2h_mpi_sync(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
     xfer_prop h2h_mpi_async(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
@@ -285,9 +285,63 @@ int main() {
     blur_dist.gen_halide_stmt();
     blur_dist.gen_halide_obj("/tmp/generated_blur_dist.o");//, {Halide::Target::CUDA});//, Halide::Target::Debug});
 #elif defined(COOP)
-
+    assert(rows % 10 == 0);
+    // number of rows to go on the GPU
+    size_t gpu_rows = (rows / 10) * GPU_PERCENTAGE; 
+    // number of rows to go on the CPU
+    size_t cpu_rows = rows - gpu_rows;
+    
+    assert(gpu_rows % procs == 0);
+    assert(cpu_rows % procs == 0);
+    size_t gpu_rows_per_proc = gpu_rows / procs;
+    size_t cpu_rows_per_proc = cpu_rows / procs;
+    
     var y1("y1"), y2("y2"), y3("y3"), y4("y4"), y5("y5"), y6("y6"), x1("x1"), x2("x2"), q("q");
-    bx.split(y, rows_per_proc, y1, y2);
+    
+    // First, separate bx and by into two different computations each, one for the CPU and one for the GPU
+    bx.separate_at(y, {gpu_rows}, rows);
+    by.separate_at(y, {gpu_rows}, rows);
+    tiramisu::computation bx_gpu = bx.get_update(0);
+    tiramisu::computation bx_cpu = bx.get_update(1);
+    tiramisu::computation by_gpu = by.get_update(0);
+    tiramisu::computation by_cpu = by.get_update(1);
+    std::string bx_gpu_name = "bx_0";
+    std::string bx_cpu_name = "bx_1";
+    std::string by_gpu_name = "by_0";
+    std::string by_cpu_name = "by_1";
+    std::cerr << bx_gpu.get_name() << std::endl;
+    std::cerr << bx_cpu.get_name() << std::endl;
+    std::cerr << by_gpu.get_name() << std::endl;
+    std::cerr << by_cpu.get_name() << std::endl;
+    /*    bx_gpu.rename_computation("bx_gpu");
+    bx_cpu.rename_computation("bx_cpu");
+    by_gpu.rename_computation("by_gpu");
+    by_cpu.rename_computation("by_cpu");*/
+
+    generator::update_producer_expr_name(&by_cpu, "bx", bx_cpu_name, false);
+    generator::update_producer_expr_name(&by_gpu, "bx", bx_gpu_name, false);
+    
+    bx_gpu.before(bx_cpu, computation::root);
+    bx_cpu.before(by_gpu, computation::root);
+    by_gpu.before(by_cpu, computation::root);
+    
+    tiramisu::buffer buff_input("buff_input", {tiramisu::expr(cols)}, T_DATA_TYPE,
+                                tiramisu::a_input, &blur_dist);
+    tiramisu::buffer buff_bx_cpu("buff_bx_cpu", {cpu_rows_per_proc, cols}, T_DATA_TYPE, tiramisu::a_temporary, &blur_dist);
+    tiramisu::buffer buff_bx_gpu("buff_bx_gpu", {offset, cols}, T_DATA_TYPE, tiramisu::a_temporary, &blur_dist);
+    tiramisu::buffer buff_by_cpu("buff_by_cpu", {cpu_rows_per_proc+gpu_rows_per_proc, cols}, 
+                                 T_DATA_TYPE, tiramisu::a_output, &blur_dist);
+    tiramisu::buffer buff_by_gpu("buff_by_gpu", {offset, cols}, T_DATA_TYPE, tiramisu::a_temporary, &blur_dist);
+    
+    blur_input.set_access("{blur_input[i1,i0]->buff_input[i0]}");
+    bx_cpu.set_access("{"+bx_cpu_name+"[y,x]->buff_bx_cpu[y,x]}");
+    bx_gpu.set_access("{"+bx_gpu_name+"[y,x]->buff_bx_gpu[y%" + std::to_string(offset) + ",x]}");
+    by_cpu.set_access("{"+by_cpu_name+"[y,x]->buff_bx_cpu[y+" + std::to_string(gpu_rows_per_proc) + ",x]}");
+    by_gpu.set_access("{"+by_gpu_name+"[y,x]->buff_by_gpu[y%" + std::to_string(offset) + ",x]}");
+    
+    
+
+    /*    bx.split(y, rows_per_proc, y1, y2);
     bx.split(y2, offset, y3, y4);
     bx.split(x, 1000, x1, x2);
 
@@ -295,17 +349,9 @@ int main() {
     by.split(y2, offset, y3, y4);
     by.split(x, 1000, x1, x2);
 
-    constant rows_per_proc_const("rows_per_proc", expr(rows_per_proc), T_LOOP_ITER_TYPE, true, NULL, 0, &blur_dist);
-
-    xfer_prop h2h_mpi_sync(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
-    xfer_prop h2h_mpi_async(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
-    xfer_prop h2h_mpi_async_nonblock(T_DATA_TYPE, {ASYNC, NONBLOCK, MPI, CPU2CPU});
-    xfer_prop h2d_cuda_sync(T_DATA_TYPE, {SYNC, CUDA, CPU2GPU});
     xfer_prop h2d_cuda_async(T_DATA_TYPE, {ASYNC, CUDA, CPU2GPU}, 1);
-    xfer_prop kernel_stream(T_DATA_TYPE, {ASYNC, CUDA}, 0);
-    xfer_prop d2h_cuda_sync(T_DATA_TYPE, {SYNC, CUDA, GPU2CPU});
     xfer_prop d2h_cuda_async(T_DATA_TYPE, {ASYNC, CUDA, GPU2CPU}, 2);
-
+    xfer_prop kernel_stream(T_DATA_TYPE, {ASYNC, CUDA}, 0);
     xfer_prop kernel(T_DATA_TYPE, {ASYNC, CUDA}, 2);
 
     // Need an  CPU-GPU transfer for each input
@@ -420,9 +466,9 @@ int main() {
 
     gpu_to_cpu.os->set_wait_access("{gpu_to_cpu_os[y,x]->buff_gpu_to_cpu_wait[y]}");
 
-    by.set_wait_access("{by[y,x]->buff_kernel_by_wait[y]}");
+    by.set_wait_access("{by[y,x]->buff_kernel_by_wait[y]}");*/
 
-    blur_dist.set_arguments({&buff_input, &buff_by});
+    blur_dist.set_arguments({&buff_input, &buff_by_cpu});
     blur_dist.lift_dist_comps();
     blur_dist.gen_time_space_domain();
     blur_dist.gen_isl_ast();
