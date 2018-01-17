@@ -79,28 +79,30 @@ int main() {
     xfer_prop sync_block(T_DATA_TYPE, {SYNC, BLOCK, MPI, CPU2CPU});
     xfer_prop async_block(T_DATA_TYPE, {ASYNC, BLOCK, MPI, CPU2CPU});
     // transfer the computed rows from bx
-    xfer bx_exchange = computation::create_xfer("[procs, cols]->{bx_exchange_s[q,y,x]: 1<=q<procs and 0<=y<2 and 0<=x<cols and procs>1}",
+    /*    xfer bx_exchange = computation::create_xfer("[procs, cols]->{bx_exchange_s[q,y,x]: 1<=q<procs and 0<=y<2 and 0<=x<cols and procs>1}",
                                                 "[procs, cols]->{bx_exchange_r[q,y,x]: 0<=q<procs-1 and 0<=y<2 and 0<=x<cols and procs>1}",
                                                 q-(C_LOOP_ITER_TYPE)1, q+(C_LOOP_ITER_TYPE)1, async_block, sync_block,
                                                 bx(y,x), &blur_dist);
-
-
-    bx.before(*bx_exchange.s, computation::root);
-    bx_exchange.s->before(*bx_exchange.r, computation::root);
-    bx_exchange.r->before(by, computation::root);
+    */
+    //    bx_exchange.os->set_schedule_this_comp(false);
+    //    bx.before(*bx_exchange.s, computation::root);
+    //    bx_exchange.s->before(*bx_exchange.r, computation::root);
+    //    bx_exchange.r->before(by, computation::root);
+    bx.before(by, computation::root);
 
     bx.tag_distribute_level(y1);
     by.tag_distribute_level(y1);
 
 #ifdef PARALLEL
-    assert(false);
     var y5("y5"), y6("y6");
     bx.tile(y2, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
     by.tile(y2, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
-    bx.split(y3, 100, y5, y6);
-    by.split(y3, 100, y5, y6);
-    //    bx.tag_parallel_level(y3);
-    //    by.tag_parallel_level(y3);
+    bx.split(y3, 10, y5, y6);
+    by.split(y3, 10, y5, y6);
+    bx.tag_vector_level(x2, 8);
+    by.tag_vector_level(x2, 8);
+    bx.tag_parallel_level(y5);
+    by.tag_parallel_level(y5);
 #else
     //    bx.tile(y2, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
     //    by.tile(y2, x, (C_LOOP_ITER_TYPE)10, (C_LOOP_ITER_TYPE)8, y3, x1, y4, x2);
@@ -109,17 +111,17 @@ int main() {
 #endif
 
 
-    bx_exchange.s->tag_distribute_level(q, false);
-    bx_exchange.r->tag_distribute_level(q, false);
+    //    bx_exchange.s->tag_distribute_level(q, false);
+    //    bx_exchange.r->tag_distribute_level(q, false);
 
-    bx_exchange.s->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)2)});
-    bx_exchange.r->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)2)});
+    //    bx_exchange.s->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)2)});
+    //    bx_exchange.r->collapse_many({collapser(2, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)cols), collapser(1, (C_LOOP_ITER_TYPE)0, (C_LOOP_ITER_TYPE)2)});
 
     tiramisu::expr bx_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1, tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc));
     tiramisu::expr by_select_dim0(tiramisu::o_select, var(T_LOOP_ITER_TYPE, "rank") == procs-1, tiramisu::expr(rows_per_proc), tiramisu::expr(rows_per_proc));
 
 #ifdef CHECK_RESULTS
-    tiramisu::buffer buff_input("buff_input", {offset, tiramisu::expr(cols)}, T_DATA_TYPE,
+    tiramisu::buffer buff_input("buff_input", {rows_per_proc, tiramisu::expr(cols)}, T_DATA_TYPE,
                                 tiramisu::a_input, &blur_dist);
 #else
     tiramisu::buffer buff_input("buff_input", {tiramisu::expr(cols)}, T_DATA_TYPE,
@@ -151,7 +153,7 @@ int main() {
 
     bx.set_access("{bx[y, x]->buff_bx[y, x]}");
 
-    bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_bx[" + std::to_string(rows_per_proc) + " + y, x]}");
+    //    bx_exchange.r->set_access("{bx_exchange_r[q,y,x]->buff_bx[" + std::to_string(rows_per_proc) + " + y, x]}");
 
     blur_dist.lift_dist_comps();
     blur_dist.set_arguments({&buff_input, &buff_bx, &buff_by});
