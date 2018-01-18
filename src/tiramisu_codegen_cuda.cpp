@@ -497,8 +497,21 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     }
     // headers
     if (!skip) {
-        kernel << cuda_headers() << std::endl;
-        kernel_wrapper << cuda_headers() << "#include \"" + kernel_fn + ".h\""<< std::endl;
+      std::string init_cuda = "void tiramisu_init_cuda(int device_num) {\n";
+      init_cuda += "    assert(cuInit(0) == 0);\n";
+      init_cuda += "    assert(cuDeviceGet(&(cvars.device), device_num) == 0);\n";
+      init_cuda += "    size_t memory;\n";
+      init_cuda += "    assert(cuDeviceTotalMem(&memory, cvars.device) == 0);\n";
+      init_cuda += "    fprintf(stderr, \"Total memory on device %d is %lu\\n\", device_num, memory);\n";
+      init_cuda += "    assert(cuCtxCreate(&(cvars.ctx), CU_CTX_SCHED_BLOCKING_SYNC, cvars.device) == 0);\n";
+      int idx = 0;
+      for (auto k : kernel_names) {
+        idx++;
+        init_cuda += "    assert(cuModuleLoad(&cvars.mod" + std::to_string(idx) + ", \"/tmp/" + k + ".fatbin\") == 0);\n";
+      }
+      init_cuda += "  }\n";
+      kernel << cuda_headers() << std::endl;
+      kernel_wrapper << cuda_headers() << "#include \"" + kernel_fn + ".h\"" << "\nstruct cuda_vars cvars;\n" << init_cuda << std::endl;
     }
     // kernel
     std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
@@ -507,7 +520,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     std::string kernel_params = "  void *kernel_args[] = {";
     std::string clear_static_var = "\nvoid clear_static_var_" + kernel_name + "() { " + kernel_name + "_kernel_count = 0; }\n";
     if (!skip) {
-        kernel_wrapper_header << "extern \"C\" { \nvoid clear_static_var_" + kernel_name + "(); }\n" << std::endl;
+        kernel_wrapper_header << "extern \"C\" {\nvoid clear_static_var_" + kernel_name + "(); }\n" << std::endl;
         kernel_wrapper_header.close();
     }
     std::vector<std::string> buffer_names;
@@ -595,7 +608,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     std::string event_record = "  if(_kernel_event_buff) {\n    CUevent *kernel_event_buff = (CUevent*)_kernel_event_buff;\n";//"  //if (other_event != NULL) { cuEventRecord(other_event, kernel_stream); }\n";
     event_record += "    CUevent event;\n    assert(cuEventCreate(&event, 0) == 0);\n    assert(cuEventRecord(event, kernel_stream[0]) == 0);\n    kernel_event_buff[0] = event;\n  }\n";
     if (!skip) {
-        kernel_wrapper << kernel_wrapper_signature << " {\n" << stream_convert << module_mgmt << device_params << kernel_params
+        kernel_wrapper << kernel_wrapper_signature << "  {\n" << stream_convert << module_mgmt << device_params << kernel_params
                        << kernel_wrapper_body
                        << event_check << kernel_launch << device_free << event_record << "  " << kernel_name <<  "_kernel_count++;\n}\n";
         kernel_wrapper << kernel_wrapper_signature_no_event << " {\n" << stream_convert << module_mgmt << device_params << kernel_params
@@ -622,8 +635,8 @@ void print_tiramisu_cuda_runtime() {
     std::ofstream runtime;
     runtime.open("/tmp/tiramisu_cuda_runtime.h");
     std::string code = "";
-    code += "#ifndef TIRAMISU_TIRAMISU_CUDA_RUNTIME_H\n";
-    code += "#define TIRAMISU_TIRAMISU_CUDA_RUNTIME_H\n";
+    code += "#ifndef TIRAMISU_CUDA_RUNTIME_H\n";
+    code += "#define TIRAMISU_CUDA_RUNTIME_H\n";
     code += "#include \"cuda.h\"\n";
     code += "extern \"C\" {\n";
     code += "  struct cuda_vars {\n";
@@ -633,20 +646,8 @@ void print_tiramisu_cuda_runtime() {
         code += "    CUmodule mod" + std::to_string(i+1) + ";\n";
     }
     code += "  };\n";
-    code += "  struct cuda_vars cvars;\n";
-    code += "  void tiramisu_init_cuda(int device_num) {\n";
-    code += "    assert(cuInit(0) == 0);\n";
-    code += "    assert(cuDeviceGet(&(cvars.device), device_num) == 0);\n";
-    code += "    size_t memory;\n";
-    code += "    assert(cuDeviceTotalMem(&memory, cvars.device) == 0);\n";
-    code += "    fprintf(stderr, \"Total memory on device %d is %lu\\n\", device_num, memory);\n";
-    code += "    assert(cuCtxCreate(&(cvars.ctx), CU_CTX_SCHED_BLOCKING_SYNC, cvars.device) == 0);\n";
-    int idx = 0;
-    for (auto k : kernel_names) {
-        idx++;
-        code += "    assert(cuModuleLoad(&cvars.mod" + std::to_string(idx) + ", \"/tmp/" + k + ".fatbin\") == 0);\n";
-    }
-    code += "  }\n";
+    code += "  extern struct cuda_vars cvars;\n";
+    code += "  void tiramisu_init_cuda(int device_num);\n";
     code += "}\n";
     code += "#endif //TIRAMISU_TIRAMISU_CUDA_RUNTIME_H\n";
     runtime << code << std::endl;

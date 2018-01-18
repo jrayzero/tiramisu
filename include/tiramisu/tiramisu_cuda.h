@@ -15,7 +15,7 @@
 
 extern "C" {
 
-void tiramisu_init_cuda(int device_num);
+  //void tiramisu_init_cuda(int device_num);
 
 inline void tiramisu_check_cudad_error(const char *wrapper_name, CUresult code);
 

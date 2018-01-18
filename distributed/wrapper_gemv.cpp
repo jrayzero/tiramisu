@@ -16,6 +16,8 @@
 #include "/tmp/tiramisu_CUDA_kernel_gemv.cu.h"
 #endif
 
+extern void clear_static_var_tiramisu_CUDA_kernel_gemv();
+
 int mpi_init() {
     int provided = -1;
     MPI_Init_thread(NULL, NULL, REQ, &provided);
@@ -97,13 +99,13 @@ void check_results(halide_buffer_t *vector, halide_buffer_t *matrix, halide_buff
     float *should_be = (float*)calloc(ROWS, sizeof(float));
     for (uint64_t r = 0; r < ROWS; r++) {
         for (uint64_t c = 0; c < COLS; c++) {
-            should_be[r] += matrix[r*COLS+c] * vector[c];
+            should_be[r] += matrix->host[r*COLS+c] * vector->host[c];
         }
     }
     for (uint64_t r = 0; r < ROWS; r++) {
-        if (fabs(should_be[r] - result[r]) > 0.000001) {
+        if (fabs(should_be[r] - result->host[r]) > 0.000001) {
             std::cerr << "result at " << r << " is wrong" << std::endl;
-            std::cerr << "should be " << should_be[r] << " but is " << result[r] << std::endl;
+            std::cerr << "should be " << should_be[r] << " but is " << result->host[r] << std::endl;
             assert(false);
         }
     }
@@ -112,6 +114,7 @@ void check_results(halide_buffer_t *vector, halide_buffer_t *matrix, halide_buff
 }
 
 void run_gemv_cpu_only() {
+#ifdef CPU
     int rank = 0;
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
     Halide::Buffer<float> vector(COLS);
@@ -134,18 +137,21 @@ void run_gemv_cpu_only() {
     }
     print_time("performance_CPU.csv", "GEMV CPU", {"Tiramisu"}, {median(duration_vector)});
     std::cout.flush();
+#endif
 }
 
 void run_gemv_gpu_only() {
+#ifdef GPU
     int rank = 0;
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
-    halide_buffer_t *vector = fill_vector_pinned();
-    halide_buffer_t *matrix = fill_matrix_pinned();
-    float *res;
-    assert(cuMemHostAlloc((void**)&res, ROWS * sizeof(float), CU_MEMHOSTALLOC_PORTABLE) == 0);
-    halide_buffer_t result;
-    result.host = res;	   
     for (int iter = 0; iter < ITERS; iter++) {
+        tiramisu_init_cuda(1);
+        halide_buffer_t *vector = fill_vector_pinned();
+        halide_buffer_t *matrix = fill_matrix_pinned();
+        float *res;
+        assert(cuMemHostAlloc((void**)&res, ROWS * sizeof(float), CU_MEMHOSTALLOC_PORTABLE) == 0);
+        halide_buffer_t result;
+        result.host = (uint8_t*)res;
         auto start = std::chrono::high_resolution_clock::now();
         gemv_gpu(vector, matrix, &result);
         auto end = std::chrono::high_resolution_clock::now();
@@ -157,15 +163,21 @@ void run_gemv_gpu_only() {
 	  check_results(vector, matrix, &result);
 	}
 #endif
+        clear_static_var_tiramisu_CUDA_kernel_gemv();
+        cuCtxSynchronize();
+        cuCtxDestroy(cvars.ctx);
     }
     print_time("performance_CPU.csv", "GEMV GPU", {"Tiramisu"}, {median(duration_vector)});
     std::cout.flush();
+#endif
 }
 
 
 int main() {
-
+#ifdef CPU
   run_gemv_cpu_only();
-
-
+#elif defined(GPU)
+  run_gemv_gpu_only();
+#endif
+  
 }
