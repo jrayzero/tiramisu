@@ -2512,7 +2512,7 @@ void function::gen_halide_stmt()
                                                                                              "tiramisu_cudad_stream_create",
                                                                                              {streams_buffer, Halide::Expr((uint64_t)xfer_prop::comm_prop_ids.size())})), stmt);
         stmt = Halide::Internal::Allocate::make("streams", Halide::Handle(),
-                                                {Halide::Expr((uint64_t)xfer_prop::comm_prop_ids.size())},
+                                                {Halide::Expr((uint64_t)xfer_prop::comm_prop_ids.size()+1)},
                                                 Halide::Internal::const_true(), stmt);
     }
 
