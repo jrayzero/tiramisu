@@ -43,6 +43,8 @@ struct xfer;
 
 extern std::map<std::string, int> literals_per_kernel;
 extern bool use_gpu;
+void compile_kernels_to_obj();
+void print_tiramisu_cuda_runtime();
 
 struct HalideCodegenOutput
 {

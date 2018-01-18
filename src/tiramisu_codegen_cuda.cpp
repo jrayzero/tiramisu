@@ -41,7 +41,7 @@ std::string cuda_headers() {
     //    includes += "#include <cassert>\n";
     includes += "#include <assert.h>\n";
     includes += "#include <stdio.h>\n";
-    includes += "#include \"tiramisu/tiramisu_cuda_runtime.h\"\n";
+    includes += "#include \"/tmp/tiramisu_cuda_runtime.h\"\n";
     includes += "#include \"HalideRuntime.h\"\n";
     return includes;
 }
@@ -349,7 +349,7 @@ std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::
 
             if (kernel_ending_level - kernel_starting_level == 1) { // 1 dimension
                 if (current_level == kernel_ending_level) {
-                    idx_computation = "int thread_x = threadIdx.x;\n";
+                    idx_computation = "\n  int thread_x = threadIdx.x;\n";
                     cuda_dim = "\n  int block_width = " + cuda_loop_extent + ";\n  int block_height = 1;\n  int block_depth = 1;\n";
                 } else {
                     idx_computation = "int block_x = blockIdx.x;\n";//blockIdx.x;\n";
@@ -357,16 +357,16 @@ std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::
                 }
             } else if (kernel_ending_level - kernel_starting_level == 3) { // 2 dimension
                 if (current_level == kernel_ending_level) {
-                    idx_computation = "int thread_x = threadIdx.x;\n";
+                    idx_computation = "\n  int thread_x = threadIdx.x;\n";
                     cuda_dim = "\n  int block_width = " + cuda_loop_extent + ";\n  int block_depth = 1;\n";
                 } else if (current_level == kernel_ending_level - 1) {
-                    idx_computation = "int thread_y = threadIdx.y;\n";
+                    idx_computation = "\n  int thread_y = threadIdx.y;\n";
                     cuda_dim = "\n  int block_height = " + cuda_loop_extent + ";\n";
                 } else if (current_level == kernel_ending_level - 2) {
-                    idx_computation = "int block_x = blockIdx.x;\n";
+                    idx_computation = "\n  int block_x = blockIdx.x;\n";
                     cuda_dim = "\n  int grid_width = " + cuda_loop_extent + ";\n  int grid_depth = 1;\n";
                 } else {
-                    idx_computation = "int block_y = blockIdx.y;\n";
+                    idx_computation = "\n  int block_y = blockIdx.y;\n";
                     cuda_dim = "\n  int grid_height = " + cuda_loop_extent + ";\n";
                 }
             } else if (kernel_ending_level - kernel_starting_level == 5) { // 3 dimension
@@ -470,12 +470,15 @@ std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::
 // SUPERRRRR hacky right here
 std::map<std::string, int> literals_per_kernel;
 std::vector<std::string> already_printed;
+std::set<std::string> kernel_names;
+int num_kernels = 0;
 std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_file(std::string kernel_name, std::string kernel_fn,
                                                                                    std::string kernel_wrapper_fn,
                                                                                    std::string kernel_body, std::string kernel_wrapper_body,
                                                                                    std::string fatbin_fn) {
     // HAHAHA
-    bool skip1 = std::find(closure_vars_no_type.begin(), closure_vars_no_type.end(), "c1") != closure_vars_no_type.end();
+    kernel_names.insert(kernel_name);
+    bool skip1 = false;//std::find(closure_vars_no_type.begin(), closure_vars_no_type.end(), "c1") != closure_vars_no_type.end();
     bool skip2 = std::find(already_printed.begin(), already_printed.end(), kernel_name)  != already_printed.end();
     bool skip = skip1 || skip2;
     if (!skip2 && !skip1) {
@@ -483,6 +486,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     }
     std::ofstream kernel;
     if (!skip) {
+        num_kernels++;
         kernel.open(kernel_fn);
     }
     std::ofstream kernel_wrapper;
@@ -503,8 +507,8 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     std::string kernel_params = "  void *kernel_args[] = {";
     std::string clear_static_var = "\nvoid clear_static_var_" + kernel_name + "() { " + kernel_name + "_kernel_count = 0; }\n";
     if (!skip) {
-      kernel_wrapper_header << "extern \"C\" { \nvoid clear_static_var_" + kernel_name + "(); }\n" << std::endl;
-      kernel_wrapper_header.close();
+        kernel_wrapper_header << "extern \"C\" { \nvoid clear_static_var_" + kernel_name + "(); }\n" << std::endl;
+        kernel_wrapper_header.close();
     }
     std::vector<std::string> buffer_names;
     std::vector<std::string> other_params;
@@ -584,21 +588,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     // wrapper function that the host calls
     std::string stream_convert = "   CUstream *kernel_stream = (CUstream*)_kernel_stream;\n";
     std::string kernel_launch =  "  /*fprintf(stderr, \"grid width %d, grid height %d, grid depth %d, block width %d, block width %d, block depth %d\\n\", grid_width, grid_height, grid_depth, block_width, block_height, block_depth);*/\n  assert(cuLaunchKernel(kernel, grid_width, grid_height, grid_depth, block_width, block_height, block_depth, 0 /*No shmem for now*/, kernel_stream[0], kernel_args, 0) == 0);\n";
-    std::string module_mgmt = "";
-    if (kernel_name == "tiramisu_CUDA_kernel_bx") {
-        module_mgmt = "  CUmodule mod = cvars.mod1; CUfunction kernel;\n";
-    } else if (kernel_name == "tiramisu_CUDA_kernel_by") {
-        module_mgmt = "  CUmodule mod = cvars.mod2; CUfunction kernel;\n";
-    } else if (kernel_name == "tiramisu_CUDA_kernel_recompute") {
-        module_mgmt = "  CUmodule mod = cvars.mod3; CUfunction kernel;\n";
-    } else if (kernel_name == "tiramisu_CUDA_kernel_bx_0") {
-        module_mgmt = "  CUmodule mod = cvars.mod4; CUfunction kernel;\n";
-    } else if (kernel_name == "tiramisu_CUDA_kernel_by_0") {
-        module_mgmt = "  CUmodule mod = cvars.mod5; CUfunction kernel;\n";
-    } else {
-        assert(false && "Need other kernels");
-    }
-    module_mgmt += "  /*assert(cuModuleLoad(&mod, \"" + fatbin_fn + "\") == 0);*/\n";
+    std::string module_mgmt = "  CUmodule mod = cvars.mod" + std::to_string(num_kernels) + "; CUfunction kernel;\n";
     module_mgmt += "  CUresult func_err = cuModuleGetFunction(&kernel, mod, \"DEVICE_" + kernel_name + "\");\n";
     module_mgmt += "  if (func_err != CUDA_SUCCESS) { const char *cuda_err; cuGetErrorName(func_err, &cuda_err); fprintf(stderr, \"CUDA error for cuModuleGetFunction: %s\\n\", cuda_err); assert(false); }\n";
     std::string event_check = "  //if (event != NULL) { cuStreamWaitEvent(kernel_stream[0], event, 0); }\n";
@@ -607,10 +597,10 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     if (!skip) {
         kernel_wrapper << kernel_wrapper_signature << " {\n" << stream_convert << module_mgmt << device_params << kernel_params
                        << kernel_wrapper_body
-                       << event_check << kernel_launch << device_free << event_record << kernel_name <<  "_kernel_count++;\n}\n";
+                       << event_check << kernel_launch << device_free << event_record << "  " << kernel_name <<  "_kernel_count++;\n}\n";
         kernel_wrapper << kernel_wrapper_signature_no_event << " {\n" << stream_convert << module_mgmt << device_params << kernel_params
                        << kernel_wrapper_body
-                       << kernel_launch << device_free << kernel_name << "_kernel_count++;\n}" << clear_static_var << "\n}/*extern \"C\"*/\n";
+                       << kernel_launch << device_free << "  " << kernel_name << "_kernel_count++;\n}" << clear_static_var << "\n}/*extern \"C\"*/\n";
         kernel.close();
         kernel_wrapper.close();
     }
@@ -620,6 +610,67 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     closure_buffers.clear();
     closure_buffers_no_type.clear();
     return std::pair<std::vector<std::string>, std::vector<std::string>>(buffer_names, other_params);
+}
+
+bool runtime_printed = false;
+void print_tiramisu_cuda_runtime() {
+    if(!runtime_printed) {
+        runtime_printed = true;
+    } else {
+        assert(false && "Runtime already printed");
+    }
+    std::ofstream runtime;
+    runtime.open("/tmp/tiramisu_cuda_runtime.h");
+    std::string code = "";
+    code += "#ifndef TIRAMISU_TIRAMISU_CUDA_RUNTIME_H\n";
+    code += "#define TIRAMISU_TIRAMISU_CUDA_RUNTIME_H\n";
+    code += "#include \"cuda.h\"\n";
+    code += "extern \"C\" {\n";
+    code += "  struct cuda_vars {\n";
+    code += "    CUdevice device;\n";
+    code += "    CUcontext ctx;\n";
+    for (int i = 0; i < num_kernels; i++) {
+        code += "    CUmodule mod" + std::to_string(i+1) + ";\n";
+    }
+    code += "  };\n";
+    code += "  struct cuda_vars cvars;\n";
+    code += "  void tiramisu_init_cuda(int device_num) {\n";
+    code += "    assert(cuInit(0) == 0);\n";
+    code += "    assert(cuDeviceGet(&(cvars.device), device_num) == 0);\n";
+    code += "    size_t memory;\n";
+    code += "    assert(cuDeviceTotalMem(&memory, cvars.device) == 0);\n";
+    code += "    fprintf(stderr, \"Total memory on device %d is %lu\\n\", device_num, memory);\n";
+    code += "    assert(cuCtxCreate(&(cvars.ctx), CU_CTX_SCHED_BLOCKING_SYNC, cvars.device) == 0);\n";
+    int idx = 0;
+    for (auto k : kernel_names) {
+        idx++;
+        code += "    assert(cuModuleLoad(&cvars.mod" + std::to_string(idx) + ", \"/tmp/" + k + ".fatbin\") == 0);\n";
+    }
+    code += "  }\n";
+    code += "}\n";
+    code += "#endif //TIRAMISU_TIRAMISU_CUDA_RUNTIME_H\n";
+    runtime << code << std::endl;
+    runtime.close();
+}
+
+void compile_kernels_to_obj() {
+    for (auto k : kernel_names) {
+        // Generate a fat binary with a cubin file from the kernel
+        std::string kernel_fn = "/tmp/" + k + ".cu";
+        std::string kernel_wrapper_fn = "/tmp/" + k + "_wrapper.cu";
+        std::string cmd =
+                "nvcc --default-stream per-thread -I/Users/JRay/ClionProjects/tiramisu/include -I/data/hltemp/jray/tiramisu/include -I/data/hltemp/jray/tiramisu/Halide/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " +
+                kernel_fn + " --fatbin -odir /tmp/";
+        std::cerr << "cmd: " << cmd << std::endl;
+        int ret = system(cmd.c_str());
+        assert(ret == 0 && "Non-zero exit code for nvcc invocation");
+        //Compile the wrapper into an object file
+        cmd = "nvcc --default-stream per-thread -I/Users/JRay/ClionProjects/tiramisu/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -I/data/hltemp/jray/tiramisu/include -I/data/hltemp/jray/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " +
+              kernel_wrapper_fn + " -odir /tmp/";
+        std::cerr << "cmd: " << cmd << std::endl;
+        ret = system(cmd.c_str());
+        assert(ret == 0 && "Non-zero exit code for nvcc invocation");
+    }
 }
 
 // compile the kernel file to an object file that can later be linked in
@@ -646,7 +697,7 @@ std::tuple<std::string, std::vector<std::string>, std::vector<std::string>, std:
     std::string kernel_wrapper_fn = "/tmp/" + kernel_name + "_wrapper.cu";
     std::pair<std::vector<std::string>, std::vector<std::string>> params =
             generate_kernel_file(kernel_name, kernel_fn, kernel_wrapper_fn, kernel_body, wrapper_body, kernel_fatbin_fn);
-    compile_kernel_to_obj(kernel_fn, kernel_wrapper_fn);
+    //    compile_kernel_to_obj(kernel_fn, kernel_wrapper_fn);
     std::tuple<std::string, std::vector<std::string>, std::vector<std::string>, std::vector<std::pair<std::string, Halide::Expr>>> ret(kernel_fn, params.first, params.second, std::get<2>(bodies));
     return ret;
 }
@@ -1024,7 +1075,7 @@ std::string tiramisu::computation::create_kernel_assignment() {
     tiramisu::expr tiramisu_rhs = replace_original_indices_with_transformed_indices(this->expression, this->get_iterators_map());
     std::string rhs_expr = generator::cuda_expr_from_tiramisu_expr(this->get_function(), this->index_expr, tiramisu_rhs, this);
     generator::get_closures_from_tiramisu_expr(this->get_function(), this->index_expr, tiramisu_rhs, this);
-    std::string store_expr = lhs_buffer_name + "[" + lhs_index + "] = " + rhs_expr + ";";
+    std::string store_expr = "\n  " + lhs_buffer_name + "[" + lhs_index + "] = " + rhs_expr + ";";
     return store_expr;
 }
 

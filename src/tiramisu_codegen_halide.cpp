@@ -1692,7 +1692,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                     allocate_stmts_vector.push_back(comp);
                 }
                 else {
-                  block = Halide::Internal::Free::make(comp->get_name());
+                    block = Halide::Internal::Free::make(comp->get_name());
                 }
             }
             else
@@ -2423,11 +2423,11 @@ void function::gen_halide_stmt()
         }
     }
     if (use_gpu) {
-      stmt = Halide::Internal::Block::make(stmt, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cudad_ctx_sync", {})));
-      for (auto s : free_buffs) {
-        Halide::Expr gpu_buffer = Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), s);
-        stmt = Halide::Internal::Block::make(stmt, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cudad_free", {gpu_buffer})));
-      }
+        stmt = Halide::Internal::Block::make(stmt, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cudad_ctx_sync", {})));
+        for (auto s : free_buffs) {
+            Halide::Expr gpu_buffer = Halide::Internal::Variable::make(Halide::type_of<struct halide_buffer_t *>(), s);
+            stmt = Halide::Internal::Block::make(stmt, Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), "tiramisu_cudad_free", {gpu_buffer})));
+        }
     }
 
     for (const auto &b : this->get_buffers())
@@ -2500,20 +2500,20 @@ void function::gen_halide_stmt()
                                                                           std::vector<Halide::Expr>(),
                                                                           Halide::Internal::Call::Extern));
         stmt = Halide::Internal::LetStmt::make("rank", mpi_rank, stmt);
-        if (use_gpu) {
-          Halide::Expr streams_buffer = Halide::Internal::Load::make(
-                                                                     Halide::Handle(), "streams", 0, Halide::Buffer<>(),
-                                                                     Halide::Internal::Parameter(), Halide::Internal::const_true());
-          streams_buffer = Halide::Internal::Call::make(Halide::Handle(),
-                                                        Halide::Internal::Call::address_of, {streams_buffer},
-                                                        Halide::Internal::Call::Intrinsic);
-          stmt = Halide::Internal::Block::make(Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(),
-                                                                                               "tiramisu_cudad_stream_create",
-                                                                                               {streams_buffer, Halide::Expr((uint64_t)xfer_prop::comm_prop_ids.size())})), stmt);
-          stmt = Halide::Internal::Allocate::make("streams", Halide::Handle(),
-                                                  {Halide::Expr((uint64_t)xfer_prop::comm_prop_ids.size())},
-                                                  Halide::Internal::const_true(), stmt);
-        }
+    }
+    if (use_gpu) {
+        Halide::Expr streams_buffer = Halide::Internal::Load::make(
+                Halide::Handle(), "streams", 0, Halide::Buffer<>(),
+                Halide::Internal::Parameter(), Halide::Internal::const_true());
+        streams_buffer = Halide::Internal::Call::make(Halide::Handle(),
+                                                      Halide::Internal::Call::address_of, {streams_buffer},
+                                                      Halide::Internal::Call::Intrinsic);
+        stmt = Halide::Internal::Block::make(Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(),
+                                                                                             "tiramisu_cudad_stream_create",
+                                                                                             {streams_buffer, Halide::Expr((uint64_t)xfer_prop::comm_prop_ids.size())})), stmt);
+        stmt = Halide::Internal::Allocate::make("streams", Halide::Handle(),
+                                                {Halide::Expr((uint64_t)xfer_prop::comm_prop_ids.size())},
+                                                Halide::Internal::const_true(), stmt);
     }
 
     // Add producer tag

@@ -4,7 +4,6 @@
 
 #include <cassert>
 #include "tiramisu/tiramisu_cuda.h"
-#include "tiramisu/tiramisu_cuda_runtime.h"
 #include <stdio.h>
 #include <HalideBuffer.h>
 #include "HalideRuntime.h"
@@ -13,25 +12,25 @@
 
 extern "C" {
 
-struct cuda_vars cvars;
+//struct cuda_vars cvars;
 
-// TODO load all at once into one module to reduce overhead of loading module everytime at runtime
-void *tiramisu_init_cuda(int device_num) {
-    //   struct cuda_vars *cvars = (struct cuda_vars*)malloc(sizeof(struct cuda_vars));
-    assert(cuInit(0) == 0);
-    assert(cuDeviceGet(&(cvars.device), device_num) == 0);
-    size_t memory;
-    assert(cuDeviceTotalMem(&memory, cvars.device) == 0);
-    fprintf(stderr, "Total memory on device %d is %lu\n", device_num, memory);
-    assert(cuCtxCreate(&(cvars.ctx), CU_CTX_SCHED_BLOCKING_SYNC, cvars.device) == 0);
-    assert(cuModuleLoad(&cvars.mod1, "/tmp/tiramisu_CUDA_kernel_bx.fatbin") == 0);
-    assert(cuModuleLoad(&cvars.mod2, "/tmp/tiramisu_CUDA_kernel_by.fatbin") == 0);
-//    assert(cuModuleLoad(&cvars.mod3, "/tmp/tiramisu_CUDA_kernel_recompute.fatbin") == 0);
-    assert(cuModuleLoad(&cvars.mod4, "/tmp/tiramisu_CUDA_kernel_bx_0.fatbin") == 0);
-    assert(cuModuleLoad(&cvars.mod5, "/tmp/tiramisu_CUDA_kernel_by_0.fatbin") == 0);
-
-    return (void*)(&cvars);
-}
+//// TODO load all at once into one module to reduce overhead of loading module everytime at runtime
+//void *tiramisu_init_cuda(int device_num) {
+//    //   struct cuda_vars *cvars = (struct cuda_vars*)malloc(sizeof(struct cuda_vars));
+//    assert(cuInit(0) == 0);
+//    assert(cuDeviceGet(&(cvars.device), device_num) == 0);
+//    size_t memory;
+//    assert(cuDeviceTotalMem(&memory, cvars.device) == 0);
+//    fprintf(stderr, "Total memory on device %d is %lu\n", device_num, memory);
+//    assert(cuCtxCreate(&(cvars.ctx), CU_CTX_SCHED_BLOCKING_SYNC, cvars.device) == 0);
+//    assert(cuModuleLoad(&cvars.mod1, "/tmp/tiramisu_CUDA_kernel_bx.fatbin") == 0);
+//    assert(cuModuleLoad(&cvars.mod2, "/tmp/tiramisu_CUDA_kernel_by.fatbin") == 0);
+////    assert(cuModuleLoad(&cvars.mod3, "/tmp/tiramisu_CUDA_kernel_recompute.fatbin") == 0);
+//    assert(cuModuleLoad(&cvars.mod4, "/tmp/tiramisu_CUDA_kernel_bx_0.fatbin") == 0);
+//    assert(cuModuleLoad(&cvars.mod5, "/tmp/tiramisu_CUDA_kernel_by_0.fatbin") == 0);
+//
+//    return (void*)(&cvars);
+//}
 
 inline void tiramisu_check_cudad_error(const char *wrapper_name, CUresult code) {
     if (code != CUDA_SUCCESS) {
