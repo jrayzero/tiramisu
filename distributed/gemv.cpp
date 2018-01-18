@@ -76,58 +76,73 @@ void create_cpu_version() {
 }
 
 void create_gpu_version() {
-//    function *gemv_gpu = new function("gemv_gpu");
-//    std::vector<computation *> comps = make_algorithm(gemv_gpu, ROWS, COLS);
-//    computation *vector = comps[0];
-//    computation *matrix = comps[1];
-//    computation *gemv_dummy = comps[2];
-//    gemv_dummy->set_schedule_this_comp(false);
-//    computation *gemv = comps[3];
-//    gemv->set_schedule_this_comp(false);
-//
-//    int64_t rows_resident_on_gpu = 200;
-//    int64_t threads_per_block = 1000;
-//
-////    gemv_dummy->split(r, rows_resident_on_gpu, r0, r1);
-////    gemv->split(r, rows_resident_on_gpu, r0, r1);
-////    gemv->split(c, threads_per_block, c0, c1);
-////    gemv->tag_gpu_level2(c0, c1, 0);
-//
-//    xfer_prop h2d_cuda_async(p_float32, {ASYNC, CUDA, CPU2GPU}, 1);
-//    xfer_prop h2d_cuda_sync(p_float32, {SYNC, CUDA, CPU2GPU}, 1);
-//    xfer vector_copy = computation::create_xfer("{vector_copy[r,c]: 0<=r<1 and 0<=c<" + std::to_string(COLS) + "}", h2d_cuda_sync,
-//                                                vector->operator()(r,c), gemv_gpu);
-////    vector_copy.os->collapse_many({collapser(0, (int64_t)0, COLS)});
-//    generator::update_producer_expr_name(gemv, "vector", "vector_copy", false);
-//    xfer matrix_row_copy = computation::create_xfer("{matrix_row_copy[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<" +
-//                                                    std::to_string(COLS) + "}", h2d_cuda_sync,
-//                                                    matrix->operator()(r,c), gemv_gpu);
-//    generator::update_producer_expr_name(gemv, "matrix", "matrix_row_copy", false);
-//    isl_map_dump(matrix_row_copy.os->get_schedule());
-//    isl_map_dump(vector_copy.os->get_schedule());
-//    vector_copy.os->before(*matrix_row_copy.os, computation::root);
-//    isl_map_dump(matrix_row_copy.os->get_schedule());
-//    isl_map_dump(vector_copy.os->get_schedule());
-//
-//    buffer vector_buff("vector_buff", {1,COLS}, p_float32, a_input, gemv_gpu);
-//    buffer matrix_buff("matrix_buff", {ROWS, COLS}, p_float32, a_input, gemv_gpu);
-//    buffer result_buff("result_buff", {1,ROWS}, p_float32, a_output, gemv_gpu);
-//    buffer vector_gpu_buff("vector_gpu_buff", {COLS}, p_float32, a_temporary_gpu, gemv_gpu); // should fully fit on gpu
-//    buffer matrix_gpu_buff("matrix_gpu_buff", {rows_resident_on_gpu, COLS}, p_float32, a_temporary_gpu, gemv_gpu); // copy up one row at a time
-//    buffer result_gpu_buff("result_gpu_buff", {rows_resident_on_gpu}, p_float32, a_temporary_gpu, gemv_gpu); // should fully fit on gpu
-//    tiramisu::buffer buff_bx_literals("buff_gemv_literals", {ROWS, 3}, p_int64, tiramisu::a_temporary_gpu, gemv_gpu);
-//
-//    vector->set_access("{vector[c]->vector_buff[c]}");
-//    vector_copy.os->set_access("{vector_copy[c]->vector_gpu_buff[c]}");
-//    matrix->set_access("{matrix[r,c]->matrix_buff[r,c]}");
-//    matrix_row_copy.os->set_access("{matrix_row_copy[r,c]->matrix_gpu_buff[r%" + std::to_string(rows_resident_on_gpu) + ",c]}");
-//    gemv_dummy->set_access("{gemv_dummy[r]->result_gpu_buff[r]}");
-//    gemv->set_access("{gemv[r,c]->result_gpu_buff[r]}");
-//
-//    gemv_gpu->set_arguments({&vector_buff, &matrix_buff, &result_buff});
-//    postprocess(gemv_gpu, "/tmp/generated_gemv_gpu.o");
-//    print_tiramisu_cuda_runtime();
-//    compile_kernels_to_obj();
+    function *gemv_gpu = new function("gemv_gpu");
+    std::vector<computation *> comps = make_algorithm(gemv_gpu, ROWS, COLS);
+    computation *vector = comps[0];
+    computation *matrix = comps[1];
+    computation *gemv_dummy = comps[2];
+    computation *gemv = comps[3];
+
+    int64_t rows_resident_on_gpu = 200;
+    int64_t threads_per_block = 1000;
+
+    xfer_prop h2d_cuda_async(p_float32, {ASYNC, CUDA, CPU2GPU}, 1);
+    xfer_prop h2d_cuda_sync(p_float32, {SYNC, CUDA, CPU2GPU}, 1);
+    xfer_prop d2h_cuda_sync(p_float32, {SYNC, CUDA, GPU2CPU}, 2);
+    xfer vector_copy = computation::create_xfer("{vector_copy[r,c]: 0<=r<1 and 0<=c<" + std::to_string(COLS) + "}", h2d_cuda_sync,
+                                                vector->operator()(r,c), gemv_gpu);
+    generator::update_producer_expr_name(gemv, "vector", "vector_copy", false);
+    xfer matrix_row_copy = computation::create_xfer("{matrix_row_copy[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<" +
+                                                    std::to_string(COLS) + "}", h2d_cuda_sync,
+                                                    matrix->operator()(r,c), gemv_gpu);
+    generator::update_producer_expr_name(gemv, "matrix", "matrix_row_copy", false);
+    xfer init_reduction = computation::create_xfer("{init_reduction[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", h2d_cuda_sync, gemv_dummy->operator()(r,c), gemv_gpu);
+    generator::update_producer_expr_name(gemv, "gemv_dummy", "init_reduction", false);
+
+    xfer copy_back_results = computation::create_xfer("{copy_back[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", d2h_cuda_sync, gemv->operator()(r,c), gemv_gpu);
+
+    gemv->split(c, threads_per_block, c0, c1);
+
+    matrix_row_copy.os->split(r, rows_resident_on_gpu, r0, r1);
+    gemv->split(r, rows_resident_on_gpu, r0, r1);
+    gemv_dummy->split(r, rows_resident_on_gpu, r0, r1);
+    init_reduction.os->split(r, rows_resident_on_gpu, r0, r1);
+    copy_back_results.os->split(r, rows_resident_on_gpu, r0, r1);
+
+    vector_copy.os->before(*matrix_row_copy.os, computation::root);
+    matrix_row_copy.os->before(*gemv_dummy, r1);
+    gemv_dummy->before(*init_reduction.os, r1);
+    init_reduction.os->before(*gemv, r1);
+    gemv->before(*copy_back_results.os, r1);
+
+    vector_copy.os->collapse_many({collapser(1, (int64_t)0, COLS)});
+    matrix_row_copy.os->collapse_many({collapser(2, (int64_t)0, COLS)});
+
+    // this has to go after all the other things have been scheduled
+    gemv->tag_gpu_level2(c0, c1, 0);
+
+    buffer vector_buff("vector_buff", {1,COLS}, p_float32, a_input, gemv_gpu);
+    buffer matrix_buff("matrix_buff", {ROWS, COLS}, p_float32, a_input, gemv_gpu);
+    buffer result_buff("result_buff", {ROWS,1}, p_float32, a_output, gemv_gpu);
+    buffer zero_buff("zero_buff", {1,1}, p_float32, a_temporary, gemv_gpu);
+    buffer vector_gpu_buff("vector_gpu_buff", {1,COLS}, p_float32, a_temporary_gpu, gemv_gpu); // should fully fit on gpu
+    buffer matrix_gpu_buff("matrix_gpu_buff", {rows_resident_on_gpu,COLS}, p_float32, a_temporary_gpu, gemv_gpu); // copy up one row at a time
+    buffer result_gpu_buff("result_gpu_buff", {rows_resident_on_gpu,1}, p_float32, a_temporary_gpu, gemv_gpu); // should fully fit on gpu
+    tiramisu::buffer buff_bx_literals("buff_gemv_literals", {ROWS, 3}, p_int64, tiramisu::a_temporary_gpu, gemv_gpu);
+
+    vector->set_access("{vector[r,c]->vector_buff[r,c]}");
+    vector_copy.os->set_access("{vector_copy[r,c]->vector_gpu_buff[r,c]}");
+    matrix->set_access("{matrix[r,c]->matrix_buff[r,c]}");
+    matrix_row_copy.os->set_access("{matrix_row_copy[r,c]->matrix_gpu_buff[r%" + std::to_string(rows_resident_on_gpu) + ",c]}");
+    gemv_dummy->set_access("{gemv_dummy[r,c]->zero_buff[0,0]}");
+    init_reduction.os->set_access("{init_reduction[r,c]->result_gpu_buff[r,c]}");
+    gemv->set_access("{gemv[r,c]->result_gpu_buff[r,0]}");
+    copy_back_results.os->set_access("{copy_back[r,c]->result_buff[r,c]}");
+
+    gemv_gpu->set_arguments({&vector_buff, &matrix_buff, &result_buff});
+    postprocess(gemv_gpu, "/tmp/generated_gemv_gpu.o");
+    print_tiramisu_cuda_runtime();
+    compile_kernels_to_obj();
 }
 
 int main() {
