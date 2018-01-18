@@ -19,7 +19,7 @@
 using namespace tiramisu;
 
 std::vector<computation *> make_algorithm(function *f, int64_t rows, int64_t cols) {
-  var c("c"), r("r");
+    var c("c"), r("r");
     computation *vector = new computation("{vector[r,c]: 0<=r<1 and 0<=c<" + std::to_string(cols) + "}", expr(), false, p_float32, f);
     computation *matrix = new computation("{matrix[r,c]: 0<=r<" + std::to_string(rows) + " and 0<=c<" + std::to_string(cols) + "}",
                                           expr(), false, p_float32, f);
@@ -43,7 +43,7 @@ void postprocess(function *f, std::string obj_file_name) {
 }
 
 void create_cpu_version() {
-    var c("c"), r("r"), r0("r0"), r1("r1"), r2("r2"), r3("r3"), c0("c0"), c1("c1");    
+    var c("c"), r("r"), r0("r0"), r1("r1"), r2("r2"), r3("r3"), c0("c0"), c1("c1");
     function *gemv_cpu = new function("gemv_cpu");
 
     std::vector<computation *> comps = make_algorithm(gemv_cpu, ROWS, COLS);
@@ -104,24 +104,30 @@ void create_gpu_version() {
     xfer copy_back_results = computation::create_xfer("{copy_back[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", d2h_cuda_async, gemv->operator()(r,c), gemv_gpu);
 
     //    gemv->split(c, threads_per_block, c0, c1);
-
+    int64_t block_size = 10;
     matrix_row_copy.os->split(r, rows_resident_on_gpu, r0, r1);
     gemv->split(r, rows_resident_on_gpu, r0, r1);
+    gemv->split(r1, block_size, r2, r3);
     gemv_dummy->split(r, rows_resident_on_gpu, r0, r1);
+    gemv_dummy->split(r1, block_size, r2, r3);
     init_reduction.os->split(r, rows_resident_on_gpu, r0, r1);
+    init_reduction.os->split(r1, block_size, r2, r3);
     copy_back_results.os->split(r, rows_resident_on_gpu, r0, r1);
+    copy_back_results.os->split(r1, block_size, r2, r3);
 
     vector_copy.os->before(*matrix_row_copy.os, computation::root);
-    matrix_row_copy.os->before(*gemv_dummy, r1);
-    gemv_dummy->before(*init_reduction.os, r1);
-    init_reduction.os->before(*gemv, r1);
-    gemv->before(*copy_back_results.os, r1);
+    matrix_row_copy.os->before(*gemv_dummy, r0);
+    gemv_dummy->before(*init_reduction.os, r0);
+    init_reduction.os->before(*gemv, r0);
+    gemv->before(*copy_back_results.os, r0);
 
     vector_copy.os->collapse_many({collapser(1, (int64_t)0, COLS)});
-    matrix_row_copy.os->collapse_many({collapser(2, (int64_t)0, COLS)});
+    matrix_row_copy.os->collapse_many({collapser(2, (int64_t)0, COLS), collapser(1, (int64_t)0, rows_resident_on_gpu)});
+    init_reduction.os->collapse_many({collapser(2, (int64_t)0, block_size), collapser(1, (int64_t)0, rows_resident_on_gpu/block_size)});
+    copy_back_results.os->collapse_many({collapser(2, (int64_t)0, block_size), collapser(1, (int64_t)0, rows_resident_on_gpu/block_size)});
 
     // this has to go after all the other things have been scheduled
-    //    gemv->tag_gpu_level2(c0, c1, 0);
+    gemv->tag_gpu_level2(r2, r3, 0);
 
     buffer vector_buff("vector_buff", {1,COLS}, p_float32, a_input, gemv_gpu);
     buffer matrix_buff("matrix_buff", {ROWS, COLS}, p_float32, a_input, gemv_gpu);
@@ -143,8 +149,8 @@ void create_gpu_version() {
     init_reduction.os->set_access("{init_reduction[r,c]->result_gpu_buff[r%" + std::to_string(rows_resident_on_gpu) + ",c]}");
     init_reduction.os->set_wait_access("{init_reduction[r,c]->null_buffer[0]}");
     gemv->set_access("{gemv[r,c]->result_gpu_buff[r%" + std::to_string(rows_resident_on_gpu) + ",0]}");
-    copy_back_results.os->set_access("{copy_back[r,c]->result_buff[r,c]}");    
-    copy_back_results.os->set_wait_access("{copy_back[r,c]->null_buffer[0]}");    
+    copy_back_results.os->set_access("{copy_back[r,c]->result_buff[r,c]}");
+    copy_back_results.os->set_wait_access("{copy_back[r,c]->null_buffer[0]}");
 
     gemv_gpu->set_arguments({&vector_buff, &matrix_buff, &result_buff});
     postprocess(gemv_gpu, "/tmp/generated_gemv.o");

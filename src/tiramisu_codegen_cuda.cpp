@@ -24,6 +24,8 @@
 // make sure having multiple computations in the same loop nest work. Both will need to be converted into kernels
 namespace tiramisu {
 
+
+std::string c_type_from_tiramisu_type(tiramisu::primitive_t type);
 std::vector<std::string> closure_buffers;
 std::vector<std::string> closure_buffers_no_type;
 // vars to pass into the wrapper
@@ -305,7 +307,54 @@ std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::
         std::string code = "";
         if (current_level > kernel_ending_level) {
             std::cerr << "Generating for loop in kernel" << std::endl;
-            assert(false && "Support for loops in kernels once we actually need them");
+            isl_ast_expr *iter = isl_ast_node_for_get_iterator(node);
+            char *cstr = isl_ast_expr_to_C_str(iter);
+            std::string iterator_str = std::string(cstr);
+            std::string idx_computation = "";
+            std::string cuda_dim = "";
+
+            isl_ast_expr *init = isl_ast_node_for_get_init(node);
+            isl_ast_expr *cond = isl_ast_node_for_get_cond(node);
+            std::vector<std::pair<std::string, Halide::Expr>> iter_lets;
+
+            isl_ast_expr *cond_upper_bound_isl_format = NULL;
+            std::string bound = "";
+            if (isl_ast_expr_get_op_type(cond) == isl_ast_op_lt) {
+                cond_upper_bound_isl_format = isl_ast_expr_get_op_arg(cond, 1);
+                bound = "<";
+            } else if (isl_ast_expr_get_op_type(cond) == isl_ast_op_le) {
+                // Create an expression of "1".
+                isl_val *one = isl_val_one(isl_ast_node_get_ctx(node));
+                // Add 1 to the ISL ast upper bound to transform it into a strict bound.
+                cond_upper_bound_isl_format = isl_ast_expr_add(
+                        isl_ast_expr_get_op_arg(cond, 1),
+                        isl_ast_expr_from_val(one));
+                bound = "<=";
+            } else {
+                tiramisu::error("The for loop upper bound is not an isl_est_expr of type le or lt" , 1);
+            }
+
+            Halide::Expr init_expr = halide_expr_from_isl_ast_expr(init, true);
+            Halide::Expr cond_upper_bound_halide_format =
+                    (halide_expr_from_isl_ast_expr(cond_upper_bound_isl_format, true));
+            std::string cuda_init = cuda_expr_from_isl_ast_expr(init, kernel_starting_level, kernel_ending_level,
+                                                                true, false, true);
+            std::string cuda_extent =
+                    cuda_expr_from_isl_ast_expr(cond_upper_bound_isl_format, kernel_starting_level, kernel_ending_level,
+                                                true, false, true);
+
+//            std::string cuda_loop_extent = "(" + cuda_extent + " - " + cuda_init + ")";
+            isl_ast_node *body = isl_ast_node_for_get_body(node);
+            std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>>  bodies =
+                    tiramisu::generator::codegen_kernel_body(fct, body, current_level + 1, kernel_starting_level,
+                                                             kernel_ending_level);
+            std::string cuda_body = std::get<0>(bodies);
+            cuda_body = "for (" + c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " " + iterator_str + " = " +
+                    cuda_init + "; " + iterator_str + " " + bound + " " + cuda_extent + "; " + iterator_str +
+                    "++" + ") {" + cuda_body + "\n}\n";
+
+            std::cerr << cuda_body << std::endl;
+            return std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>> (cuda_body, "", {});
         } else { // this is a GPU kernel loop, i.e. a thread iterator (or block iterator, w/e)
             // Figure out the new name for this iterator based on blocks and threads
             // and then convert to the appropriate coordinate
@@ -497,21 +546,21 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     }
     // headers
     if (!skip) {
-      std::string init_cuda = "void tiramisu_init_cuda(int device_num) {\n";
-      init_cuda += "    assert(cuInit(0) == 0);\n";
-      init_cuda += "    assert(cuDeviceGet(&(cvars.device), device_num) == 0);\n";
-      init_cuda += "    size_t memory;\n";
-      init_cuda += "    assert(cuDeviceTotalMem(&memory, cvars.device) == 0);\n";
-      init_cuda += "    fprintf(stderr, \"Total memory on device %d is %lu\\n\", device_num, memory);\n";
-      init_cuda += "    assert(cuCtxCreate(&(cvars.ctx), CU_CTX_SCHED_BLOCKING_SYNC, cvars.device) == 0);\n";
-      int idx = 0;
-      for (auto k : kernel_names) {
-        idx++;
-        init_cuda += "    assert(cuModuleLoad(&cvars.mod" + std::to_string(idx) + ", \"/tmp/" + k + ".fatbin\") == 0);\n";
-      }
-      init_cuda += "  }\n";
-      kernel << cuda_headers() << std::endl;
-      kernel_wrapper << cuda_headers() << "#include \"" + kernel_fn + ".h\"" << "\nstruct cuda_vars cvars;\n" << init_cuda << std::endl;
+        std::string init_cuda = "void tiramisu_init_cuda(int device_num) {\n";
+        init_cuda += "    assert(cuInit(0) == 0);\n";
+        init_cuda += "    assert(cuDeviceGet(&(cvars.device), device_num) == 0);\n";
+        init_cuda += "    size_t memory;\n";
+        init_cuda += "    assert(cuDeviceTotalMem(&memory, cvars.device) == 0);\n";
+        init_cuda += "    fprintf(stderr, \"Total memory on device %d is %lu\\n\", device_num, memory);\n";
+        init_cuda += "    assert(cuCtxCreate(&(cvars.ctx), CU_CTX_SCHED_BLOCKING_SYNC, cvars.device) == 0);\n";
+        int idx = 0;
+        for (auto k : kernel_names) {
+            idx++;
+            init_cuda += "    assert(cuModuleLoad(&cvars.mod" + std::to_string(idx) + ", \"/tmp/" + k + ".fatbin\") == 0);\n";
+        }
+        init_cuda += "  }\n";
+        kernel << cuda_headers() << std::endl;
+        kernel_wrapper << cuda_headers() << "#include \"" + kernel_fn + ".h\"" << "\nstruct cuda_vars cvars;\n" << init_cuda << std::endl;
     }
     // kernel
     std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
@@ -573,6 +622,9 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         //        kernel_signature += ", void* literals";
         kernel_wrapper_signature += ", halide_buffer_t *literals)";
         kernel_wrapper_signature_no_event += ", halide_buffer_t *literals)"; // have to pass in the correct address for the row
+    } else {
+        kernel_wrapper_signature += ")";
+        kernel_wrapper_signature_no_event += ")";
     }
 
     std::string device_params = "";
@@ -750,11 +802,10 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
         isl_id *identifier = isl_ast_expr_get_id(isl_expr);
         std::string name_str(isl_id_get_name(identifier));
         isl_id_free(identifier);
-
+        std::string tmp_name = name_str.substr(1);
+        int current_level = std::stoi(tmp_name);
+        current_level /= 2;
         if (map_iterator) {
-            std::string tmp_name = name_str.substr(1);
-            int current_level = std::stoi(tmp_name);
-            current_level /= 2;
             if (current_level >= kernel_starting_level && current_level <= kernel_ending_level) {
                 if (kernel_ending_level - kernel_starting_level == 1) { // 1 dimension
                     if (current_level == kernel_ending_level) {
@@ -790,7 +841,9 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
             }
         }
 
-        if (name_str != "thread_x" && name_str != "thread_y" && name_str != "thread_z" && name_str != "block_x" && name_str != "block_y" && name_str != "block_z") {
+        if (name_str != "thread_x" && name_str != "thread_y" && name_str != "thread_z" && name_str != "block_x" &&
+                name_str != "block_y" && name_str != "block_z" && (current_level >= kernel_starting_level &&
+                current_level <= kernel_ending_level)) {
             if (!convert_to_loop_type) {
                 result = "(int)" + name_str;
                 if (capture_vars) {
@@ -809,7 +862,8 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
                         closure_vars.push_back(
                                 c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " " + name_str);
                         closure_vars_no_type.push_back(name_str);
-                        closure_vars_ptr.push_back(c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) + " *DEVICE_" + name_str);
+                        closure_vars_ptr.push_back(c_type_from_tiramisu_type(global::get_loop_iterator_data_type()) +
+                                                           " *DEVICE_" + name_str);
                     }
                 }
             }
