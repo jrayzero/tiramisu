@@ -1,14 +1,6 @@
 //
 // Created by Jessica Ray on 1/17/18.
 //
-
-#include <isl/set.h>
-#include <isl/union_map.h>
-#include <isl/union_set.h>
-#include <isl/ast_build.h>
-#include <isl/schedule.h>
-#include <isl/schedule_node.h>
-
 #include <tiramisu/debug.h>
 #include <tiramisu/core.h>
 
@@ -132,7 +124,7 @@ void create_gpu_version() {
     buffer vector_buff("vector_buff", {1,COLS}, p_float32, a_input, gemv_gpu);
     buffer matrix_buff("matrix_buff", {ROWS, COLS}, p_float32, a_input, gemv_gpu);
     buffer result_buff("result_buff", {ROWS,1}, p_float32, a_output, gemv_gpu);
-    buffer zero_buff("zero_buff", {1,1}, p_float32, a_temporary, gemv_gpu);
+    buffer zero_buff("zero_buff", {rows_resident_on_gpu,1}, p_float32, a_temporary, gemv_gpu);
     buffer vector_gpu_buff("vector_gpu_buff", {1,COLS}, p_float32, a_temporary_gpu, gemv_gpu); // should fully fit on gpu
     buffer matrix_gpu_buff("matrix_gpu_buff", {rows_resident_on_gpu,COLS}, p_float32, a_temporary_gpu, gemv_gpu); // copy up one row at a time
     buffer result_gpu_buff("result_gpu_buff", {rows_resident_on_gpu,1}, p_float32, a_temporary_gpu, gemv_gpu); // should fully fit on gpu
@@ -145,7 +137,7 @@ void create_gpu_version() {
     matrix->set_access("{matrix[r,c]->matrix_buff[r,c]}");
     matrix_row_copy.os->set_access("{matrix_row_copy[r,c]->matrix_gpu_buff[r%" + std::to_string(rows_resident_on_gpu) + ",c]}");
     matrix_row_copy.os->set_wait_access("{matrix_row_copy[r,c]->null_buffer[0]}");
-    gemv_dummy->set_access("{gemv_dummy[r,c]->zero_buff[0,0]}");
+    gemv_dummy->set_access("{gemv_dummy[r,c]->zero_buff[r%" + std::to_string(rows_resident_on_gpu) + ",0]}");
     init_reduction.os->set_access("{init_reduction[r,c]->result_gpu_buff[r%" + std::to_string(rows_resident_on_gpu) + ",c]}");
     init_reduction.os->set_wait_access("{init_reduction[r,c]->null_buffer[0]}");
     gemv->set_access("{gemv[r,c]->result_gpu_buff[r%" + std::to_string(rows_resident_on_gpu) + ",0]}");

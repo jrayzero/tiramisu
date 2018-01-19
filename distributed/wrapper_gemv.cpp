@@ -32,7 +32,7 @@ void fill_vector(Halide::Buffer<float> &vector) {
     float f = 0.0f;
     for (uint64_t c = 0; c < COLS; c++) {
         vector(c) = f;
-        f += 0.01;
+        f += 0.01f;
     }
 }
 
@@ -42,7 +42,7 @@ void fill_matrix(Halide::Buffer<float> &matrix) {
     for (uint64_t r = 0; r < ROWS; r++) {
         for (uint64_t c = 0; c < COLS; c++) {
             matrix(c,r) = f;
-            f += 0.01;
+            f += 0.01f;
         }
     }
 }
@@ -54,7 +54,7 @@ halide_buffer_t *fill_vector_pinned() {
     float f = 0.0f;
     for (uint64_t c = 0; c < COLS; c++) {
       buff[c] = f;
-      f += 0.01;
+      f += 1.0f;
     }
     halide_buffer_t *hbuff = new halide_buffer_t();
     hbuff->host = (uint8_t*)buff;
@@ -68,9 +68,10 @@ halide_buffer_t *fill_matrix_pinned() {
     float f = 0.0f;
     for (uint64_t r = 0; r < ROWS; r++) {
         for (uint64_t c = 0; c < COLS; c++) {
-            buff[r*COLS+c] = f;
-            f += 0.01;
+          buff[r*COLS+c] = f;
+          f += 1.0f;
         }
+        f = 0.0f;
     }
     halide_buffer_t *hbuff = new halide_buffer_t();
     hbuff->host = (uint8_t*)buff;
@@ -99,13 +100,14 @@ void check_results(halide_buffer_t *vector, halide_buffer_t *matrix, halide_buff
     float *should_be = (float*)calloc(ROWS, sizeof(float));
     for (uint64_t r = 0; r < ROWS; r++) {
         for (uint64_t c = 0; c < COLS; c++) {
-            should_be[r] += matrix->host[r*COLS+c] * vector->host[c];
+          should_be[r] += ((float*)(matrix->host))[r*COLS+c] * ((float*)(vector->host))[c];
         }
     }
     for (uint64_t r = 0; r < ROWS; r++) {
-        if (fabs(should_be[r] - result->host[r]) > 0.000001) {
+      if (fabs(should_be[r] - ((float*)(result->host))[r]) > 0.000001) {
             std::cerr << "result at " << r << " is wrong" << std::endl;
-            std::cerr << "should be " << should_be[r] << " but is " << result->host[r] << std::endl;
+            std::cerr << "should be " << should_be[r] << " but is " << ((float*)(result->host))[r] << std::endl;
+            std::cerr << (fabs(should_be[r] - ((float*)(result->host))[r])) << std::endl;
             assert(false);
         }
     }
@@ -143,6 +145,7 @@ void run_gemv_cpu_only() {
 void run_gemv_gpu_only() {
 #ifdef GPU
     int rank = 0;
+    std::cerr << "Running GPU" << std::endl;
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
     for (int iter = 0; iter < ITERS; iter++) {
         tiramisu_init_cuda(1);

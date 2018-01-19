@@ -318,10 +318,9 @@ std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::
             std::vector<std::pair<std::string, Halide::Expr>> iter_lets;
 
             isl_ast_expr *cond_upper_bound_isl_format = NULL;
-            std::string bound = "";
+            std::string bound = "<";
             if (isl_ast_expr_get_op_type(cond) == isl_ast_op_lt) {
                 cond_upper_bound_isl_format = isl_ast_expr_get_op_arg(cond, 1);
-                bound = "<";
             } else if (isl_ast_expr_get_op_type(cond) == isl_ast_op_le) {
                 // Create an expression of "1".
                 isl_val *one = isl_val_one(isl_ast_node_get_ctx(node));
@@ -329,7 +328,6 @@ std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::
                 cond_upper_bound_isl_format = isl_ast_expr_add(
                         isl_ast_expr_get_op_arg(cond, 1),
                         isl_ast_expr_from_val(one));
-                bound = "<=";
             } else {
                 tiramisu::error("The for loop upper bound is not an isl_est_expr of type le or lt" , 1);
             }
