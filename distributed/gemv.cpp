@@ -50,9 +50,10 @@ void create_cpu_version() {
     gemv->tile(r, c, (int64_t)100, (int64_t)100, r0, c0, r1, c1);
     gemv->split(r0, ROWS/(int64_t)100/(int64_t)20, r2, r3);
     gemv->parallelize(r2);
+    gemv_dummy->before(*gemv, r2);
 #endif
 
-    gemv_dummy->before(*gemv, r2);
+    gemv_dummy->before(*gemv, computation::root);
 
     buffer vector_buff("vector_buff", {(int64_t)1, COLS}, p_float32, a_input, gemv_cpu);
     buffer matrix_buff("matrix_buff", {ROWS, COLS}, p_float32, a_input, gemv_cpu);
@@ -95,7 +96,6 @@ void create_gpu_version() {
 
     xfer copy_back_results = computation::create_xfer("{copy_back[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", d2h_cuda_async, gemv->operator()(r,c), gemv_gpu);
 
-    //    gemv->split(c, threads_per_block, c0, c1);
     int64_t block_size = 10;
     matrix_row_copy.os->split(r, rows_resident_on_gpu, r0, r1);
     gemv->split(r, rows_resident_on_gpu, r0, r1);

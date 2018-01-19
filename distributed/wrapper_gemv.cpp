@@ -32,7 +32,7 @@ void fill_vector(Halide::Buffer<float> &vector) {
     float f = 0.0f;
     for (uint64_t c = 0; c < COLS; c++) {
         vector(c) = f;
-        f += 0.01f;
+        f += 0.001f;
     }
 }
 
@@ -42,8 +42,9 @@ void fill_matrix(Halide::Buffer<float> &matrix) {
     for (uint64_t r = 0; r < ROWS; r++) {
         for (uint64_t c = 0; c < COLS; c++) {
             matrix(c,r) = f;
-            f += 0.01f;
+            f += 0.001f;
         }
+        f = 0.0f;
     }
 }
 
@@ -55,7 +56,7 @@ halide_buffer_t *fill_vector_pinned(bool fill) {
       float f = 0.0f;
       for (uint64_t c = 0; c < COLS; c++) {
         buff[c] = f;
-        f += 1.0f;
+        f += 0.001f;
       }
     }
     halide_buffer_t *hbuff = new halide_buffer_t();
@@ -72,7 +73,7 @@ halide_buffer_t *fill_matrix_pinned(bool fill) {
       for (uint64_t r = 0; r < ROWS; r++) {
         for (uint64_t c = 0; c < COLS; c++) {
           buff[r*COLS+c] = f;
-          f += 1.0f;
+          f += 0.001f;
         }
         f = 0.0f;
       }
@@ -90,7 +91,7 @@ void check_results(Halide::Buffer<float> vector, Halide::Buffer<float> matrix, H
         }
     }
     for (uint64_t r = 0; r < ROWS; r++) {
-        if (fabs(should_be[r] - result(r)) > 0.000001) {
+        if (fabs(should_be[r] - result(r)) > 0.001) {
             std::cerr << "result at " << r << " is wrong" << std::endl;
             std::cerr << "should be " << should_be[r] << " but is " << result(r) << std::endl;
             assert(false);
@@ -132,6 +133,7 @@ void run_gemv_cpu_only() {
     fill_matrix(matrix);
 #endif
     for (int iter = 0; iter < ITERS; iter++) {
+        std::cerr << "Iter " << iter << std::endl;
         auto start = std::chrono::high_resolution_clock::now();
         gemv_cpu(vector.raw_buffer(), matrix.raw_buffer(), result.raw_buffer());
         auto end = std::chrono::high_resolution_clock::now();
@@ -157,6 +159,7 @@ void run_gemv_gpu_only() {
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
     for (int iter = 0; iter < ITERS; iter++) {
         tiramisu_init_cuda(1);
+        std::cerr << "Iter " << iter << std::endl;
 #ifdef CHECK_RESULTS
         halide_buffer_t *vector = fill_vector_pinned(true);
         halide_buffer_t *matrix = fill_matrix_pinned(true);
