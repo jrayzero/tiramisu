@@ -47,31 +47,35 @@ void fill_matrix(Halide::Buffer<float> &matrix) {
     }
 }
 
-halide_buffer_t *fill_vector_pinned() {
+halide_buffer_t *fill_vector_pinned(bool fill) {
     std::cerr << "Filling vector" << std::endl;
     float *buff;
     cuMemHostAlloc((void**)&buff, COLS * sizeof(float), CU_MEMHOSTALLOC_PORTABLE);
-    float f = 0.0f;
-    for (uint64_t c = 0; c < COLS; c++) {
-      buff[c] = f;
-      f += 1.0f;
+    if (fill) {
+      float f = 0.0f;
+      for (uint64_t c = 0; c < COLS; c++) {
+        buff[c] = f;
+        f += 1.0f;
+      }
     }
     halide_buffer_t *hbuff = new halide_buffer_t();
     hbuff->host = (uint8_t*)buff;
     return hbuff;
 }
 
-halide_buffer_t *fill_matrix_pinned() {
+halide_buffer_t *fill_matrix_pinned(bool fill) {
     std::cerr << "Filling matrix" << std::endl;
     float *buff;
     cuMemHostAlloc((void**)&buff, COLS * ROWS * sizeof(float), CU_MEMHOSTALLOC_PORTABLE);
     float f = 0.0f;
-    for (uint64_t r = 0; r < ROWS; r++) {
+    if (fill) {
+      for (uint64_t r = 0; r < ROWS; r++) {
         for (uint64_t c = 0; c < COLS; c++) {
           buff[r*COLS+c] = f;
           f += 1.0f;
         }
         f = 0.0f;
+      }
     }
     halide_buffer_t *hbuff = new halide_buffer_t();
     hbuff->host = (uint8_t*)buff;
@@ -117,13 +121,16 @@ void check_results(halide_buffer_t *vector, halide_buffer_t *matrix, halide_buff
 
 void run_gemv_cpu_only() {
 #ifdef CPU
-    int rank = 0;
+    int rank = mpi_init();
+    assert(rank == 0 && "This CPU implementation is for a single node ONLY (i.e. one process)");
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
     Halide::Buffer<float> vector(COLS);
     Halide::Buffer<float> matrix(COLS, ROWS);
     Halide::Buffer<float> result(ROWS);
+#ifdef CHECK_RESULTS
     fill_vector(vector);
     fill_matrix(matrix);
+#endif
     for (int iter = 0; iter < ITERS; iter++) {
         auto start = std::chrono::high_resolution_clock::now();
         gemv_cpu(vector.raw_buffer(), matrix.raw_buffer(), result.raw_buffer());
@@ -144,13 +151,19 @@ void run_gemv_cpu_only() {
 
 void run_gemv_gpu_only() {
 #ifdef GPU
-    int rank = 0;
+    int rank = mpi_init();
+    assert(rank == 0 && "This GPU implementation is for a single node ONLY (i.e. one process)");
     std::cerr << "Running GPU" << std::endl;
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
     for (int iter = 0; iter < ITERS; iter++) {
         tiramisu_init_cuda(1);
-        halide_buffer_t *vector = fill_vector_pinned();
-        halide_buffer_t *matrix = fill_matrix_pinned();
+#ifdef CHECK_RESULTS
+        halide_buffer_t *vector = fill_vector_pinned(true);
+        halide_buffer_t *matrix = fill_matrix_pinned(true);
+#else
+        halide_buffer_t *vector = fill_vector_pinned(false);
+        halide_buffer_t *matrix = fill_matrix_pinned(false);
+#endif
         float *res;
         assert(cuMemHostAlloc((void**)&res, ROWS * sizeof(float), CU_MEMHOSTALLOC_PORTABLE) == 0);
         halide_buffer_t result;
@@ -182,5 +195,5 @@ int main() {
 #elif defined(GPU)
   run_gemv_gpu_only();
 #endif
-  
+  MPI_Finalize();
 }
