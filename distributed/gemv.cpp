@@ -77,13 +77,13 @@ void create_gpu_version() {
     computation *gemv_dummy = comps[2];
     computation *gemv = comps[3];
 
-    int64_t rows_resident_on_gpu = 200;
+    int64_t rows_resident_on_gpu = 2000;
     int64_t threads_per_block = 1000;
 
-    xfer_prop h2d_cuda_async(p_float32, {ASYNC, CUDA, CPU2GPU}, 0);
-    xfer_prop d2h_cuda_async(p_float32, {ASYNC, CUDA, GPU2CPU}, 0);
-    xfer_prop h2d_cuda_sync(p_float32, {SYNC, CUDA, CPU2GPU}, 0);
-    xfer_prop d2h_cuda_sync(p_float32, {SYNC, CUDA, GPU2CPU}, 0);
+    xfer_prop h2d_cuda_async(p_float32, {ASYNC, CUDA, CPU2GPU}, 1);
+    xfer_prop h2d_cuda_async_alt(p_float32, {ASYNC, CUDA, CPU2GPU}, 2);
+    xfer_prop d2h_cuda_async(p_float32, {ASYNC, CUDA, GPU2CPU}, 2);
+
     xfer vector_copy = computation::create_xfer("{vector_copy[r,c]: 0<=r<1 and 0<=c<" + std::to_string(COLS) + "}", h2d_cuda_async,
                                                 vector->operator()(r,c), gemv_gpu);
     generator::update_producer_expr_name(gemv, "vector", "vector_copy", false);
@@ -91,7 +91,7 @@ void create_gpu_version() {
                                                     std::to_string(COLS) + "}", h2d_cuda_async,
                                                     matrix->operator()(r,c), gemv_gpu);
     generator::update_producer_expr_name(gemv, "matrix", "matrix_row_copy", false);
-    xfer init_reduction = computation::create_xfer("{init_reduction[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", h2d_cuda_async, gemv_dummy->operator()(r,c), gemv_gpu);
+    xfer init_reduction = computation::create_xfer("{init_reduction[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", h2d_cuda_async_alt, gemv_dummy->operator()(r,c), gemv_gpu);
     generator::update_producer_expr_name(gemv, "gemv_dummy", "init_reduction", false);
 
     xfer copy_back_results = computation::create_xfer("{copy_back[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", d2h_cuda_async, gemv->operator()(r,c), gemv_gpu);
@@ -131,15 +131,18 @@ void create_gpu_version() {
     buffer buff_bx_literals("buff_gemv_literals", {ROWS, 3}, p_int64, tiramisu::a_temporary_gpu, gemv_gpu);
     buffer null_buffer("null_buffer", {1}, p_wait_ptr, tiramisu::a_temporary, gemv_gpu);
 
+    buffer matrix_gpu_wait_buff("matrix_gpu_wait_buff", {ROWS/rows_resident_on_gpu}, p_wait_ptr, a_temporary, gemv_gpu); //copy up chunks of whole rows (ROWS/rows_resident gives # chunks)
+    buffer init_reduc_wait_buff("init_reduc_wait_buff", {ROWS/rows_resident_on_gpu}, p_wait_ptr, a_temporary, gemv_gpu);
+
     vector->set_access("{vector[r,c]->vector_buff[r,c]}");
     vector_copy.os->set_access("{vector_copy[r,c]->vector_gpu_buff[r,c]}");
     vector_copy.os->set_wait_access("{vector_copy[r,c]->null_buffer[0]}");
     matrix->set_access("{matrix[r,c]->matrix_buff[r,c]}");
     matrix_row_copy.os->set_access("{matrix_row_copy[r,c]->matrix_gpu_buff[r%" + std::to_string(rows_resident_on_gpu) + ",c]}");
-    matrix_row_copy.os->set_wait_access("{matrix_row_copy[r,c]->null_buffer[0]}");
+    matrix_row_copy.os->set_wait_access("{matrix_row_copy[r,c]->matrix_gpu_wait_buff[r]}");
     gemv_dummy->set_access("{gemv_dummy[r,c]->zero_buff[r%" + std::to_string(rows_resident_on_gpu) + ",0]}");
     init_reduction.os->set_access("{init_reduction[r,c]->result_gpu_buff[r%" + std::to_string(rows_resident_on_gpu) + ",c]}");
-    init_reduction.os->set_wait_access("{init_reduction[r,c]->null_buffer[0]}");
+    init_reduction.os->set_wait_access("{init_reduction[r,c]->init_reduc_wait_buff[r%" + std::to_string(rows_resident_on_gpu) + "]}");
     gemv->set_access("{gemv[r,c]->result_gpu_buff[r%" + std::to_string(rows_resident_on_gpu) + ",0]}");
     copy_back_results.os->set_access("{copy_back[r,c]->result_buff[r,c]}");
     copy_back_results.os->set_wait_access("{copy_back[r,c]->null_buffer[0]}");
