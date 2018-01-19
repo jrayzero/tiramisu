@@ -206,6 +206,9 @@ void create_gpu_alternate_version() {
 
     xfer copy_back_results = computation::create_xfer("{copy_back[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", d2h_cuda_sync, sum->operator()(r,c), gemv_gpu);
 
+    multiply->split(c, threads_per_block, c0, c1);
+    sum->split(r, threads_per_block, r0, r1);
+
     vector_copy.os->before(*matrix_row_copy.os, computation::root);
     matrix_row_copy.os->before(*multiply, computation::root);
     multiply->before(*gemv_dummy, computation::root);
@@ -213,11 +216,9 @@ void create_gpu_alternate_version() {
     init_reduction.os->before(*sum, computation::root);
     sum->before(*copy_back_results.os, computation::root);
 
-    //    gemv_dummy->before(*init_reduction.os, r0);
-    //    init_reduction.os->before(*gemv, r0);
-    //    gemv->before(*copy_back_results.os, r0);
+    multiply->tag_gpu_level2(c0, c1, -1);
+    sum->tag_gpu_level2(r0, r1, -1);
 
-    //    int64_t block_size = 10;
     //    matrix_row_copy.os->split(r, rows_resident_on_gpu, r0, r1);
     //    gemv->split(r, rows_resident_on_gpu, r0, r1);
     //    gemv->split(r1, block_size, r2, r3);
@@ -250,7 +251,8 @@ void create_gpu_alternate_version() {
     buffer matrix_gpu_buff("matrix_gpu_buff", {rows_resident_on_gpu,COLS}, p_float32, a_temporary_gpu, gemv_gpu); // copy up one row at a time
     buffer multiply_gpu_buff("multiply_gpu_buff", {rows_resident_on_gpu,COLS}, p_float32, a_temporary_gpu, gemv_gpu); // copy up one row at a time
     buffer result_gpu_buff("result_gpu_buff", {rows_resident_on_gpu,1}, p_float32, a_temporary_gpu, gemv_gpu); // should fully fit on gpu
-    buffer buff_bx_literals("buff_gemv_literals", {ROWS, 3}, p_int64, tiramisu::a_temporary_gpu, gemv_gpu);
+    buffer buff_multiply_literals("buff_multiply_literals", {ROWS, 3}, p_int64, tiramisu::a_temporary_gpu, gemv_gpu);
+    buffer buff_sum_literals("buff_sum_literals", {ROWS, 3}, p_int64, tiramisu::a_temporary_gpu, gemv_gpu);
     buffer null_buffer("null_buffer", {1}, p_wait_ptr, tiramisu::a_temporary, gemv_gpu);
 
     buffer matrix_gpu_wait_buff("matrix_gpu_wait_buff", {ROWS/rows_resident_on_gpu}, p_wait_ptr, a_temporary, gemv_gpu); //copy up chunks of whole rows (ROWS/rows_resident gives # chunks)

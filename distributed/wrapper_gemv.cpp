@@ -13,7 +13,8 @@
 #include <math.h>
 #ifdef GPU
 #include "/tmp/tiramisu_cuda_runtime.h"
-#include "/tmp/tiramisu_CUDA_kernel_gemv.cu.h"
+#include "/tmp/tiramisu_CUDA_kernel_multiply.cu.h"
+#include "/tmp/tiramisu_CUDA_kernel_sum.cu.h"
 #endif
 
 extern void clear_static_var_tiramisu_CUDA_kernel_gemv();
