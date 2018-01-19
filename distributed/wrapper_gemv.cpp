@@ -160,6 +160,9 @@ void run_gemv_gpu_only() {
     assert(rank == 0 && "This GPU implementation is for a single node ONLY (i.e. one process)");
     std::cerr << "Running GPU" << std::endl;
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
+    halide_buffer_t zeros;
+    float *_zeros = (float*)calloc(ROWS, sizeof(float));
+    zeros.host = (uint8_t*)_zeros;
     for (int iter = 0; iter < ITERS; iter++) {
         tiramisu_init_cuda(1);
 #ifdef CHECK_RESULTS
@@ -175,7 +178,7 @@ void run_gemv_gpu_only() {
         result.host = (uint8_t*)res;
         std::cerr << "Iter " << iter << std::endl;
         auto start = std::chrono::high_resolution_clock::now();
-        gemv_gpu(vector, matrix, &result);
+        gemv_gpu(vector, matrix, &result, &zeros);
         auto end = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double,std::milli> duration = end - start;
 	duration_vector.push_back(duration);

@@ -12,7 +12,7 @@ extern "C" {
 #endif
 
   int gemv_cpu(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
-  int gemv_gpu(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
+  int gemv_gpu(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
 
 #ifdef __cplusplus
 }  // extern "C"

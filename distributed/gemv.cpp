@@ -34,9 +34,9 @@ std::vector<computation *> make_alternate_algorithm(function *f, int64_t rows, i
     computation *multiply = new computation("{multiply[r,c]: 0<=r<" + std::to_string(rows) + " and 0<=c<" + std::to_string(cols) + "}",
                                             expr(matrix->operator()(r,c) * vector->operator()(0,c)),
                                             true, p_float32, f);
-    computation *gemv_dummy = new computation("{gemv_dummy[r,c]: 0<=r<" + std::to_string(rows) + " and 0<=c<1}", multiply->operator()(r,c),
-                                              true, p_float32, f);
-    computation *sum = new computation("{sum[r,c]: 0<=r<" + std::to_string(rows) + " and 1<=c<" + std::to_string(cols) + "}",
+    computation *gemv_dummy = new computation("{gemv_dummy[r,c]: 0<=r<" + std::to_string(rows) + " and 0<=c<1}", expr(), //multiply->operator()(r,c),
+                                              false, p_float32, f);
+    computation *sum = new computation("{sum[r,c]: 0<=r<" + std::to_string(rows) + " and 0<=c<" + std::to_string(cols) + "}",
                                        multiply->operator()(r,c) + gemv_dummy->operator()(r,0),
                                        true, p_float32, f);
     return {vector, matrix, multiply, gemv_dummy, sum};
@@ -102,6 +102,8 @@ void create_gpu_version() {
     xfer_prop h2d_cuda_async_alt(p_float32, {ASYNC, CUDA, CPU2GPU}, 0);
     xfer_prop d2h_cuda_async(p_float32, {ASYNC, CUDA, GPU2CPU}, 1);
     xfer_prop d2h_cuda_sync(p_float32, {SYNC, CUDA, GPU2CPU}, 1);
+   
+    
 
     // just do this all at once at the beginning
     xfer vector_copy = computation::create_xfer("{vector_copy[r,c]: 0<=r<1 and 0<=c<" + std::to_string(COLS) + "}", h2d_cuda_sync,
@@ -113,7 +115,7 @@ void create_gpu_version() {
                                                     matrix->operator()(r,c), gemv_gpu);
     generator::update_producer_expr_name(gemv, "matrix", "matrix_row_copy", false);
     xfer init_reduction = computation::create_xfer("{init_reduction[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", h2d_cuda_sync, gemv_dummy->operator()(r,c), gemv_gpu);
-    generator::update_producer_expr_name(gemv, "gemv_dummy", "init_reduction", false);
+   generator::update_producer_expr_name(gemv, "gemv_dummy", "init_reduction", false);
 
     xfer copy_back_results = computation::create_xfer("{copy_back[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", d2h_cuda_sync, gemv->operator()(r,c), gemv_gpu);
 
@@ -183,8 +185,8 @@ void create_gpu_alternate_version() {
     computation *gemv_dummy = comps[3];
     computation *sum = comps[4];
 
-    int64_t rows_resident_on_gpu = 1000;//12500;
-    int64_t threads_per_block = 10;
+    int64_t rows_resident_on_gpu = 2000;//12500;
+    int64_t threads_per_block = 1000;
 
     xfer_prop h2d_cuda_async(p_float32, {ASYNC, CUDA, CPU2GPU}, 1);
     xfer_prop h2d_cuda_sync(p_float32, {SYNC, CUDA, CPU2GPU}, -1);
@@ -195,6 +197,8 @@ void create_gpu_alternate_version() {
     xfer_prop stream1(p_float32, {CUDA}, 1);
 
     // just do this all at once at the beginning
+    computation output_init("{output_init[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", expr(), false, p_float32, gemv_gpu);
+    xfer zero_out = computation::create_xfer("{zero_out[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", h2d_cuda_sync, output_init(r,c), gemv_gpu);
     xfer vector_copy = computation::create_xfer("{vector_copy[r,c]: 0<=r<1 and 0<=c<" + std::to_string(COLS) + "}", h2d_cuda_async,
                                                 vector->operator()(r,c), gemv_gpu);
     generator::update_producer_expr_name(multiply, "vector", "vector_copy", false);
@@ -221,6 +225,7 @@ void create_gpu_alternate_version() {
     multiply->split(r, rows_resident_on_gpu, r0, r1);
     gemv_dummy->split(r, rows_resident_on_gpu, r0, r1);
 
+    zero_out.os->before(*vector_copy.os, computation::root);
     vector_copy.os->before(vector_copy_wait, computation::root);
     vector_copy_wait.before(*matrix_row_copy.os, computation::root);
     matrix_row_copy.os->before(matrix_row_copy_wait, r1);//computation::root);
@@ -230,6 +235,7 @@ void create_gpu_alternate_version() {
     sum->before(sum_wait, r);
     sum_wait.before(*copy_back_results.os, computation::root);
 
+    zero_out.os->collapse_many({collapser(0, (int64_t)0, ROWS)});
     vector_copy.os->collapse_many({collapser(1, (int64_t)0, COLS)});
     matrix_row_copy.os->collapse_many({collapser(2, (int64_t)0, COLS)});//, collapser(1, (int64_t)0, rows_resident_on_gpu)});
     copy_back_results.os->collapse_many({collapser(0, (int64_t)0, ROWS)});//, collapser(1, (int64_t)0, rows_resident_on_gpu/block_size)});
@@ -244,13 +250,15 @@ void create_gpu_alternate_version() {
     buffer matrix_gpu_buff("matrix_gpu_buff", {rows_resident_on_gpu,COLS}, p_float32, a_temporary_gpu, gemv_gpu); // copy up one row at a time
     buffer multiply_gpu_buff("multiply_gpu_buff", {rows_resident_on_gpu,COLS}, p_float32, a_temporary_gpu, gemv_gpu); // copy up one row at a time
     buffer result_gpu_buff("result_gpu_buff", {ROWS,1}, p_float32, a_temporary_gpu, gemv_gpu); // should fully fit on gpu
-    buffer buff_multiply_literals("buff_multiply_literals", {ROWS, 3}, p_int64, tiramisu::a_temporary_gpu, gemv_gpu);
+    buffer buff_multiply_literals("buff_multiply_literals", {ROWS, 1}, p_int64, tiramisu::a_temporary_gpu, gemv_gpu);
     buffer buff_sum_literals("buff_sum_literals", {ROWS, 3}, p_int64, tiramisu::a_temporary_gpu, gemv_gpu);
     buffer null_buffer("null_buffer", {1}, p_wait_ptr, tiramisu::a_temporary, gemv_gpu);
     buffer sum_wait_buff("sum_wait_buff", {ROWS / rows_resident_on_gpu, 1}, p_wait_ptr, tiramisu::a_temporary, gemv_gpu);
+    buffer matrix_gpu_wait_buff("matrix_gpu_wait_buff", {ROWS}, p_wait_ptr, a_temporary, gemv_gpu); //copy up chunks of whole rows (ROWS/rows_resident gives # chunks)
+   buffer zero_buff("zero_buff", {ROWS,1}, p_float32, a_input, gemv_gpu);
 
-    buffer matrix_gpu_wait_buff("matrix_gpu_wait_buff", {ROWS/rows_resident_on_gpu}, p_wait_ptr, a_temporary, gemv_gpu); //copy up chunks of whole rows (ROWS/rows_resident gives # chunks)
-
+   output_init.set_access("{output_init[r,c]->zero_buff[r,c]}");
+   zero_out.os->set_access("{zero_out[r,c]->result_gpu_buff[r,c]}");
     vector->set_access("{vector[r,c]->vector_buff[r,c]}");
     vector_copy.os->set_access("{vector_copy[r,c]->vector_gpu_buff[r,c]}");
     vector_copy.os->set_wait_access("{vector_copy[r,c]->null_buffer[0]}");
@@ -264,7 +272,7 @@ void create_gpu_alternate_version() {
     copy_back_results.os->set_access("{copy_back[r,c]->result_buff[r,c]}");
     copy_back_results.os->set_wait_access("{copy_back[r,c]->null_buffer[0]}");
 
-    gemv_gpu->set_arguments({&vector_buff, &matrix_buff, &result_buff});
+    gemv_gpu->set_arguments({&vector_buff, &matrix_buff, &result_buff, &zero_buff});
     postprocess(gemv_gpu, "/tmp/generated_gemv.o");
     print_tiramisu_cuda_runtime();
     compile_kernels_to_obj();
