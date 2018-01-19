@@ -17,7 +17,9 @@
 #include "/tmp/tiramisu_CUDA_kernel_sum.cu.h"
 #endif
 
-extern void clear_static_var_tiramisu_CUDA_kernel_gemv();
+//extern void clear_static_var_tiramisu_CUDA_kernel_gemv();
+extern void clear_static_var_tiramisu_CUDA_kernel_multiply();
+extern void clear_static_var_tiramisu_CUDA_kernel_sum();
 
 int mpi_init() {
     int provided = -1;
@@ -183,7 +185,9 @@ void run_gemv_gpu_only() {
 	  check_results(vector, matrix, &result);
 	}
 #endif
-        clear_static_var_tiramisu_CUDA_kernel_gemv();
+//        clear_static_var_tiramisu_CUDA_kernel_gemv();
+        clear_static_var_tiramisu_CUDA_kernel_multiply();
+        clear_static_var_tiramisu_CUDA_kernel_sum();
         cuCtxSynchronize();
         cuCtxDestroy(cvars.ctx);
     }

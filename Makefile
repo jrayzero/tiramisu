@@ -9,7 +9,7 @@ NVCC = nvcc
 CXXFLAGS = -g -std=c++11 -O3 -Wall -Wno-sign-compare -fno-rtti -fvisibility=hidden -march=corei7-avx -mtune=corei7-avx -fopenmp -DNODES=${MPI_NODES} -DPROCS=${MPI_PROCS} #-DUSE_HALIDE_DEV_COPIES
 NVCCFLAGS = -ccbin ${NVCC_CLANG} -g -std=c++11 -Xcompiler -Wall -Xcompiler -fPIC -Xcompiler -Wno-sign-compare -Xcompiler -fno-rtti -Xcompiler -fvisibility=hidden -Xcompiler -march=corei7-avx -Xcompiler -mtune=corei7-avx
 INCLUDES = -Iinclude/ -I${ISL_INCLUDE_DIRECTORY} -I${HALIDE_SOURCE_DIRECTORY}/include -I${HALIDE_SOURCE_DIRECTORY}/tools -I${HALIDE_SOURCE_DIRECTORY}/src/runtime -Ibuild/ -I/tmp/ -I3rdParty/isl/include -I/data/scratch/jray/anaconda2/include/ -I/usr/local/cuda-7.5/targets/x86_64-linux/include/ -I/usr/local/cuda-9.1/targets/x86_64-linux/include/
-LIBRARIES = -L/tmp/build/ -L${ISL_LIB_DIRECTORY} -L3rdParty/isl/.libs -lisl -lgmp -L${HALIDE_LIB_DIRECTORY} -L/usr/local/cuda-7.5/targets/x86_64-linux/lib/ -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/ -lHalide -lmpi_cxx -ldl -lpthread -lz -lcuda -lcudart `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
+LIBRARIES = -L/tmp/build/ -L${ISL_LIB_DIRECTORY} -L3rdParty/isl/.libs -lisl  -L${HALIDE_LIB_DIRECTORY} -L/usr/local/cuda-7.5/targets/x86_64-linux/lib/ -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/ -lHalide -lmpi_cxx -ldl -lpthread -lz -lcuda -lcudart `libpng-config --cflags --ldflags` -ljpeg `${LLVM_CONFIG_BIN}llvm-config --system-libs`
 HEADER_FILES = \
 	include/tiramisu/core.h \
 	include/tiramisu/debug.h \
@@ -63,9 +63,17 @@ TUTO_RUN = \
 	run_tutorial_10
 
 DBLUR_KERNEL_OBJ = \
-	/tmp/tiramisu_CUDA_kernel_bx_wrapper.o \
-	/tmp/tiramisu_CUDA_kernel_by_wrapper.o \
-	/tmp/tiramisu_CUDA_kernel_recompute_wrapper.o
+#	/tmp/tiramisu_CUDA_kernel_bx_0_wrapper.o \
+#	/tmp/tiramisu_CUDA_kernel_by_0_wrapper.o \
+	#/tmp/tiramisu_CUDA_kernel_bx_wrapper.o \
+	#/tmp/tiramisu_CUDA_kernel_by_wrapper.o
+#	/tmp/tiramisu_CUDA_kernel_recompute_wrapper.o
+
+GEMV_KERNEL_OBJ = \
+	/tmp/tiramisu_cuda_runtime.o \
+	/tmp/tiramisu_CUDA_kernel_multiply_wrapper.o \
+	/tmp/tiramisu_CUDA_kernel_sum_wrapper.o
+#	/tmp/tiramisu_CUDA_kernel_gemv_wrapper.o
 
 #####################################################
 
@@ -419,6 +427,16 @@ dblur: $(OBJ) /tmp/blur_generator /tmp/blur
 /tmp/generated_blur_dist.o: /tmp/blur_generator
 /tmp/blur: distributed/wrapper_blur.cpp /tmp/blur_generator /tmp/generated_blur_dist.o distributed/wrapper_blur.h ${OBJ} ${DBLUR_KERNEL_OBJ} ${HEADER_FILES} distributed/blur_params.h
 	$(CXX) ${CXXFLAGS} ${OBJ} ${DBLUR_KERNEL_OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
+gemv: $(OBJ) /tmp/gemv_generator /tmp/gemv
+/tmp/gemv_generator: distributed/gemv.cpp 
+	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}//tmp/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}//tmp/ $@
+/tmp/generated_gemv.o: /tmp/gemv_generator
+/tmp/tiramisu_cuda_runtime.o: /tmp/tiramisu_cuda_runtime.cpp
+	$(CXX) -fPIC ${CXXFLAGS} ${INCLUDES} -c $< -o $@
+/tmp/gemv: distributed/wrapper_gemv.cpp /tmp/gemv_generator /tmp/generated_gemv.o distributed/wrapper_gemv.h ${OBJ} ${GEMV_KERNEL_OBJ} ${HEADER_FILES} distributed/gemv_params.h
+	$(CXX) ${CXXFLAGS} ${OBJ} ${GEMV_KERNEL_OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
 
 dsimple: $(OBJ) build/simple_generator build/simple
 build/simple_generator: distributed/simple.cpp 

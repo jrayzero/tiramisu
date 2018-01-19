@@ -517,14 +517,13 @@ std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::
 // SUPERRRRR hacky right here
 std::map<std::string, int> literals_per_kernel;
 std::vector<std::string> already_printed;
-std::set<std::string> kernel_names;
+std::vector<std::string> kernel_names;
 int num_kernels = 0;
 std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_file(std::string kernel_name, std::string kernel_fn,
                                                                                    std::string kernel_wrapper_fn,
                                                                                    std::string kernel_body, std::string kernel_wrapper_body,
                                                                                    std::string fatbin_fn, tiramisu::function *fct, std::string comp_name) {
     // HAHAHA
-    kernel_names.insert(kernel_name);
     bool skip1 = false;//std::find(closure_vars_no_type.begin(), closure_vars_no_type.end(), "c1") != closure_vars_no_type.end();
     bool skip2 = std::find(already_printed.begin(), already_printed.end(), kernel_name)  != already_printed.end();
     bool skip = skip1 || skip2;
@@ -534,6 +533,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     std::ofstream kernel;
     if (!skip) {
         num_kernels++;
+        kernel_names.push_back(kernel_name);
         kernel.open(kernel_fn);
     }
     std::ofstream kernel_wrapper;
@@ -718,7 +718,7 @@ void print_tiramisu_cuda_runtime() {
     runtime.close();
 
     runtime.open("/tmp/tiramisu_cuda_runtime.cpp");
-    std::string init_cuda = "#include \"tiramisu_cuda_runtime.h\"\nvoid tiramisu_init_cuda(int device_num) {\n";
+    std::string init_cuda = "#include <assert.h>\n#include <stdio.h>\n#include \"tiramisu_cuda_runtime.h\"\nextern \"C\" {\nstruct cuda_vars cvars;\nvoid tiramisu_init_cuda(int device_num) {\n";
     init_cuda += "    assert(cuInit(0) == 0);\n";
     init_cuda += "    assert(cuDeviceGet(&(cvars.device), device_num) == 0);\n";
     init_cuda += "    size_t memory;\n";
@@ -728,9 +728,9 @@ void print_tiramisu_cuda_runtime() {
     int idx = 0;
     for (auto k : kernel_names) {
         idx++;
-        init_cuda += "    assert(cuModuleLoad(&cvars.mod" + std::to_string(idx) + ", \"/tmp/" + k + ".fatbin\") == 0);\nstruct cuda_vars cvars;\n";
+        init_cuda += "    assert(cuModuleLoad(&cvars.mod" + std::to_string(idx) + ", \"/tmp/" + k + ".fatbin\") == 0);\n";
     }
-    init_cuda += "  }\n";
+    init_cuda += "}\n}\n  ";
     runtime << init_cuda << std::endl;
     runtime.close();
 
