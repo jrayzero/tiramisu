@@ -159,7 +159,6 @@ void run_gemv_gpu_only() {
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
     for (int iter = 0; iter < ITERS; iter++) {
         tiramisu_init_cuda(1);
-        std::cerr << "Iter " << iter << std::endl;
 #ifdef CHECK_RESULTS
         halide_buffer_t *vector = fill_vector_pinned(true);
         halide_buffer_t *matrix = fill_matrix_pinned(true);
@@ -171,6 +170,7 @@ void run_gemv_gpu_only() {
         assert(cuMemHostAlloc((void**)&res, ROWS * sizeof(float), CU_MEMHOSTALLOC_PORTABLE) == 0);
         halide_buffer_t result;
         result.host = (uint8_t*)res;
+        std::cerr << "Iter " << iter << std::endl;
         auto start = std::chrono::high_resolution_clock::now();
         gemv_gpu(vector, matrix, &result);
         auto end = std::chrono::high_resolution_clock::now();
