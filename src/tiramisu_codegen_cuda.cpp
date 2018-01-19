@@ -853,7 +853,7 @@ std::string cuda_expr_from_isl_ast_expr(isl_ast_expr *isl_expr, int kernel_start
         }
 
         if (name_str != "thread_x" && name_str != "thread_y" && name_str != "thread_z" && name_str != "block_x" &&
-                name_str != "block_y" && name_str != "block_z" && (current_level >= kernel_starting_level &&
+                name_str != "block_y" && name_str != "block_z" && (/*current_level >= kernel_starting_level &&*/
                 current_level <= kernel_ending_level)) {
             if (!convert_to_loop_type) {
                 result = "(int)" + name_str;
