@@ -522,7 +522,7 @@ int num_kernels = 0;
 std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_file(std::string kernel_name, std::string kernel_fn,
                                                                                    std::string kernel_wrapper_fn,
                                                                                    std::string kernel_body, std::string kernel_wrapper_body,
-                                                                                   std::string fatbin_fn) {
+                                                                                   std::string fatbin_fn, tiramisu::function *fct, std::string comp_name) {
     // HAHAHA
     kernel_names.insert(kernel_name);
     bool skip1 = false;//std::find(closure_vars_no_type.begin(), closure_vars_no_type.end(), "c1") != closure_vars_no_type.end();
@@ -558,7 +558,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         }
         init_cuda += "  }\n";
         kernel << cuda_headers() << std::endl;
-        kernel_wrapper << cuda_headers() << "#include \"" + kernel_fn + ".h\"" << "\nstruct cuda_vars cvars;\n" << init_cuda << std::endl;
+        kernel_wrapper << cuda_headers() << "#include \"" + kernel_fn + ".h\"" << "\nextern \"C\" {\nstruct cuda_vars cvars;\n" << init_cuda << " }\n" << std::endl;
     }
     // kernel
     std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
@@ -629,13 +629,15 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     std::string device_free = "";
     std::string ptr_to_literal = "";
     int k = 0;
+    int comm_id = fct->get_gpu_comm_prop_id(comp_name);
     for (std::string v : closure_vars_no_type) {
         other_params.push_back(v);
-        //        device_params += "\n  CUdeviceptr DEVICE_" + v + "; cuMemAlloc(&DEVICE_" + v + ", sizeof(" + v + ")); cuMemcpyHtoDAsync(DEVICE_" + v + ", &" + v + ", sizeof(" + v + "), kernel_stream[0]);\n";
-        device_params += "\n  CUdeviceptr DEVICE_" + v + " = literals->device + sizeof(" + v + ")*(" + std::to_string(k) + " + " + kernel_name + "_kernel_count)" + "; cuMemcpyHtoDAsync(DEVICE_" + v + ", &" + v + ", sizeof(" + v + "), kernel_stream[0]);\n";
+        if (comm_id >= 0) {
+          device_params += "\n  CUdeviceptr DEVICE_" + v + " = literals->device + sizeof(" + v + ")*(" + std::to_string(k) + " + " + kernel_name + "_kernel_count)" + "; cuMemcpyHtoDAsync(DEVICE_" + v + ", &" + v + ", sizeof(" + v + "), kernel_stream[" + std::to_string(comm_id) + "]);\n";
+        } else {
+          device_params += "\n  CUdeviceptr DEVICE_" + v + " = literals->device + sizeof(" + v + ")*(" + std::to_string(k) + " + " + kernel_name + "_kernel_count)" + "; cuMemcpyHtoD(DEVICE_" + v + ", &" + v + ", sizeof(" + v + "));\n";
+        }
         kernel_params += ", (void*)&DEVICE_" + v;
-        // Forces kernel synchronization, don't use
-        //        device_free += "\n  cuMemFree(DEVICE_" + v +");\n";
         ptr_to_literal += "\n  " + closure_vars[k] + " = *DEVICE_" + v + ";\n";
         idx++;
         k++;
@@ -649,14 +651,25 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         kernel << kernel_code << std::endl;
     }
     // wrapper function that the host calls
-    std::string stream_convert = "   CUstream *kernel_stream = (CUstream*)_kernel_stream;\n";
-    std::string kernel_launch =  "  /*fprintf(stderr, \"grid width %d, grid height %d, grid depth %d, block width %d, block width %d, block depth %d\\n\", grid_width, grid_height, grid_depth, block_width, block_height, block_depth);*/\n  assert(cuLaunchKernel(kernel, grid_width, grid_height, grid_depth, block_width, block_height, block_depth, 0 /*No shmem for now*/, kernel_stream[0], kernel_args, 0) == 0);\n";
+    std::string stream_convert = "";
+    std::string kernel_launch = "";
+    if (fct->get_gpu_comm_prop_id(comp_name) >= 0) {
+      stream_convert = "   CUstream *kernel_stream = (CUstream*)_kernel_stream;\n";
+      kernel_launch = "  /*fprintf(stderr, \"grid width %d, grid height %d, grid depth %d, block width %d, block width %d, block depth %d\\n\", grid_width, grid_height, grid_depth, block_width, block_height, block_depth);*/\n  assert(cuLaunchKernel(kernel, grid_width, grid_height, grid_depth, block_width, block_height, block_depth, 0 /*No shmem for now*/, kernel_stream[" + std::to_string(fct->get_gpu_comm_prop_id(comp_name)) + "], kernel_args, 0) == 0);\n";
+    } else { // otherwise, use the default stream
+      kernel_launch = "  /*fprintf(stderr, \"grid width %d, grid height %d, grid depth %d, block width %d, block width %d, block depth %d\\n\", grid_width, grid_height, grid_depth, block_width, block_height, block_depth);*/\n  assert(cuLaunchKernel(kernel, grid_width, grid_height, grid_depth, block_width, block_height, block_depth, 0 /*No shmem for now*/, 0 /*default stream*/, kernel_args, 0) == 0);\n";
+    }
+
     std::string module_mgmt = "  CUmodule mod = cvars.mod" + std::to_string(num_kernels) + "; CUfunction kernel;\n";
     module_mgmt += "  CUresult func_err = cuModuleGetFunction(&kernel, mod, \"DEVICE_" + kernel_name + "\");\n";
     module_mgmt += "  if (func_err != CUDA_SUCCESS) { const char *cuda_err; cuGetErrorName(func_err, &cuda_err); fprintf(stderr, \"CUDA error for cuModuleGetFunction: %s\\n\", cuda_err); assert(false); }\n";
     std::string event_check = "  //if (event != NULL) { cuStreamWaitEvent(kernel_stream[0], event, 0); }\n";
     std::string event_record = "  if(_kernel_event_buff) {\n    CUevent *kernel_event_buff = (CUevent*)_kernel_event_buff;\n";//"  //if (other_event != NULL) { cuEventRecord(other_event, kernel_stream); }\n";
-    event_record += "    CUevent event;\n    assert(cuEventCreate(&event, 0) == 0);\n    assert(cuEventRecord(event, kernel_stream[0]) == 0);\n    kernel_event_buff[0] = event;\n  }\n";
+    if (comm_id >= 0) {
+      event_record += "    CUevent event;\n    assert(cuEventCreate(&event, 0) == 0);\n    assert(cuEventRecord(event, kernel_stream[" + std::to_string(comm_id) + "]) == 0);\n    kernel_event_buff[0] = event;\n  }\n;";
+    } else {
+      event_record += "    CUevent event;\n    /*assert(cuEventCreate(&event, 0) == 0);\n    assert(cuEventRecord(event, kernel_stream[" + std::to_string(comm_id) + "]) == 0);\n    kernel_event_buff[0] = event;*/\n  }\n";
+    }
     if (!skip) {
         kernel_wrapper << kernel_wrapper_signature << "  {\n" << stream_convert << module_mgmt << device_params << kernel_params
                        << kernel_wrapper_body
@@ -725,7 +738,7 @@ void compile_kernels_to_obj() {
 }
 
 // compile the kernel file to an object file that can later be linked in
-void compile_kernel_to_obj(std::string kernel_fn, std::string kernel_wrapper_fn) {
+  void compile_kernel_to_obj(std::string kernel_fn, std::string kernel_wrapper_fn) {
     // Generate a fat binary with a cubin file from the kernel
     std::string cmd = "nvcc --default-stream per-thread -I/Users/JRay/ClionProjects/tiramisu/include -I/data/hltemp/jray/tiramisu/include -I/data/hltemp/jray/tiramisu/Halide/include -I/Users/JRay/ClionProjects/tiramisu/Halide/include -ccbin $NVCC_CLANG --compile -g -O3 --std=c++11 " + kernel_fn + " --fatbin -odir /tmp/";
     std::cerr << "cmd: " << cmd << std::endl;
@@ -739,7 +752,7 @@ void compile_kernel_to_obj(std::string kernel_fn, std::string kernel_wrapper_fn)
 }
 
 std::tuple<std::string, std::vector<std::string>, std::vector<std::string>, std::vector<std::pair<std::string, Halide::Expr>>> tiramisu::generator::cuda_kernel_from_isl_node(function &fct, isl_ast_node *node,
-                                                                                                                                                                              int level, std::vector<std::string> &tagged_stmts, std::string kernel_name, int start_kernel_level, int end_kernel_level) {
+                                                                                                                                                                              int level, std::vector<std::string> &tagged_stmts, std::string kernel_name, int start_kernel_level, int end_kernel_level, std::string comp_name) {
     std::tuple<std::string, std::string, std::vector<std::pair<std::string, Halide::Expr>>> bodies = generator::codegen_kernel_body(fct, node, level, start_kernel_level, end_kernel_level);
     std::string kernel_body = std::get<0>(bodies);
     std::string wrapper_body = std::get<1>(bodies);
@@ -747,7 +760,7 @@ std::tuple<std::string, std::vector<std::string>, std::vector<std::string>, std:
     std::string kernel_fatbin_fn = "/tmp/" + kernel_name + ".fatbin";
     std::string kernel_wrapper_fn = "/tmp/" + kernel_name + "_wrapper.cu";
     std::pair<std::vector<std::string>, std::vector<std::string>> params =
-            generate_kernel_file(kernel_name, kernel_fn, kernel_wrapper_fn, kernel_body, wrapper_body, kernel_fatbin_fn);
+      generate_kernel_file(kernel_name, kernel_fn, kernel_wrapper_fn, kernel_body, wrapper_body, kernel_fatbin_fn, &fct, comp_name);
     //    compile_kernel_to_obj(kernel_fn, kernel_wrapper_fn);
     std::tuple<std::string, std::vector<std::string>, std::vector<std::string>, std::vector<std::pair<std::string, Halide::Expr>>> ret(kernel_fn, params.first, params.second, std::get<2>(bodies));
     return ret;

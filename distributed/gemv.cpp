@@ -92,7 +92,7 @@ void create_gpu_version() {
     generator::update_producer_expr_name(gemv, "vector", "vector_copy", false);
     // copy up a big chunk, then run the kernel, then copy back. No overlap with kernel, but can have overlap with sending and receiving.
     xfer matrix_row_copy = computation::create_xfer("{matrix_row_copy[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<" +
-                                                    std::to_string(COLS) + "}", h2d_cuda_async,
+                                                    std::to_string(COLS) + "}", h2d_cuda_sync,
                                                     matrix->operator()(r,c), gemv_gpu);
     generator::update_producer_expr_name(gemv, "matrix", "matrix_row_copy", false);
     xfer init_reduction = computation::create_xfer("{init_reduction[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", h2d_cuda_sync, gemv_dummy->operator()(r,c), gemv_gpu);
@@ -123,7 +123,7 @@ void create_gpu_version() {
     copy_back_results.os->collapse_many({collapser(2, (int64_t)0, block_size), collapser(1, (int64_t)0, rows_resident_on_gpu/block_size)});
 
     // this has to go after all the other things have been scheduled
-    gemv->tag_gpu_level2(r2, r3, 0);
+    gemv->tag_gpu_level2(r2, r3, -1);
 
     buffer vector_buff("vector_buff", {1,COLS}, p_float32, a_input, gemv_gpu);
     buffer matrix_buff("matrix_buff", {ROWS, COLS}, p_float32, a_input, gemv_gpu);

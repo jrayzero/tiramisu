@@ -405,8 +405,9 @@ protected:
     void add_gpu_block_dimensions(std::string stmt_name, int dim0, int dim1 = -1, int dim2 = -1);
 
     void add_gpu_comm_prop_id(std::string stmt_name, int comm_prop_id);
-
+public:
   int get_gpu_comm_prop_id(std::string name);
+protected:
 
     /**
      * Tag the dimensions \p dim0, \p dim1 and \p dim2 of the computation
@@ -3888,7 +3889,7 @@ protected:
   // This generates a cuda file containing the kernels that should be linked in later on when running the code. Returns the file name
   static std::tuple<std::string, std::vector<std::string>, std::vector<std::string>, std::vector<std::pair<std::string, Halide::Expr>>>  cuda_kernel_from_isl_node(
             function &fct, isl_ast_node *node,
-            int level, std::vector<std::string> &tagged_stmts, std::string kernel_name, int start, int end);
+            int level, std::vector<std::string> &tagged_stmts, std::string kernel_name, int start, int end, std::string comp_name);
 
     /**
      * Create a Halide expression from a  Tiramisu expression.

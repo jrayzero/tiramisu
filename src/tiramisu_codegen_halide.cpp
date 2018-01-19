@@ -2057,7 +2057,7 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
             // now actually generate that backend code for both the loops and the computations
             std::tuple<std::string, std::vector<std::string>, std::vector<std::string>, std::vector<std::pair<std::string, Halide::Expr>>> kernel_fn_and_buffer_names =
                     generator::cuda_kernel_from_isl_node(fct, node, level,
-                                                         tagged_stmts, kernel, range.first, range.second);
+                                                         tagged_stmts, kernel, range.first, range.second, comp_name);
             std::vector<Halide::Expr> kernel_params;
             // create buffer parameters for calling the kernel
             for (std::string buff_name : std::get<1>(kernel_fn_and_buffer_names)) {
