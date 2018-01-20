@@ -420,13 +420,28 @@ run_tutorial_%: build/tutorial_%
 	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}/build/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}/build/ $< 
 
 ## distributed tests
-dblur: $(OBJ) /tmp/blur_generator /tmp/blur
-/tmp/blur_generator: distributed/blur.cpp 
+BLUR_KERNEL_OBJ = \
+	/tmp/tiramisu_cuda_runtime.o \
+	/tmp/tiramisu_CUDA_kernel_bx_wrapper.o \
+	/tmp/tiramisu_CUDA_kernel_by_wrapper.o \
+
+single_gpu_blur_test: $(OBJ) /tmp/single_gpu_blur_generator /tmp/single_gpu_blur
+/tmp/single_gpu_blur_generator: blur/blur.cpp 
 	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
 	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}//tmp/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}//tmp/ $@
-/tmp/generated_blur_dist.o: /tmp/blur_generator
-/tmp/blur: distributed/wrapper_blur.cpp /tmp/blur_generator /tmp/generated_blur_dist.o distributed/wrapper_blur.h ${OBJ} ${DBLUR_KERNEL_OBJ} ${HEADER_FILES} distributed/blur_params.h
-	$(CXX) ${CXXFLAGS} ${OBJ} ${DBLUR_KERNEL_OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+/tmp/generated_single_gpu_blur.o: /tmp/single_gpu_blur_generator
+/tmp/single_gpu_blur: blur/wrapper_blur.cpp /tmp/single_gpu_blur_generator /tmp/generated_single_gpu_blur.o blur/wrapper_blur.h ${OBJ} ${BLUR_KERNEL_OBJ} ${HEADER_FILES} blur/blur.h
+	$(CXX) ${CXXFLAGS} ${OBJ} ${BLUR_KERNEL_OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
+
+
+#dblur: $(OBJ) /tmp/blur_generator /tmp/blur
+#/tmp/blur_generator: distributed/blur_backwards.cpp 
+#	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+#	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}//tmp#/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}//tmp/ $@
+#/tmp/generated_blur_dist.o: /tmp/blur_generator
+#/tmp/blur: distributed/wrapper_blur.cpp /tmp/blur_generator /tmp/generated_blur_dist.o distributed/w#rapper_blur.h ${OBJ} ${DBLUR_KERNEL_OBJ} ${HEADER_FILES} distributed/blur_params.h
+#	$(CXX) ${CXXFLAGS} ${OBJ} ${DBLUR_KERNEL_OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
 
 gemv: $(OBJ) /tmp/gemv_generator /tmp/gemv
 /tmp/gemv_generator: distributed/gemv.cpp 

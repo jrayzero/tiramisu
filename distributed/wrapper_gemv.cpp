@@ -70,7 +70,11 @@ halide_buffer_t *fill_vector_pinned(bool fill) {
 halide_buffer_t *fill_matrix_pinned(bool fill) {
     std::cerr << "Filling matrix" << std::endl;
     float *buff;
-    cuMemHostAlloc((void**)&buff, COLS * ROWS * sizeof(float), CU_MEMHOSTALLOC_PORTABLE);
+    if (fill) {
+      cuMemHostAlloc((void**)&buff, COLS * ROWS * sizeof(float), CU_MEMHOSTALLOC_PORTABLE);
+    } else {
+      cuMemHostAlloc((void**)&buff, COLS * ROWS * sizeof(float) / 10, CU_MEMHOSTALLOC_PORTABLE);
+    }
     float f = 0.0f;
     if (fill) {
       for (uint64_t r = 0; r < ROWS; r++) {
@@ -164,7 +168,7 @@ void run_gemv_gpu_only() {
     float *_zeros = (float*)calloc(ROWS, sizeof(float));
     zeros.host = (uint8_t*)_zeros;
     for (int iter = 0; iter < ITERS; iter++) {
-        tiramisu_init_cuda(1);
+        tiramisu_init_cuda(3);
 #ifdef CHECK_RESULTS
         halide_buffer_t *vector = fill_vector_pinned(true);
         halide_buffer_t *matrix = fill_matrix_pinned(true);
