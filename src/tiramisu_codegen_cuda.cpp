@@ -736,10 +736,11 @@ void print_tiramisu_cuda_runtime() {
 
 }
 
-void compile_kernels_to_obj() {
+  void compile_kernels_to_obj() {
+    print_tiramisu_cuda_runtime();
     for (auto k : kernel_names) {
-        // Generate a fat binary with a cubin file from the kernel
-        std::string kernel_fn = "/tmp/" + k + ".cu";
+      // Generate a fat binary with a cubin file from the kernel
+      std::string kernel_fn = "/tmp/" + k + ".cu";
         std::string kernel_wrapper_fn = "/tmp/" + k + "_wrapper.cu";
 
         std::string cmd =

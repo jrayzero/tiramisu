@@ -57,12 +57,14 @@ void generate_single_gpu() {
   // collapse the h2d so it sends the whole row as a chunk
   h2d.os->collapse_many({collapser(2, (int64_t)0, COLS+(int64_t)2)});
 
-  // create a wait on d2h for the next iteration of bx
-  xfer d2h = computation::create_xfer("{d2h[r,c]: " + sresident + "<=r<" + srows + " and 0<=c<" + scols + 
+  // create a wait on d2h for the next iteration of bx. Also wait on the by kernel
+  tiramisu::wait d2h_wait_for_by("{d2h_wait_for_by[r,c]: 0<=r<" + srows + " and 0<=c<1}", by->operator()(r, 0), h2d_cuda_async_kernel_stream, true, &blur);
+  xfer d2h = computation::create_xfer("{d2h[r,c]: 0<=r<" + srows + " and 0<=c<" + scols + 
                                       "}", d2h_cuda_async, by->operator()(r,c), &blur);
-  tiramisu::wait d2h_wait("{d2h_wait[r,c]: " + sresident + "<=r<" + srows + " and 0<=c<1}", d2h.os->operator()(r,0), h2d_cuda_async, true, &blur);
+  tiramisu::wait d2h_wait("{d2h_wait[r,c]: " + sresident + "<=r<" + srows + " and 0<=c<1}", d2h.os->operator()(r-RESIDENT,0), h2d_cuda_async, true, &blur);
   d2h.os->split(r, RESIDENT, r0, r1);
   d2h_wait.split(r, RESIDENT, r0, r1);
+  d2h_wait_for_by.split(r, RESIDENT, r0, r1);
   d2h.os->collapse_many({collapser(2, (int64_t)0, COLS)});
 
   // special transfer that copies up just the two extra rows needed to get the boundary region correct
@@ -84,7 +86,8 @@ void generate_single_gpu() {
   bx->before(*ghost.os, r0);
   ghost.os->before(border, r1);
   border.before(*by, r0);
-  by->before(*d2h.os, r1);
+  by->before(d2h_wait_for_by, r1);
+  d2h_wait_for_by.before(*d2h.os, r1);
 
   // tag for the GPU
   bx->tag_gpu_level2(c0, c1, 0);
@@ -100,8 +103,9 @@ void generate_single_gpu() {
   buffer b_bx_gpu("b_bx_gpu", {RESIDENT+(int64_t)2, COLS}, p_float32, a_temporary_gpu, &blur);
   buffer b_by_gpu("b_by_gpu", {RESIDENT, COLS}, p_float32, a_temporary_gpu, &blur);
   buffer b_by("b_by", {ROWS, COLS}, p_float32, a_output, &blur);
-  buffer b_h2d_wait("b_h2d_wait", {RESIDENT, 1}, p_wait_ptr, a_temporary, &blur);
+  buffer b_h2d_wait("b_h2d_wait", {ROWS, 1}, p_wait_ptr, a_temporary, &blur);
   buffer b_d2h_wait("b_d2h_wait", {ROWS, 1}, p_wait_ptr, a_temporary, &blur);
+  buffer b_d2h_wait_for_by("b_d2h_wait_for_by", {ROWS, 1}, p_wait_ptr, a_temporary, &blur);
   buffer b_ghost_wait("b_ghost_wait", {(int64_t)2*ROWS/RESIDENT, 1}, p_wait_ptr, a_temporary, &blur);
   // buffers that are required for code gen, but we don't directly use
   buffer buff_bx_literals("buff_bx_literals", {RESIDENT, (int64_t)2}, p_int64, a_temporary_gpu, &blur);
@@ -112,10 +116,11 @@ void generate_single_gpu() {
   blur_input->set_access("{blur_input[r,c]->b_blur_input[r,c]}");
   bx->set_access("{bx[r,c]->b_bx_gpu[r%" + sresident + ",c]}");
   by->set_access("{by[r,c]->b_by_gpu[r%" + sresident + ",c]}");  
+  by->set_wait_access("{by[r,c]->b_d2h_wait_for_by[r,0]}");
   h2d.os->set_access("{h2d[r,c]->b_blur_input_gpu[r%" + sresident + ",c]}");
-  h2d.os->set_wait_access("{h2d[r,c]->b_h2d_wait[r%" + sresident + ",0]}");
+  h2d.os->set_wait_access("{h2d[r,c]->b_h2d_wait[r,0]}");
   d2h.os->set_access("{d2h[r,c]->b_by[r,c]}");
-  d2h.os->set_wait_access("{d2h[r,c]->b_d2h_wait[r%" + sresident + ",0]}");
+  d2h.os->set_wait_access("{d2h[r,c]->b_d2h_wait[r,0]}");
   ghost.os->set_access("{ghost[r,c]->b_blur_input_gpu[" + sresident + "+r%2,c]}");
   ghost.os->set_wait_access("{ghost[r,c]->b_ghost_wait[r,0]}");
   border.set_access("{border[r,c]->b_bx_gpu[" + sresident + "+r%2,c]}");
@@ -128,6 +133,7 @@ void generate_single_gpu() {
   blur.gen_halide_stmt();
   blur.gen_halide_obj("/tmp/generated_single_gpu_blur.o");
   blur.dump_halide_stmt();
+  compile_kernels_to_obj();
 }
 
 int main() {
