@@ -47,6 +47,7 @@ void generate_single_gpu() {
   // transfer the input from cpu to gpu
   xfer_prop h2d_cuda_async(p_float32, {ASYNC, CUDA, CPU2GPU}, 1);
   xfer_prop d2h_cuda_async(p_float32, {ASYNC, CUDA, GPU2CPU}, 2);
+  xfer_prop d2h_cuda_async_kernel_stream(p_float32, {ASYNC, CUDA, GPU2CPU}, 0);
   xfer_prop h2d_cuda_async_kernel_stream(p_float32, {ASYNC, CUDA, CPU2GPU}, 0);
   // copy up the last two rows later on
   xfer h2d = computation::create_xfer("{h2d[r,c]: 0<=r<" + srows + " and 0<=c<2+" + scols + 
@@ -82,6 +83,9 @@ void generate_single_gpu() {
                       ghost.os->operator()(0, z+(int64_t)2, c) + ghost.os->operator()(0, z+(int64_t)2, c+(int64_t)1) + ghost.os->operator()(0, z+(int64_t)2, c+(int64_t)2)) / 9.0f;
   computation border("{border[r,z,c]: 0<=r<" + std::to_string(ROWS/RESIDENT) + " and 0<=z<2 and 0<=c<" + scols + "}", border_expr, true, p_float32, &blur);
   border.split(c, BLOCK_SIZE, c0, c1);
+
+  xfer d2h_border = computation::create_xfer("{d2h_border[r,z,c]: 0<=z<2 and 0<=r<" + std::to_string(ROWS/RESIDENT) + " and 0<=c<" + scols + "}", d2h_cuda_async_kernel_stream, border(r,z,c), &blur);
+  d2h_border.os->collapse_many({collapser(2, (int64_t)0, COLS)});
   
   // order
   /*  d2h_wait.before(*h2d.os, r1);
@@ -102,16 +106,14 @@ void generate_single_gpu() {
   d2h_wait_for_by.before(*d2h.os, r1);
   d2h.os->before(*ghost.os, r);
   ghost.os->before(border, r);
+  border.before(*d2h_border.os, z);
   //  border.before(*by, r0);
   // need another send down
-
 
   // tag for the GPU
   bx->tag_gpu_level2(c0, c1, 0);
   by->tag_gpu_level2(c0, c1, 0);
-  border.tag_gpu_level2(c0, c1, 0);  
-
-  
+  border.tag_gpu_level2(c0, c1, 0);    
 
   // buffers
   // add on +2 to the rows in case we are actually needing the next rank's rows (we will need to do the blur on those separately)
@@ -132,6 +134,7 @@ void generate_single_gpu() {
   buffer buff_bx_literals("buff_bx_literals", {ROWS, (int64_t)1}, p_int64, a_temporary_gpu, &blur);
   buffer buff_border_literals("buff_border_literals", {ROWS, (int64_t)1}, p_int64, a_temporary_gpu, &blur);
   buffer buff_by_literals("buff_by_literals", {ROWS, (int64_t)1}, p_int64, a_temporary_gpu, &blur);
+  buffer buff_bull("buff_null", {1,1}, p_wait_ptr, a_temporary, &blur);
   
   // access functions
 
@@ -146,7 +149,9 @@ void generate_single_gpu() {
   d2h.os->set_wait_access("{d2h[r,c]->b_d2h_wait[r%" + sresident + ",0]}");
   ghost.os->set_access("{ghost[r,z,c]->b_ghost[z,c]}");
   ghost.os->set_wait_access("{ghost[r,z,c]->b_ghost_wait[r+z,0]}");
-  border.set_access("{border[r,z,c]->b_border[z,c]}");// + sresident + "+r%2,c]}");
+  border.set_access("{border[r,z,c]->b_border[z,c]}");
+  d2h_border.os->set_access("{d2h_border[r,z,c]->b_by[r*" + sresident + "+" + sresident + "-2+z,c]}");//[z+r+" + std::to_string(RESIDENT - 2) + ",c]}");
+  d2h_border.os->set_wait_access("{d2h_border[r,z,c]->buff_null[0,0]}");
 
 
   // code generation

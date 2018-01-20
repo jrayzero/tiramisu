@@ -28,7 +28,7 @@ int mpi_init() {
 
 void check_results(float *guess) {
   // compute the correct output
-  float *input = (float*)malloc(sizeof(float) * ROWS * (COLS + 2));
+  float *input = (float*)malloc(sizeof(float) * (ROWS+2) * (COLS + 2));
   float *bx = (float*)malloc(sizeof(float) * (ROWS + 2) * COLS);
   float *by = (float*)malloc(sizeof(float) * ROWS * COLS);
   std::cerr << "Computing truth value" << std::endl;
@@ -38,7 +38,7 @@ void check_results(float *guess) {
     for (int c = 0; c < COLS; c++) {
       input[r*(COLS+2)+c] = v;
       //      std::cerr << input[r*(COLS+2)+c] << std::endl;
-      v += 1.0f;
+      v += 0.01f;
     }
   }
 
@@ -61,7 +61,8 @@ void check_results(float *guess) {
   for (int r = 0; r < ROWS - 2; r++) {
     for (int c = 0; c < COLS - 2; c++) {
       float diff = std::fabs(by[r*COLS+c] - guess[r*COLS+c]);
-      if (diff != 0.0) { //> 0.00001f) {
+      if (diff > 0.001f) {
+        std::cerr << diff << std::endl;
         std::cerr << "Difference at row " << r << " and col " << c << ". Should be " << by[r*COLS+c] << " but is " << guess[r*COLS+c] << std::endl;
         exit(29);
       }
@@ -82,13 +83,13 @@ float *generate_blur_input(int rank) {
     std::cerr << "cuMemHostAlloc failed on output with " << cu << std::endl;
     exit(29);
   }
-  float starting_val = (1.0f) * rank * num_rows * COLS;
+  float starting_val = (0.01f) * rank * num_rows * COLS;
   std::cerr << "GUess value input" << std::endl;
   for (int r = 0; r < num_rows+2; r++) { // mimic filling in the data for the next rank
     for (int c = 0; c < COLS; c++) {
       input[r*(COLS+2)+c] = starting_val;
       //      std::cerr << input[r*(COLS+2)+c] << std::endl;
-      starting_val += 1.0f;
+      starting_val += 0.01f;
     }
   }
   return input;
