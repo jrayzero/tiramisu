@@ -38,7 +38,7 @@ void check_results(float *guess) {
     for (int c = 0; c < COLS; c++) {
       input[r*(COLS+2)+c] = v;
       //      std::cerr << input[r*(COLS+2)+c] << std::endl;
-      v += 0.01f;
+      v += 0.00001f;
     }
   }
 
@@ -83,13 +83,13 @@ float *generate_blur_input(int rank) {
     std::cerr << "cuMemHostAlloc failed on output with " << cu << std::endl;
     exit(29);
   }
-  float starting_val = (0.01f) * rank * num_rows * COLS;
+  float starting_val = (0.00001f) * rank * num_rows * COLS;
   std::cerr << "GUess value input" << std::endl;
   for (int r = 0; r < num_rows+2; r++) { // mimic filling in the data for the next rank
     for (int c = 0; c < COLS; c++) {
       input[r*(COLS+2)+c] = starting_val;
       //      std::cerr << input[r*(COLS+2)+c] << std::endl;
-      starting_val += 0.01f;
+      starting_val += 0.00001f;
     }
   }
   return input;
