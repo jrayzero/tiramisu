@@ -71,19 +71,20 @@ void generate_single_gpu() {
 
   // special transfer that copies up just the two extra rows needed to get the boundary region correct
   // TODO JESS this access to blur input needs to be fixed!
-  xfer ghost = computation::create_xfer("{ghost[r,z,c]: 0<=r<(" + std::to_string(ROWS/RESIDENT) + ") and 0<=z<2 and 0<=c<2+" + scols + 
-                                        "}", h2d_cuda_async_kernel_stream, blur_input->operator()(/*(r+(int64_t)1)*(ROWS/RESIDENT)+z*/r*RESIDENT+(int64_t)RESIDENT+z,c), &blur);
+  xfer ghost = computation::create_xfer("{ghost[r,z,c]: 0<=r<(" + std::to_string(ROWS/RESIDENT) + ") and 0<=z<4 and 0<=c<2+" + scols + 
+                                        "}", h2d_cuda_async_kernel_stream, blur_input->operator()(/*(r+(int64_t)1)*(ROWS/RESIDENT)+z*/r*RESIDENT+(int64_t)RESIDENT+z-(int64_t)2,c), &blur);
   //  ghost.os->split(r, 2, r0, r1);
   ghost.os->collapse_many({collapser(2, (int64_t)0, COLS+(int64_t)2)});
   
 
-  expr border_expr = ((ghost.os->operator()(0, z, c) + ghost.os->operator()(0, z, c+(int64_t)1) + ghost.os->operator()(0, z, c+(int64_t)2)) / 3.0f);
-  //  computation border("{border[r,c]: 0<=r<" + std::to_string(2*ROWS/RESIDENT) + " and 0<=c<" + scols + "}", border_expr, true, p_float32, &blur);
+  expr border_expr = (ghost.os->operator()(0, z, c) + ghost.os->operator()(0, z, c+(int64_t)1) + ghost.os->operator()(0, z, c+(int64_t)2) +
+    ghost.os->operator()(0, z+(int64_t)1, c) + ghost.os->operator()(0, z+(int64_t)1, c+(int64_t)1) + ghost.os->operator()(0, z+(int64_t)1, c+(int64_t)2) +
+                      ghost.os->operator()(0, z+(int64_t)2, c) + ghost.os->operator()(0, z+(int64_t)2, c+(int64_t)1) + ghost.os->operator()(0, z+(int64_t)2, c+(int64_t)2)) / 9.0f;
   computation border("{border[r,z,c]: 0<=r<" + std::to_string(ROWS/RESIDENT) + " and 0<=z<2 and 0<=c<" + scols + "}", border_expr, true, p_float32, &blur);
   border.split(c, BLOCK_SIZE, c0, c1);
   
   // order
-  d2h_wait.before(*h2d.os, r1);
+  /*  d2h_wait.before(*h2d.os, r1);
   h2d.os->before(h2d_wait, r1);
   h2d_wait.before(*bx, r1);
   bx->before(*ghost.os, r);
@@ -91,12 +92,24 @@ void generate_single_gpu() {
   border.before(*by, r0);
   by->before(d2h_wait_for_by, r1);
   d2h_wait_for_by.before(*d2h.os, r1);
+  */
+  
+  d2h_wait.before(*h2d.os, r1);
+  h2d.os->before(h2d_wait, r1);
+  h2d_wait.before(*bx, r1);
+  bx->before(*by, r0);
+  by->before(d2h_wait_for_by, r1);
+  d2h_wait_for_by.before(*d2h.os, r1);
+  d2h.os->before(*ghost.os, r);
+  ghost.os->before(border, r);
+  //  border.before(*by, r0);
+  // need another send down
 
 
   // tag for the GPU
   bx->tag_gpu_level2(c0, c1, 0);
-  border.tag_gpu_level2(c0, c1, 0);
-  by->tag_gpu_level2(c0, c1, 0);  
+  by->tag_gpu_level2(c0, c1, 0);
+  border.tag_gpu_level2(c0, c1, 0);  
 
   
 
@@ -107,12 +120,14 @@ void generate_single_gpu() {
   // the last two rows are junk rows, but we need to make sure we don't give ourselves an 
   // out of bound access
   buffer b_bx_gpu("b_bx_gpu", {RESIDENT+(int64_t)2, COLS}, p_float32, a_temporary_gpu, &blur);
+  buffer b_ghost("b_ghost", {(int64_t)4, COLS+(int64_t)2}, p_float32, a_temporary_gpu, &blur);
+  buffer b_border("b_border", {(int64_t)4, COLS}, p_float32, a_temporary_gpu, &blur);
   buffer b_by_gpu("b_by_gpu", {RESIDENT, COLS}, p_float32, a_temporary_gpu, &blur);
   buffer b_by("b_by", {ROWS, COLS}, p_float32, a_output, &blur);
   buffer b_h2d_wait("b_h2d_wait", {ROWS, 1}, p_wait_ptr, a_temporary, &blur);
   buffer b_d2h_wait("b_d2h_wait", {ROWS, 1}, p_wait_ptr, a_temporary, &blur);
   buffer b_d2h_wait_for_by("b_d2h_wait_for_by", {ROWS, 1}, p_wait_ptr, a_temporary, &blur);
-  buffer b_ghost_wait("b_ghost_wait", {(int64_t)2*ROWS/RESIDENT, 1}, p_wait_ptr, a_temporary, &blur);
+  buffer b_ghost_wait("b_ghost_wait", {(int64_t)4*ROWS/RESIDENT, 1}, p_wait_ptr, a_temporary, &blur);
   // buffers that are required for code gen, but we don't directly use
   buffer buff_bx_literals("buff_bx_literals", {ROWS, (int64_t)1}, p_int64, a_temporary_gpu, &blur);
   buffer buff_border_literals("buff_border_literals", {ROWS, (int64_t)1}, p_int64, a_temporary_gpu, &blur);
@@ -129,9 +144,9 @@ void generate_single_gpu() {
   h2d.os->set_wait_access("{h2d[r,c]->b_h2d_wait[r,0]}");
   d2h.os->set_access("{d2h[r,c]->b_by[r,c]}");
   d2h.os->set_wait_access("{d2h[r,c]->b_d2h_wait[r%" + sresident + ",0]}");
-  ghost.os->set_access("{ghost[r,z,c]->b_blur_input_gpu[" + sresident + "+z,c]}");
+  ghost.os->set_access("{ghost[r,z,c]->b_ghost[z,c]}");
   ghost.os->set_wait_access("{ghost[r,z,c]->b_ghost_wait[r+z,0]}");
-  border.set_access("{border[r,z,c]->b_bx_gpu[" + sresident + "+z,c]}");// + sresident + "+r%2,c]}");
+  border.set_access("{border[r,z,c]->b_border[z,c]}");// + sresident + "+r%2,c]}");
 
 
   // code generation
