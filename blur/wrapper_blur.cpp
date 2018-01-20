@@ -33,24 +33,26 @@ void check_results(float *guess) {
   float *by = (float*)malloc(sizeof(float) * ROWS * COLS);
   std::cerr << "Computing truth value" << std::endl;
   float v = 0.0f;
-  for (int r = 0; r < ROWS; r++) {
+  std::cerr << "Truth value input" << std::endl;
+  for (int r = 0; r < ROWS+2; r++) {
     for (int c = 0; c < COLS; c++) {
-      input[r*COLS+c] = v;
-      v += 0.01f;
+      input[r*(COLS+2)+c] = v;
+      //      std::cerr << input[r*(COLS+2)+c] << std::endl;
+      v += 1.0f;
     }
   }
 
   for (int r = 0; r < ROWS; r++) {
     for (int c = 0; c < COLS; c++) {
       bx[r*COLS+c] = 
-        (input[r*COLS+c] + input[r*COLS+c+1] + input[r*COLS+c+2]) / 3.0f;
+        (input[r*(COLS+2)+c] + input[r*(COLS+2)+c+1] + input[r*(COLS+2)+c+2]) / 3.0f;
     }
   }
 
   for (int r = 0; r < ROWS; r++) {
     for (int c = 0; c < COLS; c++) {
       by[r*COLS+c] = 
-        (by[r*COLS+c] + by[(r+1)*COLS+c] + by[(r+2)*COLS+c]) / 3.0f;
+        (bx[r*COLS+c] + bx[(r+1)*COLS+c] + bx[(r+2)*COLS+c]) / 3.0f;
     }
   }
 
@@ -80,11 +82,13 @@ float *generate_blur_input(int rank) {
     std::cerr << "cuMemHostAlloc failed on output with " << cu << std::endl;
     exit(29);
   }
-  float starting_val = (0.01f) * rank * num_rows * COLS;
+  float starting_val = (1.0f) * rank * num_rows * COLS;
+  std::cerr << "GUess value input" << std::endl;
   for (int r = 0; r < num_rows+2; r++) { // mimic filling in the data for the next rank
     for (int c = 0; c < COLS; c++) {
       input[r*(COLS+2)+c] = starting_val;
-      starting_val += 0.01f;
+      //      std::cerr << input[r*(COLS+2)+c] << std::endl;
+      starting_val += 1.0f;
     }
   }
   return input;
