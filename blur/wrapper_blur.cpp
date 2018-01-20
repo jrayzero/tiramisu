@@ -59,9 +59,9 @@ void check_results(float *guess) {
   for (int r = 0; r < ROWS - 2; r++) {
     for (int c = 0; c < COLS - 2; c++) {
       float diff = std::fabs(by[r*COLS+c] - guess[r*COLS+c]);
-      if (diff > 0.00001f) {
+      if (diff != 0.0) { //> 0.00001f) {
         std::cerr << "Difference at row " << r << " and col " << c << ". Should be " << by[r*COLS+c] << " but is " << guess[r*COLS+c] << std::endl;
-          exit(29);
+        exit(29);
       }
     }
   }
@@ -97,8 +97,8 @@ void generate_single_gpu_test(int rank) {
   halide_buffer_t hb_output;
   for (int i = 0; i < ITERS; i++) {
     std::cerr << "Iter " << i << std::endl;
-    MPI_Barrier(MPI_COMM_WORLD);
-    tiramisu_init_cuda(rank % 4);
+    //    MPI_Barrier(MPI_COMM_WORLD);
+    tiramisu_init_cuda(1);
     std::cerr << "Generating blur input" << std::endl;
     float *input = generate_blur_input(rank);
     float *output;
@@ -121,7 +121,7 @@ void generate_single_gpu_test(int rank) {
 #endif
     cuCtxSynchronize();
     cuCtxDestroy(cvars.ctx);
-    MPI_Barrier(MPI_COMM_WORLD);
+    //    MPI_Barrier(MPI_COMM_WORLD);
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double,std::milli> duration = end - start;
     duration_vector.push_back(duration);
@@ -131,7 +131,7 @@ void generate_single_gpu_test(int rank) {
     print_time("performance_CPU.csv", "GEMV GPU", {"Tiramisu"}, {median(duration_vector)});
     std::cout.flush();
   }
-  MPI_Finalize();
+    MPI_Finalize();
 }
 
 int main() {
