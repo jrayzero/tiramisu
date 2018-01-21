@@ -45,8 +45,10 @@ void generate_single_gpu() {
 
 
   // transfer the input from cpu to gpu
-  xfer_prop h2d_cuda_async(p_float32, {ASYNC, CUDA, CPU2GPU}, 0);//1);
-  xfer_prop d2h_cuda_async(p_float32, {ASYNC, CUDA, GPU2CPU}, 0);//2);
+  xfer_prop h2d_cuda_async(p_float32, {ASYNC, CUDA, CPU2GPU}, 1);
+  xfer_prop stream1(p_float32, {ASYNC, CUDA}, 1);
+  xfer_prop stream2(p_float32, {ASYNC, CUDA}, 2);
+  xfer_prop d2h_cuda_async(p_float32, {ASYNC, CUDA, GPU2CPU}, 2);
   xfer_prop d2h_cuda_async_kernel_stream(p_float32, {ASYNC, CUDA, GPU2CPU}, 0);
   xfer_prop h2d_cuda_async_kernel_stream(p_float32, {ASYNC, CUDA, CPU2GPU}, 0);
   // copy up the last two rows later on
@@ -61,7 +63,7 @@ void generate_single_gpu() {
   h2d.os->collapse_many({collapser(2, (int64_t)0, COLS+(int64_t)2)});
 
   // create a wait on d2h for the next iteration of bx. Also wait on the by kernel
-  tiramisu::wait d2h_wait_for_by("{d2h_wait_for_by[r,c]: 0<=r<" + srows + " and 0<=c<1}", by->operator()(r, 0), h2d_cuda_async_kernel_stream, true, &blur);
+  tiramisu::wait d2h_wait_for_by("{d2h_wait_for_by[r,c]: 0<=r<" + srows + " and 0<=c<1}", by->operator()(r, 0), stream2, true, &blur);
   xfer d2h = computation::create_xfer("{d2h[r,c]: 0<=r<" + srows + " and 0<=c<" + scols + 
                                       "}", d2h_cuda_async, by->operator()(r,0), &blur);
   tiramisu::wait d2h_wait("{d2h_wait[r,c]: " + sresident + "<=r<" + srows + " and 0<=c<1}", d2h.os->operator()(r-RESIDENT,0), h2d_cuda_async, true, &blur);
@@ -86,18 +88,9 @@ void generate_single_gpu() {
 
   xfer d2h_border = computation::create_xfer("{d2h_border[r,z,c]: 0<=z<2 and 0<=r<" + std::to_string(ROWS/RESIDENT) + " and 0<=c<" + scols + "}", d2h_cuda_async_kernel_stream, border(r,z,c), &blur);
   d2h_border.os->collapse_many({collapser(2, (int64_t)0, COLS)});
-  
-  // order
-  /*  d2h_wait.before(*h2d.os, r1);
-  h2d.os->before(h2d_wait, r1);
-  h2d_wait.before(*bx, r1);
-  bx->before(*ghost.os, r);
-  ghost.os->before(border, z);//r1);
-  border.before(*by, r0);
-  by->before(d2h_wait_for_by, r1);
-  d2h_wait_for_by.before(*d2h.os, r1);
-  */
-  
+  tiramisu::wait d2h_border_wait("{d2h_border_wait[r,z,c]: 0<=z<2 and 0<=r<" + std::to_string(ROWS/RESIDENT) + " and 0<=c<1}", d2h_border.os->operator()(r,z,0), stream1, true, &blur);
+  d2h_border_wait.set_schedule_this_comp(false);
+  // order  
   d2h_wait.before(*h2d.os, r1);
   h2d.os->before(h2d_wait, r1);
   h2d_wait.before(*bx, r1);
@@ -107,8 +100,7 @@ void generate_single_gpu() {
   d2h.os->before(*ghost.os, r);
   ghost.os->before(border, r);
   border.before(*d2h_border.os, z);
-  //  border.before(*by, r0);
-  // need another send down
+  d2h_border.os->before(d2h_border_wait, z);
 
   // tag for the GPU
   bx->tag_gpu_level2(c0, c1, 0);
@@ -134,12 +126,11 @@ void generate_single_gpu() {
   buffer buff_bx_literals("buff_bx_literals", {ROWS, (int64_t)1}, p_int64, a_temporary_gpu, &blur);
   buffer buff_border_literals("buff_border_literals", {ROWS, (int64_t)1}, p_int64, a_temporary_gpu, &blur);
   buffer buff_by_literals("buff_by_literals", {ROWS, (int64_t)1}, p_int64, a_temporary_gpu, &blur);
-  buffer buff_bull("buff_null", {1,1}, p_wait_ptr, a_temporary, &blur);
+  buffer buff_null("buff_null", {ROWS,2}, p_wait_ptr, a_temporary, &blur);
   
   // access functions
 
   blur_input->set_access("{blur_input[r,c]->b_blur_input[r,c]}");
-  //  bx->set_access("{bx[r,c]->b_bx_gpu[r%" + std::to_string(RESIDENT+2) + ",c]}");
   bx->set_access("{bx[r,c]->b_bx_gpu[r%" + sresident + ",c]}");
   by->set_access("{by[r,c]->b_by_gpu[r%" + sresident + ",c]}");  
   by->set_wait_access("{by[r,c]->b_d2h_wait_for_by[r,0]}");
@@ -151,7 +142,7 @@ void generate_single_gpu() {
   ghost.os->set_wait_access("{ghost[r,z,c]->b_ghost_wait[r+z,0]}");
   border.set_access("{border[r,z,c]->b_border[z,c]}");
   d2h_border.os->set_access("{d2h_border[r,z,c]->b_by[r*" + sresident + "+" + sresident + "-2+z,c]}");//[z+r+" + std::to_string(RESIDENT - 2) + ",c]}");
-  d2h_border.os->set_wait_access("{d2h_border[r,z,c]->buff_null[0,0]}");
+  d2h_border.os->set_wait_access("{d2h_border[r,z,c]->buff_null[r,z]}");
 
 
   // code generation
