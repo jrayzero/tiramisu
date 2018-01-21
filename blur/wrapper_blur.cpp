@@ -37,7 +37,6 @@ void check_results(float *guess) {
   for (int r = 0; r < ROWS+2; r++) {
     for (int c = 0; c < COLS; c++) {
       input[r*(COLS+2)+c] = v;
-      //      std::cerr << input[r*(COLS+2)+c] << std::endl;
       v += 0.00001f;
     }
   }
@@ -73,35 +72,74 @@ void check_results(float *guess) {
   free(by);
 }
 
-float *generate_blur_input(int rank) {
+float *generate_blur_input(int rank, bool host = true) {
   assert(ROWS % PROCS == 0);
   int num_rows = ROWS / PROCS;
   float *input;
   // the last rank doesn't need +2 rows, but it's easier to make it uniform
-  CUresult cu = cuMemHostAlloc((void**)&input, sizeof(float)*(COLS+2)*(num_rows+2), CU_MEMHOSTALLOC_PORTABLE);
-  if (cu != CUDA_SUCCESS) {
-    std::cerr << "cuMemHostAlloc failed on output with " << cu << std::endl;
-    exit(29);
+  if (host) {
+    CUresult cu = cuMemHostAlloc((void**)&input, sizeof(float)*(COLS+2)*(num_rows+2), CU_MEMHOSTALLOC_PORTABLE);
+    if (cu != CUDA_SUCCESS) {
+      std::cerr << "cuMemHostAlloc failed on output with " << cu << std::endl;
+      exit(29);
+    }
+  } else {
+    input = (float*)malloc(sizeof(float)*(COLS+2)*(num_rows+2));
   }
+
+#ifdef CHECK
   float starting_val = (0.00001f) * rank * num_rows * COLS;
-  std::cerr << "GUess value input" << std::endl;
   for (int r = 0; r < num_rows+2; r++) { // mimic filling in the data for the next rank
     for (int c = 0; c < COLS; c++) {
       input[r*(COLS+2)+c] = starting_val;
-      //      std::cerr << input[r*(COLS+2)+c] << std::endl;
       starting_val += 0.00001f;
     }
   }
+#endif
   return input;
 }
 
+void generate_single_cpu_test(int rank) {
+  std::cerr << "Beginning single cpu" << std::endl;
+  std::vector<std::chrono::duration<double,std::milli>> duration_vector;
+  halide_buffer_t hb_input;
+  halide_buffer_t hb_output;
+  halide_buffer_t hb_bx;
+  std::cerr << "Generating blur input" << std::endl;
+  float *input = generate_blur_input(rank, false);
+  float *bx = (float*)malloc(sizeof(float)*COLS*(ROWS+2));
+  float *output = (float*)malloc(sizeof(float)*COLS*ROWS);
+  hb_input.host = (uint8_t*)input;
+  hb_output.host = (uint8_t*)output;
+  hb_bx.host = (uint8_t*)bx;
+  for (int i = 0; i < ITERS; i++) {
+  std::cerr << "starting iter " << i << std::endl;
+    auto start = std::chrono::high_resolution_clock::now();    
+    blur_single_cpu(&hb_input, &hb_bx, &hb_output);
+#ifdef CHECK
+    std::cerr << "Comparing results" << std::endl;
+    check_results(output);
+    std::cerr << "Success!" << std::endl;
+#endif
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double,std::milli> duration = end - start;
+    duration_vector.push_back(duration);
+    std::cerr << "Iteration " << i << " complete: " << duration.count() << "ms." << std::endl;
+  }
+  if (rank == 0) {
+    print_time("performance_CPU.csv", "BLUR CPU", {"Tiramisu"}, {median(duration_vector)});
+    std::cout.flush();
+  }
+    MPI_Finalize();
+}
+
 void generate_single_gpu_test(int rank) {
+#ifdef GPU
   std::cerr << "Beginning single gpu" << std::endl;
   std::vector<std::chrono::duration<double,std::milli>> duration_vector;
   halide_buffer_t hb_input;
   halide_buffer_t hb_output;
   for (int i = 0; i < ITERS; i++) {
-    std::cerr << "Iter " << i << std::endl;
     //    MPI_Barrier(MPI_COMM_WORLD);
     tiramisu_init_cuda(1);
     std::cerr << "Generating blur input" << std::endl;
@@ -114,7 +152,7 @@ void generate_single_gpu_test(int rank) {
     }
     hb_input.host = (uint8_t*)input;
     hb_output.host = (uint8_t*)output;
-    std::cerr << "starting" << std::endl;
+    std::cerr << "starting iter " << i << std::endl;
     auto start = std::chrono::high_resolution_clock::now();    
     blur_single_gpu(&hb_input, &hb_output);
     clear_static_var_tiramisu_CUDA_kernel_bx();
@@ -124,23 +162,28 @@ void generate_single_gpu_test(int rank) {
     check_results(output);
     std::cerr << "Success!" << std::endl;
 #endif
-    cuCtxSynchronize();
-    cuCtxDestroy(cvars.ctx);
     //    MPI_Barrier(MPI_COMM_WORLD);
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double,std::milli> duration = end - start;
     duration_vector.push_back(duration);
     std::cerr << "Iteration " << i << " complete: " << duration.count() << "ms." << std::endl;
+    cuCtxSynchronize();
+    cuCtxDestroy(cvars.ctx);
   }
   if (rank == 0) {
-    print_time("performance_CPU.csv", "GEMV GPU", {"Tiramisu"}, {median(duration_vector)});
+    print_time("performance_CPU.csv", "BLUR GPU", {"Tiramisu"}, {median(duration_vector)});
     std::cout.flush();
   }
     MPI_Finalize();
+#endif
 }
 
 int main() {
   int rank = mpi_init();
+#ifdef GPU
   generate_single_gpu_test(rank);
+#elif defined(CPU)
+  generate_single_cpu_test(rank);
+#endif
 }
 

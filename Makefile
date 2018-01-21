@@ -424,14 +424,16 @@ BLUR_KERNEL_OBJ = \
 	/tmp/tiramisu_cuda_runtime.o \
 	/tmp/tiramisu_CUDA_kernel_bx_wrapper.o \
 	/tmp/tiramisu_CUDA_kernel_by_wrapper.o \
+	/tmp/tiramisu_CUDA_kernel_border_wrapper.o 
 
-single_gpu_blur_test: $(OBJ) /tmp/single_gpu_blur_generator /tmp/single_gpu_blur
-/tmp/single_gpu_blur_generator: blur/blur.cpp 
+single_cpu_blur_test: $(OBJ) /tmp/single_cpu_blur_generator /tmp/single_cpu_blur
+/tmp/single_cpu_blur_generator: blur/blur.cpp 
 	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
 	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}//tmp/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}//tmp/ $@
-/tmp/generated_single_gpu_blur.o: /tmp/single_gpu_blur_generator
-/tmp/single_gpu_blur: blur/wrapper_blur.cpp /tmp/single_gpu_blur_generator /tmp/generated_single_gpu_blur.o blur/wrapper_blur.h ${OBJ} ${BLUR_KERNEL_OBJ} ${HEADER_FILES} blur/blur.h
-	$(CXX) ${CXXFLAGS} ${OBJ} ${BLUR_KERNEL_OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+/tmp/generated_single_cpu_blur.o: /tmp/single_cpu_blur_generator
+/tmp/single_cpu_blur: blur/wrapper_blur.cpp /tmp/single_cpu_blur_generator /tmp/generated_single_cpu_blur.o blur/wrapper_blur.h ${OBJ} ${HEADER_FILES} blur/blur.h
+	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
 
 
 

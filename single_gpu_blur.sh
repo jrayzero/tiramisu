@@ -5,16 +5,18 @@ p=$2 # mpi procs
 rank_file=$3
 machine_list=$4
 
+rm /tmp/single*
+
 set -e
 
 export MPI_NODES=$n
 export MPI_PROCS=$p
 
-for machine in $(cat $machine_list)
-do
-    echo ssh $machine "export MPI_NODES=$n; export MPI_PROCS=$p; rm /tmp/*blur*; cd /data/hltemp/jray/tiramisu/; make -j 10; make single_gpu_blur_test"
-    ssh $machine "export MPI_NODES=$n; export MPI_PROCS=$p; rm /tmp/*blur*; cd /data/hltemp/jray/tiramisu/; make -j 10; make single_gpu_blur_test"
-done
+#for machine in $(cat $machine_list)
+#do
+#    echo ssh $machine "export MPI_NODES=$n; export MPI_PROCS=$p; rm /tmp/*blur*; cd /data/hltemp/jray/tiramisu/; make -j 10; make single_gpu_blur_test"
+#    ssh $machine "export MPI_NODES=$n; export MPI_PROCS=$p; rm /tmp/*blur*; cd /data/hltemp/jray/tiramisu/; make -j 10; make single_gpu_blur_test"
+#done
 make -j 10
 make single_gpu_blur_test
 

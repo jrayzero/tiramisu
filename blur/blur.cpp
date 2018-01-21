@@ -21,6 +21,50 @@ std::vector<computation *> algorithm(function *f, std::string srows, std::string
   return {blur_input, bx, by};
 }
 
+void generate_single_cpu() {
+  std::string srows = std::to_string(ROWS);
+  std::string scols = std::to_string(COLS);
+  function blur("blur_single_cpu");
+  std::vector<computation *> comps = algorithm(&blur, srows, scols);
+  computation *blur_input = comps[0];
+  computation *bx = comps[1];
+  computation *by = comps[2];
+  var r(p_int64, "r"), r0(p_int64, "r0"), r1(p_int64, "r1"), r2(p_int64, "r2"), r3(p_int64, "r3");
+  var c(p_int64, "c"), c0(p_int64, "c0"), c1(p_int64, "c1");
+  var z(p_int64, "z");
+
+  bx->tile(r, c, (int64_t)100, (int64_t)8, r0, c0, r1, c1);
+  by->tile(r, c, (int64_t)100, (int64_t)8, r0, c0, r1, c1);
+  /*  bx->split(r0, 8, r2, r3);
+  by->split(r0, 8, r2, r3);
+  bx->tag_vector_level(c1, 8);
+  by->tag_vector_level(c1, 8);
+  bx->tag_parallel_level(r2);
+  by->tag_parallel_level(r2);*/
+
+  bx->before(*by, computation::root);
+
+  tiramisu::buffer buff_input("buff_input", {ROWS+(int64_t)2, COLS+(int64_t)2}, p_float32,
+                                tiramisu::a_input, &blur);
+
+  tiramisu::buffer buff_bx("buff_bx", {ROWS, COLS},
+                           p_float32, tiramisu::a_output, &blur);
+  
+  tiramisu::buffer buff_by("buff_by", {ROWS, COLS},
+                           p_float32, tiramisu::a_output, &blur);
+  
+  blur_input->set_access("{blur_input[i1, i0]->buff_input[i1,i0]}");  
+  by->set_access("{by[y, x]->buff_by[y,x]}");
+  bx->set_access("{bx[y, x]->buff_bx[y, x]}");
+  blur.lift_dist_comps();
+  blur.set_arguments({&buff_input, &buff_bx, &buff_by});
+  blur.gen_time_space_domain();
+  blur.gen_isl_ast();
+  blur.gen_halide_stmt();
+  blur.gen_halide_obj("/tmp/generated_single_cpu_blur.o");
+
+}
+
 void generate_single_gpu() {
   std::string srows = std::to_string(ROWS);
   std::string scols = std::to_string(COLS);
@@ -42,7 +86,6 @@ void generate_single_gpu() {
   // split up the columns for bx and by for GPU level tagging
   bx->split(c, BLOCK_SIZE, c0, c1);
   by->split(c, BLOCK_SIZE, c0, c1);
-
 
   // transfer the input from cpu to gpu
   xfer_prop h2d_cuda_async(p_float32, {ASYNC, CUDA, CPU2GPU}, 1);
@@ -159,5 +202,9 @@ void generate_single_gpu() {
 int main() {
     global::set_default_tiramisu_options();
     global::set_loop_iterator_type(p_int64);;
+#ifdef GPU
     generate_single_gpu();
+#else
+    generate_single_cpu();
+#endif
 }
