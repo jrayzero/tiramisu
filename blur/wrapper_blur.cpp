@@ -22,33 +22,32 @@ int mpi_init() {
   assert(provided == MPI_THREAD_FUNNELED && "Did not get the appropriate MPI thread requirement.");
   int rank;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  assert(rank == 0 && "Only one rank allowed right now. Need to adding error check for multirank");
   return rank;
 }
 
-void check_results(float *guess) {
+void check_results(float *guess, int rank) {
   // compute the correct output
-  float *input = (float*)malloc(sizeof(float) * (ROWS+2) * (COLS + 2));
-  float *bx = (float*)malloc(sizeof(float) * (ROWS + 2) * COLS);
-  float *by = (float*)malloc(sizeof(float) * ROWS * COLS);
+  float *input = (float*)malloc(sizeof(float) * (ROWS/PROCS+2) * (COLS + 2));
+  float *bx = (float*)malloc(sizeof(float) * (ROWS/PROCS + 2) * COLS);
+  float *by = (float*)malloc(sizeof(float) * ROWS/PROCS * COLS);
   std::cerr << "Computing truth value" << std::endl;
-  float v = 0.0f;
+  float v = (0.00001f) * rank * ROWS/PROCS * COLS;
   std::cerr << "Truth value input" << std::endl;
-  for (int r = 0; r < ROWS+2; r++) {
+  for (int r = 0; r < ROWS/PROCS+2; r++) {
     for (int c = 0; c < COLS; c++) {
       input[r*(COLS+2)+c] = v;
       v += 0.00001f;
     }
   }
 
-  for (int r = 0; r < ROWS; r++) {
+  for (int r = 0; r < ROWS/PROCS; r++) {
     for (int c = 0; c < COLS; c++) {
       bx[r*COLS+c] = 
         (input[r*(COLS+2)+c] + input[r*(COLS+2)+c+1] + input[r*(COLS+2)+c+2]) / 3.0f;
     }
   }
 
-  for (int r = 0; r < ROWS; r++) {
+  for (int r = 0; r < ROWS/PROCS; r++) {
     for (int c = 0; c < COLS; c++) {
       by[r*COLS+c] = 
         (bx[r*COLS+c] + bx[(r+1)*COLS+c] + bx[(r+2)*COLS+c]) / 3.0f;
@@ -57,13 +56,26 @@ void check_results(float *guess) {
 
   // the borders are junk, so ignore those
   std::cerr << "Comparing" << std::endl;
-  for (int r = 0; r < ROWS - 2; r++) {
-    for (int c = 0; c < COLS - 2; c++) {
-      float diff = std::fabs(by[r*COLS+c] - guess[r*COLS+c]);
-      if (diff > 0.001f) {
-        std::cerr << diff << std::endl;
-        std::cerr << "Difference at row " << r << " and col " << c << ". Should be " << by[r*COLS+c] << " but is " << guess[r*COLS+c] << std::endl;
-        exit(29);
+  if (rank != PROCS - 1) {
+    for (int r = 0; r < ROWS/PROCS - 2; r++) {
+      for (int c = 0; c < COLS - 2; c++) {
+        float diff = std::fabs(by[r*COLS+c] - guess[r*COLS+c]);
+        if (diff > 0.001f) {
+          std::cerr << diff << std::endl;
+          std::cerr << "Difference at row " << r << " and col " << c << ". Should be " << by[r*COLS+c] << " but is " << guess[r*COLS+c] << std::endl;
+          exit(29);
+        }
+      }
+    }
+  } else {
+    for (int r = 0; r < ROWS/PROCS; r++) {
+      for (int c = 0; c < COLS - 2; c++) {
+        float diff = std::fabs(by[r*COLS+c] - guess[r*COLS+c]);
+        if (diff > 0.001f) {
+          std::cerr << diff << std::endl;
+          std::cerr << "Difference at row " << r << " and col " << c << ". Should be " << by[r*COLS+c] << " but is " << guess[r*COLS+c] << std::endl;
+          exit(29);
+        }
       }
     }
   }
@@ -100,6 +112,7 @@ float *generate_blur_input(int rank, bool host = true) {
 }
 
 void generate_single_cpu_test(int rank) {
+#ifdef CPU
   std::cerr << "Beginning single cpu" << std::endl;
   std::vector<std::chrono::duration<double,std::milli>> duration_vector;
   halide_buffer_t hb_input;
@@ -113,12 +126,12 @@ void generate_single_cpu_test(int rank) {
   hb_output.host = (uint8_t*)output;
   hb_bx.host = (uint8_t*)bx;
   for (int i = 0; i < ITERS; i++) {
-  std::cerr << "starting iter " << i << std::endl;
+    std::cerr << "starting iter " << i << std::endl;
     auto start = std::chrono::high_resolution_clock::now();    
     blur_single_cpu(&hb_input, &hb_bx, &hb_output);
 #ifdef CHECK
     std::cerr << "Comparing results" << std::endl;
-    check_results(output);
+    check_results(output, rank);
     std::cerr << "Success!" << std::endl;
 #endif
     auto end = std::chrono::high_resolution_clock::now();
@@ -131,10 +144,11 @@ void generate_single_cpu_test(int rank) {
     std::cout.flush();
   }
     MPI_Finalize();
+#endif
 }
 
 void generate_single_gpu_test(int rank) {
-#ifdef GPU
+#if defined(GPU) && !defined(DIST)
   std::cerr << "Beginning single gpu" << std::endl;
   std::vector<std::chrono::duration<double,std::milli>> duration_vector;
   halide_buffer_t hb_input;
@@ -159,7 +173,7 @@ void generate_single_gpu_test(int rank) {
     clear_static_var_tiramisu_CUDA_kernel_by();
 #ifdef CHECK
     std::cerr << "Comparing results" << std::endl;
-    check_results(output);
+    check_results(output, rank);
     std::cerr << "Success!" << std::endl;
 #endif
     //    MPI_Barrier(MPI_COMM_WORLD);
@@ -178,10 +192,72 @@ void generate_single_gpu_test(int rank) {
 #endif
 }
 
+void generate_multi_gpu_test(int rank) {
+#if defined(GPU) && defined(DIST)
+  std::cerr << "Beginning Multi gpu" << std::endl;
+  std::vector<std::chrono::duration<double,std::milli>> duration_vector;
+  halide_buffer_t hb_input;
+  halide_buffer_t hb_output;
+  halide_buffer_t hb_d2h_wait;
+  for (int i = 0; i < ITERS; i++) {
+    MPI_Barrier(MPI_COMM_WORLD);
+    tiramisu_init_cuda(rank % 4);
+    std::cerr << "Generating blur input" << std::endl;
+    float *input = generate_blur_input(rank);
+    float *output;
+    CUevent *d2h_wait = (CUevent*)malloc(sizeof(CUevent) * ROWS/PROCS);
+    hb_d2h_wait.host = (uint8_t*)d2h_wait;
+    CUstream s;
+    cuStreamCreate(&s, CU_STREAM_DEFAULT);
+    for (int r = 0; r < RESIDENT; r++) {
+      cuEventCreate(&d2h_wait[r], 0);
+      cuEventRecord(d2h_wait[r], s);
+    }
+    CUresult cu = cuMemHostAlloc((void**)&output, sizeof(float)*COLS*ROWS, CU_MEMHOSTALLOC_PORTABLE);
+    if (cu != CUDA_SUCCESS) {
+      std::cerr << "cuMemHostAlloc failed on output with " << cu << std::endl;
+      exit(29);
+    }
+    hb_input.host = (uint8_t*)input;
+    hb_output.host = (uint8_t*)output;
+    if (rank == 0) {
+      std::cerr << "starting iter " << i << std::endl;
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    auto start = std::chrono::high_resolution_clock::now();    
+    blur_multi_gpu(&hb_input, &hb_output, &hb_d2h_wait);
+    clear_static_var_tiramisu_CUDA_kernel_bx();
+    clear_static_var_tiramisu_CUDA_kernel_by();
+#ifdef CHECK
+    std::cerr << "Comparing results" << std::endl;
+    check_results(output, rank);
+    std::cerr << "Success!" << std::endl;
+#endif
+    MPI_Barrier(MPI_COMM_WORLD);
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double,std::milli> duration = end - start;
+    duration_vector.push_back(duration);
+    std::cerr << "Iteration " << i << " complete: " << duration.count() << "ms." << std::endl;
+    cuCtxSynchronize();
+    cuCtxDestroy(cvars.ctx);
+  }
+  if (rank == 0) {
+    print_time("performance_CPU.csv", "BLUR GPU", {"Tiramisu"}, {median(duration_vector)});
+    std::cout.flush();
+  }
+    MPI_Finalize();
+#endif
+}
+
+
 int main() {
   int rank = mpi_init();
 #ifdef GPU
+#ifdef DIST
+  generate_multi_gpu_test(rank);
+#else
   generate_single_gpu_test(rank);
+#endif
 #elif defined(CPU)
   generate_single_cpu_test(rank);
 #endif
