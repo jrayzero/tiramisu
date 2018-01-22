@@ -436,7 +436,7 @@ int main() {
   global::set_default_tiramisu_options();
   global::set_loop_iterator_type(p_int64);;
 #ifdef GPU
-  #ifdef DIST
+#ifdef DIST
     generate_multi_gpu();
 #else
     generate_single_gpu();

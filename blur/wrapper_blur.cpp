@@ -163,14 +163,17 @@ void generate_multi_cpu_test(int rank) {
   halide_buffer_t hb_output;
   halide_buffer_t hb_bx;
   std::cerr << "Generating blur input" << std::endl;
-  float *input = generate_blur_input(rank, false);
-  float *bx = (float*)malloc(sizeof(float)*COLS*(ROWS+2));
-  float *output = (float*)malloc(sizeof(float)*COLS*ROWS);
-  hb_input.host = (uint8_t*)input;
-  hb_output.host = (uint8_t*)output;
-  hb_bx.host = (uint8_t*)bx;
   for (int i = 0; i < ITERS; i++) {
-    std::cerr << "starting iter " << i << std::endl;
+    if (rank == 0) {
+      std::cerr << "starting iter " << i << std::endl;
+    }
+    float *input = generate_blur_input(rank, false);
+    float *bx = (float*)malloc(sizeof(float)*COLS*(ROWS+2));
+    float *output = (float*)malloc(sizeof(float)*COLS*ROWS);
+    hb_input.host = (uint8_t*)input;
+    hb_output.host = (uint8_t*)output;
+    hb_bx.host = (uint8_t*)bx;
+    MPI_Barrier(MPI_COMM_WORLD);
     auto start = std::chrono::high_resolution_clock::now();    
     blur_multi_cpu(&hb_input, &hb_bx, &hb_output);
 #ifdef CHECK
@@ -178,10 +181,16 @@ void generate_multi_cpu_test(int rank) {
     check_results(output, rank);
     std::cerr << "Success!" << std::endl;
 #endif
+    MPI_Barrier(MPI_COMM_WORLD);
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double,std::milli> duration = end - start;
     duration_vector.push_back(duration);
-    std::cerr << "Iteration " << i << " complete: " << duration.count() << "ms." << std::endl;
+    if (rank == 0) {
+      std::cerr << "Iteration " << i << " complete: " << duration.count() << "ms." << std::endl;
+    }
+    free(input);
+    free(bx);
+    free(output);
   }
   if (rank == 0) {
     print_time("performance_CPU.csv", "BLUR CPU", {"Tiramisu"}, {median(duration_vector)});
@@ -197,8 +206,6 @@ void generate_single_gpu_test(int rank) {
   std::vector<std::chrono::duration<double,std::milli>> duration_vector;
   halide_buffer_t hb_input;
   halide_buffer_t hb_output;
-  for (int i = 0; i < ITERS; i++) {
-    //    MPI_Barrier(MPI_COMM_WORLD);
     tiramisu_init_cuda(1);
     std::cerr << "Generating blur input" << std::endl;
     float *input = generate_blur_input(rank);
@@ -210,6 +217,8 @@ void generate_single_gpu_test(int rank) {
     }
     hb_input.host = (uint8_t*)input;
     hb_output.host = (uint8_t*)output;
+  for (int i = 0; i < ITERS; i++) {
+    //    MPI_Barrier(MPI_COMM_WORLD);
     std::cerr << "starting iter " << i << std::endl;
     auto start = std::chrono::high_resolution_clock::now();    
     blur_single_gpu(&hb_input, &hb_output);
@@ -226,7 +235,7 @@ void generate_single_gpu_test(int rank) {
     duration_vector.push_back(duration);
     std::cerr << "Iteration " << i << " complete: " << duration.count() << "ms." << std::endl;
     cuCtxSynchronize();
-    cuCtxDestroy(cvars.ctx);
+    //    cuCtxDestroy(cvars.ctx);
   }
   if (rank == 0) {
     print_time("performance_CPU.csv", "BLUR GPU", {"Tiramisu"}, {median(duration_vector)});
