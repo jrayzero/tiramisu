@@ -6,17 +6,17 @@ using namespace tiramisu;
 std::vector<computation *> algorithm(function *f, std::string srows, std::string scols) {
   var r(p_int64, "r");
   var c(p_int64, "c");
-  computation *blur_input = new computation("{blur_input[r,c]: 0<=r<" + srows + " and 0<=c<" + 
+  computation *blur_input = new computation("{blur_input[r,c]: 0<=r<" + srows + " and 0<=c<" +
                                             scols + "}", expr(), false, p_float32, f);
-  expr bx_expr = (blur_input->operator()(var("r"), var("c")) + 
-                  blur_input->operator()(var("r"), var("c") + (int64_t)1) + 
+  expr bx_expr = (blur_input->operator()(var("r"), var("c")) +
+                  blur_input->operator()(var("r"), var("c") + (int64_t)1) +
                   blur_input->operator()(var("r"), var("c") + (int64_t)2)) / 3.0f;
-  computation *bx = new computation("{bx[r,c]: 0<=r<" + srows + " and 0<=c<" + scols + "}", 
+  computation *bx = new computation("{bx[r,c]: 0<=r<" + srows + " and 0<=c<" + scols + "}",
                                     bx_expr, true, p_float32, f);
-  expr by_expr = (bx->operator()(var("r"), var("c")) + 
-                  bx->operator()(var("r") + (int64_t)1, var("c")) + 
+  expr by_expr = (bx->operator()(var("r"), var("c")) +
+                  bx->operator()(var("r") + (int64_t)1, var("c")) +
                   bx->operator()(var("r") + (int64_t)2, var("c"))) / 3.0f;
-  computation *by = new computation("{by[r,c]: 0<=r<" + srows + " and 0<=c<" + scols + "}", 
+  computation *by = new computation("{by[r,c]: 0<=r<" + srows + " and 0<=c<" + scols + "}",
                                     by_expr, true, p_float32, f);
   return {blur_input, bx, by};
 }
@@ -45,15 +45,15 @@ void generate_single_cpu() {
   bx->before(*by, computation::root);
 
   tiramisu::buffer buff_input("buff_input", {ROWS+(int64_t)2, COLS+(int64_t)2}, p_float32,
-                                tiramisu::a_input, &blur);
+                              tiramisu::a_input, &blur);
 
   tiramisu::buffer buff_bx("buff_bx", {ROWS, COLS},
                            p_float32, tiramisu::a_output, &blur);
-  
+
   tiramisu::buffer buff_by("buff_by", {ROWS, COLS},
                            p_float32, tiramisu::a_output, &blur);
-  
-  blur_input->set_access("{blur_input[i1, i0]->buff_input[i1,i0]}");  
+
+  blur_input->set_access("{blur_input[i1, i0]->buff_input[i1,i0]}");
   by->set_access("{by[y, x]->buff_by[y,x]}");
   bx->set_access("{bx[y, x]->buff_bx[y, x]}");
   blur.lift_dist_comps();
@@ -81,38 +81,38 @@ void generate_multi_cpu() {
 
 
   expr border_expr = (blur_input->operator()(r,c) + blur_input->operator()(r,c+(int64_t)1) + blur_input->operator()(r,c+(int64_t)2) + blur_input->operator()(r+(int64_t)1,c) + blur_input->operator()(r+(int64_t)1,c+(int64_t)1) + blur_input->operator()(r+(int64_t)1,c+(int64_t)2) + blur_input->operator()(r+(int64_t)2,c) + blur_input->operator()(r+(int64_t)2,c+(int64_t)1) + blur_input->operator()(r+(int64_t)2,c+(int64_t)2)) / 9.0f;
-  computation border("{border[q,r,c]: 0<=q<" + std::to_string(PROCS) + "0<=r<2 and 0<=c<" + scols + "}", border_expr, true, p_float32, &blur);
-  
+  computation border("{border[q,r,c]: 0<=q<" + std::to_string(PROCS) + " and 0<=r<2 and 0<=c<" + scols + "}", border_expr, true, p_float32, &blur);
+
   bx->split(r, ROWS/PROCS, q1, q2);
   by->split(r, ROWS/PROCS, q1, q2);
 
-  /*  bx->tile(q2, c, (int64_t)100, (int64_t)8, r0, c0, r1, c1);
+  bx->tile(q2, c, (int64_t)100, (int64_t)8, r0, c0, r1, c1);
   by->tile(q2, c, (int64_t)100, (int64_t)8, r0, c0, r1, c1);
   bx->split(r0, 8, r2, r3);
   by->split(r0, 8, r2, r3);
   bx->tag_vector_level(c1, 8);
   by->tag_vector_level(c1, 8);
   bx->tag_parallel_level(r2);
-  by->tag_parallel_level(r2);*/
+  by->tag_parallel_level(r2);
 
-  //  bx->tag_distribute_level(q1);
-  //  by->tag_distribute_level(q1);
-  //  border.tag_distribute_level(q);
+  bx->tag_distribute_level(q1);
+  by->tag_distribute_level(q1);
+  border.tag_distribute_level(q);
 
 
   bx->before(*by, computation::root);
   by->before(border, computation::root);
 
   tiramisu::buffer buff_input("buff_input", {ROWS/PROCS+(int64_t)2, COLS+(int64_t)2}, p_float32,
-                                tiramisu::a_input, &blur);
+                              tiramisu::a_input, &blur);
 
   tiramisu::buffer buff_bx("buff_bx", {ROWS/PROCS, COLS},
                            p_float32, tiramisu::a_output, &blur);
-  
+
   tiramisu::buffer buff_by("buff_by", {ROWS/PROCS, COLS},
                            p_float32, tiramisu::a_output, &blur);
-  
-  blur_input->set_access("{blur_input[i1, i0]->buff_input[i1,i0]}");  
+
+  blur_input->set_access("{blur_input[i1, i0]->buff_input[i1,i0]}");
   by->set_access("{by[y, x]->buff_by[y,x]}");
   bx->set_access("{bx[y, x]->buff_bx[y, x]}");
   border.set_access("{border[q,r,c]->buff_by[r+" + std::to_string(ROWS/PROCS) + "-2,c]}");
@@ -134,7 +134,7 @@ void generate_single_gpu() {
   var r(p_int64, "r"), r0(p_int64, "r0"), r1(p_int64, "r1");
   var c(p_int64, "c"), c0(p_int64, "c0"), c1(p_int64, "c1");
   var z(p_int64, "z");
-  
+
   std::vector<computation *> comps = algorithm(&blur, srows, scols);
   computation *blur_input = comps[0];
   computation *bx = comps[1];
@@ -156,7 +156,7 @@ void generate_single_gpu() {
   xfer_prop d2h_cuda_async_kernel_stream(p_float32, {ASYNC, CUDA, GPU2CPU}, 0);
   xfer_prop h2d_cuda_async_kernel_stream(p_float32, {ASYNC, CUDA, CPU2GPU}, 0);
   // copy up the last two rows later on
-  xfer h2d = computation::create_xfer("{h2d[r,c]: 0<=r<" + srows + " and 0<=c<2+" + scols + 
+  xfer h2d = computation::create_xfer("{h2d[r,c]: 0<=r<" + srows + " and 0<=c<2+" + scols +
                                       "}", h2d_cuda_async, blur_input->operator()(r,c), &blur);
   tiramisu::wait h2d_wait("{h2d_wait[r,c]: 0<=r<" + srows + " and 0<=c<1}", h2d.os->operator()(r,0), h2d_cuda_async_kernel_stream, true, &blur);
   generator::update_producer_expr_name(bx, "blur_input", "h2d", false);
@@ -168,7 +168,7 @@ void generate_single_gpu() {
 
   // create a wait on d2h for the next iteration of bx. Also wait on the by kernel
   tiramisu::wait d2h_wait_for_by("{d2h_wait_for_by[r,c]: 0<=r<" + srows + " and 0<=c<1}", by->operator()(r, 0), stream2, true, &blur);
-  xfer d2h = computation::create_xfer("{d2h[r,c]: 0<=r<" + srows + " and 0<=c<" + scols + 
+  xfer d2h = computation::create_xfer("{d2h[r,c]: 0<=r<" + srows + " and 0<=c<" + scols +
                                       "}", d2h_cuda_async, by->operator()(r,0), &blur);
   tiramisu::wait d2h_wait("{d2h_wait[r,c]: " + sresident + "<=r<" + srows + " and 0<=c<1}", d2h.os->operator()(r-RESIDENT,0), h2d_cuda_async, true, &blur);
   d2h.os->split(r, RESIDENT, r0, r1);
@@ -178,14 +178,14 @@ void generate_single_gpu() {
 
   // special transfer that copies up just the two extra rows needed to get the boundary region correct
   // TODO JESS this access to blur input needs to be fixed!
-  xfer ghost = computation::create_xfer("{ghost[r,z,c]: 0<=r<(" + std::to_string(ROWS/RESIDENT) + ") and 0<=z<4 and 0<=c<2+" + scols + 
+  xfer ghost = computation::create_xfer("{ghost[r,z,c]: 0<=r<(" + std::to_string(ROWS/RESIDENT) + ") and 0<=z<4 and 0<=c<2+" + scols +
                                         "}", h2d_cuda_async_kernel_stream, blur_input->operator()(/*(r+(int64_t)1)*(ROWS/RESIDENT)+z*/r*RESIDENT+(int64_t)RESIDENT+z-(int64_t)2,c), &blur);
   //  ghost.os->split(r, 2, r0, r1);
   ghost.os->collapse_many({collapser(2, (int64_t)0, COLS+(int64_t)2)});
-  
+
 
   expr border_expr = (ghost.os->operator()(0, z, c) + ghost.os->operator()(0, z, c+(int64_t)1) + ghost.os->operator()(0, z, c+(int64_t)2) +
-    ghost.os->operator()(0, z+(int64_t)1, c) + ghost.os->operator()(0, z+(int64_t)1, c+(int64_t)1) + ghost.os->operator()(0, z+(int64_t)1, c+(int64_t)2) +
+                      ghost.os->operator()(0, z+(int64_t)1, c) + ghost.os->operator()(0, z+(int64_t)1, c+(int64_t)1) + ghost.os->operator()(0, z+(int64_t)1, c+(int64_t)2) +
                       ghost.os->operator()(0, z+(int64_t)2, c) + ghost.os->operator()(0, z+(int64_t)2, c+(int64_t)1) + ghost.os->operator()(0, z+(int64_t)2, c+(int64_t)2)) / 9.0f;
   computation border("{border[r,z,c]: 0<=r<" + std::to_string(ROWS/RESIDENT) + " and 0<=z<2 and 0<=c<" + scols + "}", border_expr, true, p_float32, &blur);
   border.split(c, BLOCK_SIZE, c0, c1);
@@ -209,7 +209,7 @@ void generate_single_gpu() {
   // tag for the GPU
   bx->tag_gpu_level2(c0, c1, 0);
   by->tag_gpu_level2(c0, c1, 0);
-  border.tag_gpu_level2(c0, c1, 0);    
+  border.tag_gpu_level2(c0, c1, 0);
 
   // buffers
   // add on +2 to the rows in case we are actually needing the next rank's rows (we will need to do the blur on those separately)
@@ -231,11 +231,11 @@ void generate_single_gpu() {
   buffer buff_border_literals("buff_border_literals", {ROWS, (int64_t)1}, p_int64, a_temporary_gpu, &blur);
   buffer buff_by_literals("buff_by_literals", {ROWS, (int64_t)1}, p_int64, a_temporary_gpu, &blur);
   buffer buff_null("buff_null", {ROWS,2}, p_wait_ptr, a_temporary, &blur);
-  
+
   // access functions
   blur_input->set_access("{blur_input[r,c]->b_blur_input[r,c]}");
   bx->set_access("{bx[r,c]->b_bx_gpu[r%" + sresident + ",c]}");
-  by->set_access("{by[r,c]->b_by_gpu[r%" + sresident + ",c]}");  
+  by->set_access("{by[r,c]->b_by_gpu[r%" + sresident + ",c]}");
   by->set_wait_access("{by[r,c]->b_d2h_wait_for_by[r,0]}");
   h2d.os->set_access("{h2d[r,c]->b_blur_input_gpu[r%" + sresident + ",c]}");
   h2d.os->set_wait_access("{h2d[r,c]->b_h2d_wait[r,0]}");
@@ -267,7 +267,7 @@ void generate_multi_gpu() {
   var r(p_int64, "r"), r0(p_int64, "r0"), r1(p_int64, "r1");
   var c(p_int64, "c"), c0(p_int64, "c0"), c1(p_int64, "c1");
   var z(p_int64, "z");
-  
+
   std::vector<computation *> comps = algorithm(&blur, srows, scols);
   computation *blur_input = comps[0];
   computation *bx = comps[1];
@@ -296,7 +296,7 @@ void generate_multi_gpu() {
   xfer_prop d2h_cuda_async_kernel_stream(p_float32, {ASYNC, CUDA, GPU2CPU}, 0);
   xfer_prop h2d_cuda_async_kernel_stream(p_float32, {ASYNC, CUDA, CPU2GPU}, 0);
   // copy up the last two rows later on
-  xfer h2d = computation::create_xfer("{h2d[r,c]: 0<=r<" + srows + " and 0<=c<2+" + scols + 
+  xfer h2d = computation::create_xfer("{h2d[r,c]: 0<=r<" + srows + " and 0<=c<2+" + scols +
                                       "}", h2d_cuda_async, blur_input->operator()(r,c), &blur);
   tiramisu::wait h2d_wait("{h2d_wait[r,c]: 0<=r<" + srows + " and 0<=c<1}", h2d.os->operator()(r,0), h2d_cuda_async_kernel_stream, true, &blur);
   generator::update_producer_expr_name(bx, "blur_input", "h2d", false);
@@ -310,7 +310,7 @@ void generate_multi_gpu() {
 
   // create a wait on d2h for the next iteration of bx. Also wait on the by kernel
   tiramisu::wait d2h_wait_for_by("{d2h_wait_for_by[r,c]: 0<=r<" + srows + " and 0<=c<1}", by->operator()(r, 0), stream2, true, &blur);
-  xfer d2h = computation::create_xfer("{d2h[r,c]: 0<=r<" + srows + " and 0<=c<" + scols + 
+  xfer d2h = computation::create_xfer("{d2h[r,c]: 0<=r<" + srows + " and 0<=c<" + scols +
                                       "}", d2h_cuda_async, by->operator()(r,0), &blur);
   tiramisu::wait d2h_wait("{d2h_wait[r,c]: 0<=r<" + srows + " and 0<=c<1}", d2h.os->operator()(r-RESIDENT,0), h2d_cuda_async, true, &blur);
   d2h.os->split(r, ROWS/PROCS, q, rq);
@@ -324,11 +324,11 @@ void generate_multi_gpu() {
 
   // special transfer that copies up just the two extra rows needed to get the boundary region correct
   // TODO JESS this access to blur input needs to be fixed!
-  xfer ghost = computation::create_xfer("{ghost[r,z,c]: 0<=r<(" + std::to_string(ROWS/RESIDENT) + ") and 0<=z<4 and 0<=c<2+" + scols + 
+  xfer ghost = computation::create_xfer("{ghost[r,z,c]: 0<=r<(" + std::to_string(ROWS/RESIDENT) + ") and 0<=z<4 and 0<=c<2+" + scols +
                                         "}", h2d_cuda_async_kernel_stream, blur_input->operator()(r*RESIDENT+(int64_t)RESIDENT+z-(int64_t)2,c), &blur);
   ghost.os->split(r, ROWS/RESIDENT/PROCS, q, rq);
   ghost.os->collapse_many({collapser(3, (int64_t)0, COLS+(int64_t)2)});
-  
+
 
   expr border_expr = (ghost.os->operator()(0, z, c) + ghost.os->operator()(0, z, c+(int64_t)1) + ghost.os->operator()(0, z, c+(int64_t)2) +
                       ghost.os->operator()(0, z+(int64_t)1, c) + ghost.os->operator()(0, z+(int64_t)1, c+(int64_t)1) + ghost.os->operator()(0, z+(int64_t)1, c+(int64_t)2) +
@@ -370,7 +370,7 @@ void generate_multi_gpu() {
   // tag for the GPU
   bx->tag_gpu_level2(c0, c1, 0);
   by->tag_gpu_level2(c0, c1, 0);
-  border.tag_gpu_level2(c0, c1, 0);    
+  border.tag_gpu_level2(c0, c1, 0);
 
   //  by->set_schedule_this_comp(false);
   //  d2h_wait_for_by.set_schedule_this_comp(false);
@@ -395,12 +395,12 @@ void generate_multi_gpu() {
   buffer buff_border_literals("buff_border_literals", {ROWS, (int64_t)1}, p_int64, a_temporary_gpu, &blur);
   buffer buff_by_literals("buff_by_literals", {ROWS, (int64_t)1}, p_int64, a_temporary_gpu, &blur);
   buffer buff_null("buff_null", {ROWS/PROCS,2}, p_wait_ptr, a_temporary, &blur);
-  
+
   // access functions
 
   blur_input->set_access("{blur_input[r,c]->b_blur_input[r,c]}");
   bx->set_access("{bx[r,c]->b_bx_gpu[r%" + sresident + ",c]}");
-  by->set_access("{by[r,c]->b_by_gpu[r%" + sresident + ",c]}");  
+  by->set_access("{by[r,c]->b_by_gpu[r%" + sresident + ",c]}");
   by->set_wait_access("{by[r,c]->b_d2h_wait_for_by[r,0]}");
   h2d.os->set_access("{h2d[r,c]->b_blur_input_gpu[r%" + sresident + ",c]}");
   h2d.os->set_wait_access("{h2d[r,c]->b_h2d_wait[r,0]}");
@@ -425,20 +425,20 @@ void generate_multi_gpu() {
 }
 
 int main() {
-    global::set_default_tiramisu_options();
-    global::set_loop_iterator_type(p_int64);;
+  global::set_default_tiramisu_options();
+  global::set_loop_iterator_type(p_int64);;
 #ifdef GPU
-#ifdef DIST
+  #ifdef DIST
     generate_multi_gpu();
 #else
     generate_single_gpu();
 #endif
 #else
 #ifdef DIST
-    std::cerr << "Generating multi cpu" << std::endl;
-    generate_multi_cpu();
+  std::cerr << "Generating multi cpu" << std::endl;
+  generate_multi_cpu();
 #else
-    generate_single_cpu();
+  generate_single_cpu();
 #endif
 #endif
 }
