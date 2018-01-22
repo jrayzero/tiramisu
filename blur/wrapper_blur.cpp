@@ -31,16 +31,19 @@ void check_results(float *guess, int rank) {
   float *bx = (float*)malloc(sizeof(float) * (ROWS/PROCS + 2) * COLS);
   float *by = (float*)malloc(sizeof(float) * ROWS/PROCS * COLS);
   std::cerr << "Computing truth value" << std::endl;
-  float v = (0.00001f) * rank * ROWS/PROCS * COLS;
+  float v = 0.0f;//(0.00001f) * rank * ROWS/PROCS * COLS;
   std::cerr << "Truth value input" << std::endl;
   for (int r = 0; r < ROWS/PROCS+2; r++) {
     for (int c = 0; c < COLS; c++) {
       input[r*(COLS+2)+c] = v;
       v += 0.00001f;
     }
+    if (r == ROWS/PROCS) {
+      v = 0.0f;
+    }
   }
 
-  for (int r = 0; r < ROWS/PROCS; r++) {
+  for (int r = 0; r < ROWS/PROCS+2; r++) {
     for (int c = 0; c < COLS; c++) {
       bx[r*COLS+c] = 
         (input[r*(COLS+2)+c] + input[r*(COLS+2)+c+1] + input[r*(COLS+2)+c+2]) / 3.0f;
@@ -57,18 +60,18 @@ void check_results(float *guess, int rank) {
   // the borders are junk, so ignore those
   std::cerr << "Comparing" << std::endl;
   if (rank != PROCS - 1) {
-    for (int r = 0; r < ROWS/PROCS - 2; r++) {
+    for (int r = 0; r < ROWS/PROCS; r++) {
       for (int c = 0; c < COLS - 2; c++) {
         float diff = std::fabs(by[r*COLS+c] - guess[r*COLS+c]);
         if (diff > 0.001f) {
           std::cerr << diff << std::endl;
-          std::cerr << "Difference at row " << r << " and col " << c << ". Should be " << by[r*COLS+c] << " but is " << guess[r*COLS+c] << std::endl;
+          std::cerr << "Rank " << rank << " has difference at row " << r << " and col " << c << ". Should be " << by[r*COLS+c] << " but is " << guess[r*COLS+c] << std::endl;
           exit(29);
         }
       }
     }
   } else {
-    for (int r = 0; r < ROWS/PROCS; r++) {
+    for (int r = 0; r < ROWS/PROCS - 2; r++) {
       for (int c = 0; c < COLS - 2; c++) {
         float diff = std::fabs(by[r*COLS+c] - guess[r*COLS+c]);
         if (diff > 0.001f) {
@@ -100,11 +103,15 @@ float *generate_blur_input(int rank, bool host = true) {
   }
 
 #ifdef CHECK
-  float starting_val = (0.00001f) * rank * num_rows * COLS;
+  //  float starting_val = (0.00001f) * rank * num_rows * COLS;
+  float starting_val = 0.0f;
   for (int r = 0; r < num_rows+2; r++) { // mimic filling in the data for the next rank
     for (int c = 0; c < COLS; c++) {
       input[r*(COLS+2)+c] = starting_val;
       starting_val += 0.00001f;
+    }
+    if (r == num_rows) {
+      starting_val = 0.0f;
     }
   }
 #endif
