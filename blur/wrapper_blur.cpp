@@ -94,6 +94,7 @@ float *generate_blur_input(int rank, bool host = true) {
   // the last rank doesn't need +2 rows, but it's easier to make it uniform
   if (host) {
     CUresult cu = cuMemHostAlloc((void**)&input, sizeof(float)*(COLS+2)*(num_rows+2), CU_MEMHOSTALLOC_PORTABLE);
+    size_t total = sizeof(float)*(COLS+2)*(num_rows+2);
     if (cu != CUDA_SUCCESS) {
       std::cerr << "cuMemHostAlloc failed on output with " << cu << std::endl;
       exit(29);
@@ -119,7 +120,7 @@ float *generate_blur_input(int rank, bool host = true) {
 }
 
 void generate_single_cpu_test(int rank) {
-#ifdef CPU
+#if defined(CPU) && !defined(DIST)
   std::cerr << "Beginning single cpu" << std::endl;
   std::vector<std::chrono::duration<double,std::milli>> duration_vector;
   halide_buffer_t hb_input;
@@ -136,6 +137,42 @@ void generate_single_cpu_test(int rank) {
     std::cerr << "starting iter " << i << std::endl;
     auto start = std::chrono::high_resolution_clock::now();    
     blur_single_cpu(&hb_input, &hb_bx, &hb_output);
+#ifdef CHECK
+    std::cerr << "Comparing results" << std::endl;
+    check_results(output, rank);
+    std::cerr << "Success!" << std::endl;
+#endif
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double,std::milli> duration = end - start;
+    duration_vector.push_back(duration);
+    std::cerr << "Iteration " << i << " complete: " << duration.count() << "ms." << std::endl;
+  }
+  if (rank == 0) {
+    print_time("performance_CPU.csv", "BLUR CPU", {"Tiramisu"}, {median(duration_vector)});
+    std::cout.flush();
+  }
+    MPI_Finalize();
+#endif
+}
+
+void generate_multi_cpu_test(int rank) {
+#if defined(CPU) && defined(DIST)
+  std::cerr << "Beginning multi cpu" << std::endl;
+  std::vector<std::chrono::duration<double,std::milli>> duration_vector;
+  halide_buffer_t hb_input;
+  halide_buffer_t hb_output;
+  halide_buffer_t hb_bx;
+  std::cerr << "Generating blur input" << std::endl;
+  float *input = generate_blur_input(rank, false);
+  float *bx = (float*)malloc(sizeof(float)*COLS*(ROWS+2));
+  float *output = (float*)malloc(sizeof(float)*COLS*ROWS);
+  hb_input.host = (uint8_t*)input;
+  hb_output.host = (uint8_t*)output;
+  hb_bx.host = (uint8_t*)bx;
+  for (int i = 0; i < ITERS; i++) {
+    std::cerr << "starting iter " << i << std::endl;
+    auto start = std::chrono::high_resolution_clock::now();    
+    blur_multi_cpu(&hb_input, &hb_bx, &hb_output);
 #ifdef CHECK
     std::cerr << "Comparing results" << std::endl;
     check_results(output, rank);
@@ -208,7 +245,13 @@ void generate_multi_gpu_test(int rank) {
   halide_buffer_t hb_d2h_wait;
   for (int i = 0; i < ITERS; i++) {
     MPI_Barrier(MPI_COMM_WORLD);
-    tiramisu_init_cuda(rank % 4);
+    if (rank == 0) {
+      std::cerr << "Allocating rank 0 with 1" << std::endl;
+      tiramisu_init_cuda(1);
+    } else {
+      std::cerr << "Allocating rank " << rank << " with " << (rank%4) << std::endl;      
+      tiramisu_init_cuda(rank % 4);
+    }
     std::cerr << "Generating blur input" << std::endl;
     float *input = generate_blur_input(rank);
     float *output;
@@ -220,7 +263,7 @@ void generate_multi_gpu_test(int rank) {
       cuEventCreate(&d2h_wait[r], 0);
       cuEventRecord(d2h_wait[r], s);
     }
-    CUresult cu = cuMemHostAlloc((void**)&output, sizeof(float)*COLS*ROWS, CU_MEMHOSTALLOC_PORTABLE);
+    CUresult cu = cuMemHostAlloc((void**)&output, sizeof(float)*COLS*ROWS/PROCS, CU_MEMHOSTALLOC_PORTABLE);
     if (cu != CUDA_SUCCESS) {
       std::cerr << "cuMemHostAlloc failed on output with " << cu << std::endl;
       exit(29);
@@ -244,7 +287,9 @@ void generate_multi_gpu_test(int rank) {
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double,std::milli> duration = end - start;
     duration_vector.push_back(duration);
-    std::cerr << "Iteration " << i << " complete: " << duration.count() << "ms." << std::endl;
+    if (rank == 0) {
+      std::cerr << "Iteration " << i << " complete: " << duration.count() << "ms." << std::endl;
+    }
     cuCtxSynchronize();
     cuCtxDestroy(cvars.ctx);
   }
@@ -266,7 +311,11 @@ int main() {
   generate_single_gpu_test(rank);
 #endif
 #elif defined(CPU)
+#ifdef DIST
+  generate_multi_cpu_test(rank);
+#else
   generate_single_cpu_test(rank);
+#endif
 #endif
 }
 

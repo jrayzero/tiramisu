@@ -65,6 +65,67 @@ void generate_single_cpu() {
 
 }
 
+void generate_multi_cpu() {
+  std::string srows = std::to_string(ROWS);
+  std::string scols = std::to_string(COLS);
+  function blur("blur_multi_cpu");
+  std::vector<computation *> comps = algorithm(&blur, srows, scols);
+  computation *blur_input = comps[0];
+  computation *bx = comps[1];
+  computation *by = comps[2];
+  var r(p_int64, "r"), r0(p_int64, "r0"), r1(p_int64, "r1"), r2(p_int64, "r2"), r3(p_int64, "r3");
+  var c(p_int64, "c"), c0(p_int64, "c0"), c1(p_int64, "c1");
+  var z(p_int64, "z");
+
+  var q("q"), q1("q1"), q2("q2");
+
+
+  expr border_expr = (blur_input->operator()(r,c) + blur_input->operator()(r,c+(int64_t)1) + blur_input->operator()(r,c+(int64_t)2) + blur_input->operator()(r+(int64_t)1,c) + blur_input->operator()(r+(int64_t)1,c+(int64_t)1) + blur_input->operator()(r+(int64_t)1,c+(int64_t)2) + blur_input->operator()(r+(int64_t)2,c) + blur_input->operator()(r+(int64_t)2,c+(int64_t)1) + blur_input->operator()(r+(int64_t)2,c+(int64_t)2)) / 9.0f;
+  computation border("{border[q,r,c]: 0<=q<" + std::to_string(PROCS) + "0<=r<2 and 0<=c<" + scols + "}", border_expr, true, p_float32, &blur);
+  
+  bx->split(r, ROWS/PROCS, q1, q2);
+  by->split(r, ROWS/PROCS, q1, q2);
+
+  /*  bx->tile(q2, c, (int64_t)100, (int64_t)8, r0, c0, r1, c1);
+  by->tile(q2, c, (int64_t)100, (int64_t)8, r0, c0, r1, c1);
+  bx->split(r0, 8, r2, r3);
+  by->split(r0, 8, r2, r3);
+  bx->tag_vector_level(c1, 8);
+  by->tag_vector_level(c1, 8);
+  bx->tag_parallel_level(r2);
+  by->tag_parallel_level(r2);*/
+
+  //  bx->tag_distribute_level(q1);
+  //  by->tag_distribute_level(q1);
+  //  border.tag_distribute_level(q);
+
+
+  bx->before(*by, computation::root);
+  by->before(border, computation::root);
+
+  tiramisu::buffer buff_input("buff_input", {ROWS/PROCS+(int64_t)2, COLS+(int64_t)2}, p_float32,
+                                tiramisu::a_input, &blur);
+
+  tiramisu::buffer buff_bx("buff_bx", {ROWS/PROCS, COLS},
+                           p_float32, tiramisu::a_output, &blur);
+  
+  tiramisu::buffer buff_by("buff_by", {ROWS/PROCS, COLS},
+                           p_float32, tiramisu::a_output, &blur);
+  
+  blur_input->set_access("{blur_input[i1, i0]->buff_input[i1,i0]}");  
+  by->set_access("{by[y, x]->buff_by[y,x]}");
+  bx->set_access("{bx[y, x]->buff_bx[y, x]}");
+  border.set_access("{border[q,r,c]->buff_by[r+" + std::to_string(ROWS/PROCS) + "-2,c]}");
+  blur.lift_dist_comps();
+  blur.set_arguments({&buff_input, &buff_bx, &buff_by});
+  blur.gen_time_space_domain();
+  blur.gen_isl_ast();
+  blur.gen_halide_stmt();
+  blur.gen_halide_obj("/tmp/generated_multi_cpu_blur.o");
+
+}
+
+
 void generate_single_gpu() {
   std::string srows = std::to_string(ROWS);
   std::string scols = std::to_string(COLS);
@@ -373,6 +434,11 @@ int main() {
     generate_single_gpu();
 #endif
 #else
+#ifdef DIST
+    std::cerr << "Generating multi cpu" << std::endl;
+    generate_multi_cpu();
+#else
     generate_single_cpu();
+#endif
 #endif
 }

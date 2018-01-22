@@ -1,6 +1,6 @@
-#define GPU
+//#define GPU
 #define DIST
-//#define CPU
+#define CPU
 #define CHECK
 
 #ifndef CHECK
