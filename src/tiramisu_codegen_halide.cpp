@@ -2250,22 +2250,14 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
             if (fct.should_map_to_gpu(computation_name)) {
                 std::pair<int, int> range = fct.gpu_ranges[computation_name];
                 for (int l = 0; l < level; l++) {
-                    if (range.first <= l) { // we need to do some special code generation and convert the rest of this loop nest directly to CUDA rather than Halide!
+                    if (range.first == l) { // we need to do some special code generation and convert the rest of this loop nest directly to CUDA rather than Halide!
                         // skip up to the non-GPU levels
                         use_gpu_backend = true;
                         tagged_stmts.push_back(computation_name);
                     }
                 }
             }
-            if (use_gpu_backend) {
-                // don't do anything for now
-                /*              std::pair<int, int> range = fct.gpu_ranges[computation_name];
-                std::string kernel = "tiramisu_CUDA_kernel_" + computation_name;
-                result = Halide::Internal::Evaluate::make(make_comm_call(Halide::Bool(), kernel, {}));
-                // now actually generate that backend code
-                std::string kernel_fn = generator::cuda_kernel_from_isl_node(fct, node, level, tagged_stmts, kernel, range.first, range.second);
-                std::cerr << "Kernel filename: " << kernel_fn << std::endl;*/
-            } else {
+            if (!use_gpu_backend) {
                 DEBUG(10, tiramisu::str_dump("The full list of tagged statements is now"));
                 for (const auto &ts: tagged_stmts)
                 DEBUG(10, tiramisu::str_dump(ts + " "));
