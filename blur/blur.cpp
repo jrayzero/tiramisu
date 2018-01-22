@@ -80,7 +80,15 @@ void generate_multi_cpu() {
   var q("q"), q1("q1"), q2("q2");
 
 
-  expr border_expr = (blur_input->operator()(r,c) + blur_input->operator()(r,c+(int64_t)1) + blur_input->operator()(r,c+(int64_t)2) + blur_input->operator()(r+(int64_t)1,c) + blur_input->operator()(r+(int64_t)1,c+(int64_t)1) + blur_input->operator()(r+(int64_t)1,c+(int64_t)2) + blur_input->operator()(r+(int64_t)2,c) + blur_input->operator()(r+(int64_t)2,c+(int64_t)1) + blur_input->operator()(r+(int64_t)2,c+(int64_t)2)) / 9.0f;
+  expr border_expr = (blur_input->operator()((int64_t)(ROWS/PROCS)-(int64_t)2+r,c) + 
+                      blur_input->operator()((int64_t)(ROWS/PROCS)-(int64_t)2+r,c+(int64_t)1) + 
+                      blur_input->operator()((int64_t)(ROWS/PROCS)-(int64_t)2+r,c+(int64_t)2) + 
+                      blur_input->operator()((int64_t)(ROWS/PROCS)-(int64_t)2+r+(int64_t)1,c) + 
+                      blur_input->operator()((int64_t)(ROWS/PROCS)-(int64_t)2+r+(int64_t)1,c+(int64_t)1) + 
+                      blur_input->operator()((int64_t)(ROWS/PROCS)-(int64_t)2+r+(int64_t)1,c+(int64_t)2) + 
+                      blur_input->operator()((int64_t)(ROWS/PROCS)-(int64_t)2+r+(int64_t)2,c) +
+                      blur_input->operator()((int64_t)(ROWS/PROCS)-(int64_t)2+r+(int64_t)2,c+(int64_t)1) + 
+                      blur_input->operator()((int64_t)(ROWS/PROCS)-(int64_t)2+r+(int64_t)2,c+(int64_t)2)) / 9.0f;
   computation border("{border[q,r,c]: 0<=q<" + std::to_string(PROCS) + " and 0<=r<2 and 0<=c<" + scols + "}", border_expr, true, p_float32, &blur);
 
   bx->split(r, ROWS/PROCS, q1, q2);
