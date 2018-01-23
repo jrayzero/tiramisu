@@ -5,10 +5,10 @@
 #ifndef TIRAMISU_GEMV_PARAMS_H
 #define TIRAMISU_GEMV_PARAMS_H
 
-#define CPU
-//#define GPU
+//#define CPU
+#define GPU
 
-//#define CHECK_RESULTS
+#define CHECK_RESULTS
 
 #ifndef CHECK_RESULTS
 #define ROWS (int64_t)1000000
@@ -16,7 +16,7 @@
 #define ITERS 10
 #else
 #define ROWS (int64_t)10000
-#define COLS (int64_t)800
+#define COLS (int64_t)1024
 #define ITERS 1
 #endif
 
