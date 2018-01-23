@@ -278,51 +278,6 @@ void create_gpu_alternate_version() {
     compile_kernels_to_obj();
 }
 
-void create_gpu_shared_version() {
-    var c("c"), r("r"), r0("r0"), r1("r1"), r2("r2"), r3("r3"), c0("c0"), c1("c1"), t("t");
-    function *gemv_shared = new function("gemv_shared");
-
-    int64_t threads_per_block = 128;
-
-    computation *vector = new computation("{vector[r,c]: 0<=r<1 and 0<=c<" + std::to_string(COLS) + "}", expr(), false, p_float32, gemv_shared);
-    computation *matrix = new computation("{matrix[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<" + std::to_string(COLS) + "}",
-                                          expr(), false, p_float32, gemv_shared);
-
-    computation init_shared_memory("{init_shared_memory[r,t,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=t<" +
-                                   std::to_string(COLS/threads_per_block) + " and 0<=c<" + std::to_string(threads_per_block) + "}", expr(0.0f), true, p_float32, gemv_shared);
-    init_shared_memory.split(r, 100, r0, r1);
-
-    computation *gemv = new computation("{gemv[r,t,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=t<" +
-                                        std::to_string(COLS/threads_per_block) + " and 0<=c<" +
-                                        std::to_string(threads_per_block) + "}",
-                                        expr(matrix->operator()(r,c) * vector->operator()(0,t + c) + init_shared_memory(r,t,c)),
-                                        true, p_float32, gemv_shared);
-    gemv->split(r, 100, r0, r1);
-
-    // now do all the partial sums within the warp
-    computation sum("{sum[r,t,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=t<" + std::to_string(COLS/threads_per_block) + " and 0<=c<" +
-                    std::to_string(threads_per_block) + "}", expr(init_shared_memory(r,t,c) + gemv->operator()(r,t,c)), true, p_float32, gemv_shared);
-    sum.split(r, 100, r0, r1);
-
-    init_shared_memory.before(*gemv, c);
-    gemv->before(sum, t);
-
-    // Per kernel
-    buffer vector_buff("vector_buff", {1,COLS}, p_float32, a_input, gemv_shared);
-    buffer matrix_buff("matrix_buff", {ROWS, COLS}, p_float32, a_input, gemv_shared);
-    buffer partial_sum_buff("partial_sum_buff", {threads_per_block}, p_float32, a_temporary_shared, gemv_shared);
-    matrix->set_access("{matrix[r,c]->matrix_buff[r,c]}");
-    vector->set_access("{vector[r,c]->vector_buff[r,c]}");
-    init_shared_memory.set_access("{init_shared_memory[r,t,c]->partial_sum_buff[c]}");
-    gemv->set_access("{gemv[r,t,c]->partial_sum_buff[c]}");
-    sum.set_access("{sum[r,t,c]->partial_sum_buff[0]}");
-
-
-    gemv_shared->set_arguments({&vector_buff, &matrix_buff});
-    postprocess(gemv_shared, "/tmp/generated_gemv.o");
-    print_tiramisu_cuda_runtime();
-    compile_kernels_to_obj();
-}
 
 void create_gpu_version_with_shared() {
     var c("c"), r("r"), r0("r0"), r1("r1"), r2("r2"), r3("r3"), c0("c0"), c1("c1");
@@ -379,7 +334,7 @@ void create_gpu_version_with_shared() {
 
     gemv_dummy->set_schedule_this_comp(false);
     // this has to go after all the other things have been scheduled
-    gemv->tag_gpu_level2(c0, c1, -1);
+    //    gemv->tag_gpu_level2(r1, c0, -1);
 
     buffer vector_buff("vector_buff", {1,COLS}, p_float32, a_input, gemv_gpu);
     buffer matrix_buff("matrix_buff", {ROWS, COLS}, p_float32, a_input, gemv_gpu);
