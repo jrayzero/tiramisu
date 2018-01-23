@@ -1,7 +1,7 @@
-//#define GPU
-#define DIST
-#define CPU
-#define CHECK
+#define GPU
+//#define DIST
+//#define CPU
+//#define CHECK
 
 #ifndef CHECK
 #define ROWS (int64_t)16000
