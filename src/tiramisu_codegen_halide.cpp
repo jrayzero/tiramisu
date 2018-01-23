@@ -1932,9 +1932,9 @@ Halide::Internal::Stmt tiramisu::generator::halide_stmt_from_isl_node(
                         if (range.first == level) {
                             process_gpu_loop = true;
                             comp_name = tagged_stmts[tt];
+                            tagged_stmts[tt] = "";
+                            break;
                         }
-                        tagged_stmts[tt] = "";
-                        break;
                     }
                 }
                 if (fct.should_parallelize(tagged_stmts[tt], level))

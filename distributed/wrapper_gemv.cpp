@@ -13,13 +13,14 @@
 #include <math.h>
 #ifdef GPU
 #include "/tmp/tiramisu_cuda_runtime.h"
-#include "/tmp/tiramisu_CUDA_kernel_multiply.cu.h"
-#include "/tmp/tiramisu_CUDA_kernel_sum.cu.h"
+//#include "/tmp/tiramisu_CUDA_kernel_multiply.cu.h"
+//#include "/tmp/tiramisu_CUDA_kernel_sum.cu.h"
+#include "/tmp/tiramisu_CUDA_kernel_gemv.cu.h"
 #endif
 
-//extern void clear_static_var_tiramisu_CUDA_kernel_gemv();
-extern void clear_static_var_tiramisu_CUDA_kernel_multiply();
-extern void clear_static_var_tiramisu_CUDA_kernel_sum();
+extern void clear_static_var_tiramisu_CUDA_kernel_gemv();
+//extern void clear_static_var_tiramisu_CUDA_kernel_multiply();
+//extern void clear_static_var_tiramisu_CUDA_kernel_sum();
 
 int mpi_init() {
     int provided = -1;
@@ -68,9 +69,10 @@ halide_buffer_t *fill_vector_pinned(bool fill) {
 }
 
 halide_buffer_t *fill_matrix_pinned(bool fill) {
-    std::cerr << "Filling matrix" << std::endl;
+
     float *buff;
     if (fill) {
+      std::cerr << "Filling matrix fully" << std::endl;
       cuMemHostAlloc((void**)&buff, COLS * ROWS * sizeof(float), CU_MEMHOSTALLOC_PORTABLE);
     } else {
       cuMemHostAlloc((void**)&buff, COLS * ROWS * sizeof(float) / 10, CU_MEMHOSTALLOC_PORTABLE);
@@ -116,7 +118,7 @@ void check_results(halide_buffer_t *vector, halide_buffer_t *matrix, halide_buff
         }
     }
     for (uint64_t r = 0; r < ROWS; r++) {
-      if (fabs(should_be[r] - ((float*)(result->host))[r]) > 0.000001) {
+      if (fabs(should_be[r] - ((float*)(result->host))[r]) > 0.001f) {
             std::cerr << "result at " << r << " is wrong" << std::endl;
             std::cerr << "should be " << should_be[r] << " but is " << ((float*)(result->host))[r] << std::endl;
             std::cerr << (fabs(should_be[r] - ((float*)(result->host))[r])) << std::endl;
@@ -168,7 +170,7 @@ void run_gemv_gpu_only() {
     float *_zeros = (float*)calloc(ROWS, sizeof(float));
     zeros.host = (uint8_t*)_zeros;
     for (int iter = 0; iter < ITERS; iter++) {
-        tiramisu_init_cuda(3);
+        tiramisu_init_cuda(0);
 #ifdef CHECK_RESULTS
         halide_buffer_t *vector = fill_vector_pinned(true);
         halide_buffer_t *matrix = fill_matrix_pinned(true);
@@ -192,9 +194,9 @@ void run_gemv_gpu_only() {
 	  check_results(vector, matrix, &result);
 	}
 #endif
-//        clear_static_var_tiramisu_CUDA_kernel_gemv();
-        clear_static_var_tiramisu_CUDA_kernel_multiply();
-        clear_static_var_tiramisu_CUDA_kernel_sum();
+        clear_static_var_tiramisu_CUDA_kernel_gemv();
+//        clear_static_var_tiramisu_CUDA_kernel_multiply();
+//        clear_static_var_tiramisu_CUDA_kernel_sum();
         cuCtxSynchronize();
         cuCtxDestroy(cvars.ctx);
     }

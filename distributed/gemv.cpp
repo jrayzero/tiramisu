@@ -288,14 +288,14 @@ void create_gpu_version_with_shared() {
     computation *gemv_dummy = comps[2];
     computation *gemv = comps[3];
 
-    int64_t rows_resident_on_gpu = 2000;
+    int64_t rows_resident_on_gpu = 50;
     int64_t threads_per_block = 128;
 
     xfer_prop h2d_cuda_async(p_float32, {ASYNC, CUDA, CPU2GPU}, 0);
-    xfer_prop h2d_cuda_sync(p_float32, {SYNC, CUDA, CPU2GPU}, -1);
+    xfer_prop h2d_cuda_sync(p_float32, {SYNC, CUDA, CPU2GPU}, 0);
     xfer_prop h2d_cuda_async_alt(p_float32, {ASYNC, CUDA, CPU2GPU}, 0);
-    xfer_prop d2h_cuda_async(p_float32, {ASYNC, CUDA, GPU2CPU}, 1);
-    xfer_prop d2h_cuda_sync(p_float32, {SYNC, CUDA, GPU2CPU}, 1);
+    xfer_prop d2h_cuda_async(p_float32, {ASYNC, CUDA, GPU2CPU}, 0);
+    xfer_prop d2h_cuda_sync(p_float32, {SYNC, CUDA, GPU2CPU}, 0);
 
 
     xfer vector_copy = computation::create_xfer("{vector_copy[r,c]: 0<=r<1 and 0<=c<" + std::to_string(COLS) + "}", h2d_cuda_sync,
@@ -303,19 +303,19 @@ void create_gpu_version_with_shared() {
     generator::update_producer_expr_name(gemv, "vector", "vector_copy", false);
     // copy up a big chunk, then run the kernel, then copy back. No overlap with kernel, but can have overlap with sending and receiving.
     xfer matrix_row_copy = computation::create_xfer("{matrix_row_copy[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<" +
-                                                    std::to_string(COLS) + "}", h2d_cuda_sync,
+                                                    std::to_string(COLS) + "}", h2d_cuda_async,
                                                     matrix->operator()(r,c), gemv_gpu);
     generator::update_producer_expr_name(gemv, "matrix", "matrix_row_copy", false);
-    xfer init_reduction = computation::create_xfer("{init_reduction[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", h2d_cuda_sync, gemv_dummy->operator()(r,c), gemv_gpu);
-    init_reduction.os->set_schedule_this_comp(false);
+    xfer init_reduction = computation::create_xfer("{init_reduction[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", h2d_cuda_async, gemv_dummy->operator()(r,c), gemv_gpu);
+    //    init_reduction.os->set_schedule_this_comp(false);
     generator::update_producer_expr_name(gemv, "gemv_dummy", "init_reduction", false);
 
-    xfer copy_back_results = computation::create_xfer("{copy_back[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", d2h_cuda_sync, gemv->operator()(r,c), gemv_gpu);
+    xfer copy_back_results = computation::create_xfer("{copy_back[r,c]: 0<=r<" + std::to_string(ROWS) + " and 0<=c<1}", d2h_cuda_async, gemv->operator()(r,c), gemv_gpu);
     matrix_row_copy.os->split(r, rows_resident_on_gpu, r0, r1);
     gemv->split(r, rows_resident_on_gpu, r0, r1);
-    gemv->split(c, threads_per_block, c0, c1);
+    gemv->split(c, COLS/threads_per_block, c0, c1);
     gemv_dummy->split(r, rows_resident_on_gpu, r0, r1);
-    gemv_dummy->split(c, threads_per_block, c0, c1);
+    gemv_dummy->split(c, COLS/threads_per_block, c0, c1);
     init_reduction.os->split(r, rows_resident_on_gpu, r0, r1);
     init_reduction.os->split(c, threads_per_block, c0, c1);
     copy_back_results.os->split(r, rows_resident_on_gpu, r0, r1);
@@ -329,12 +329,12 @@ void create_gpu_version_with_shared() {
 
     vector_copy.os->collapse_many({collapser(1, (int64_t)0, COLS)});
     matrix_row_copy.os->collapse_many({collapser(2, (int64_t)0, COLS), collapser(1, (int64_t)0, rows_resident_on_gpu)});
-//    init_reduction.os->collapse_many({collapser(2, (int64_t)0, threads_per_block), collapser(1, (int64_t)0, rows_resident_on_gpu/threads_per_block)});
-    copy_back_results.os->collapse_many({collapser(2, (int64_t)0, threads_per_block), collapser(1, (int64_t)0, rows_resident_on_gpu)});
+    init_reduction.os->collapse_many({collapser(1, (int64_t)0, rows_resident_on_gpu)});//, collapser(1, (int64_t)0, rows_resident_on_gpu/threads_per_block)});
+    copy_back_results.os->collapse_many({collapser(1, (int64_t)0, rows_resident_on_gpu)});//, collapser(1, (int64_t)0, rows_resident_on_gpu)});
 
-    gemv_dummy->set_schedule_this_comp(false);
+    //    gemv_dummy->set_schedule_this_comp(false);
     // this has to go after all the other things have been scheduled
-    //    gemv->tag_gpu_level2(r1, c0, -1);
+    gemv->tag_gpu_level2(r1, c0, 0);
 
     buffer vector_buff("vector_buff", {1,COLS}, p_float32, a_input, gemv_gpu);
     buffer matrix_buff("matrix_buff", {ROWS, COLS}, p_float32, a_input, gemv_gpu);
@@ -346,14 +346,14 @@ void create_gpu_version_with_shared() {
     buffer buff_bx_literals("buff_gemv_literals", {ROWS, 3}, p_int64, tiramisu::a_temporary_gpu, gemv_gpu);
     buffer null_buffer("null_buffer", {1}, p_wait_ptr, tiramisu::a_temporary, gemv_gpu);
 
-    buffer matrix_gpu_wait_buff("matrix_gpu_wait_buff", {ROWS/rows_resident_on_gpu}, p_wait_ptr, a_temporary, gemv_gpu); //copy up chunks of whole rows (ROWS/rows_resident gives # chunks)
+    buffer matrix_gpu_wait_buff("matrix_gpu_wait_buff", {rows_resident_on_gpu}, p_wait_ptr, a_temporary, gemv_gpu); //copy up chunks of whole rows (ROWS/rows_resident gives # chunks)
     buffer init_reduc_wait_buff("init_reduc_wait_buff", {ROWS/rows_resident_on_gpu}, p_wait_ptr, a_temporary, gemv_gpu);
 
     vector->set_access("{vector[r,c]->vector_buff[r,c]}");
     vector_copy.os->set_access("{vector_copy[r,c]->vector_gpu_buff[r,c]}");
     matrix->set_access("{matrix[r,c]->matrix_buff[r,c]}");
     matrix_row_copy.os->set_access("{matrix_row_copy[r,c]->matrix_gpu_buff[r%" + std::to_string(rows_resident_on_gpu) + ",c]}");
-    matrix_row_copy.os->set_wait_access("{matrix_row_copy[r,c]->matrix_gpu_wait_buff[r]}");
+    matrix_row_copy.os->set_wait_access("{matrix_row_copy[r,c]->matrix_gpu_wait_buff[r%" + std::to_string(rows_resident_on_gpu) + "]}");
     gemv_dummy->set_access("{gemv_dummy[r,c]->zero_buff[r%" + std::to_string(rows_resident_on_gpu) + ",0]}");
     init_reduction.os->set_access("{init_reduction[r,c]->result_gpu_buff[r%" + std::to_string(rows_resident_on_gpu) + ",c]}");
     init_reduction.os->set_wait_access("{init_reduction[r,c]->init_reduc_wait_buff[r%" + std::to_string(rows_resident_on_gpu) + "]}");

@@ -15,7 +15,7 @@
 #define COLS (int64_t)80000
 #define ITERS 10
 #else
-#define ROWS (int64_t)10000
+#define ROWS (int64_t)100
 #define COLS (int64_t)1024
 #define ITERS 1
 #endif
