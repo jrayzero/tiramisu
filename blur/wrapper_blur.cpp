@@ -17,6 +17,9 @@
 extern void clear_static_var_tiramisu_CUDA_kernel_bx();
 extern void clear_static_var_tiramisu_CUDA_kernel_by();
 extern void clear_static_var_tiramisu_CUDA_kernel_border();
+//extern void total_time_bx();
+//extern void total_time_by();
+//extern void total_time_border();
 
 int mpi_init() {
   int provided = -1;
@@ -224,8 +227,6 @@ void generate_single_gpu_test(int rank) {
     std::cerr << "starting iter " << i << std::endl;
     auto start = std::chrono::high_resolution_clock::now();    
     blur_single_gpu(&hb_input, &hb_output);
-    clear_static_var_tiramisu_CUDA_kernel_bx();
-    clear_static_var_tiramisu_CUDA_kernel_by();
 #ifdef CHECK
     std::cerr << "Comparing results" << std::endl;
     check_results(output, rank);
@@ -233,6 +234,12 @@ void generate_single_gpu_test(int rank) {
 #endif
     //    MPI_Barrier(MPI_COMM_WORLD);
     auto end = std::chrono::high_resolution_clock::now();
+    //    total_time_bx();
+    //    total_time_by();
+    //    total_time_border();
+    clear_static_var_tiramisu_CUDA_kernel_bx();
+    clear_static_var_tiramisu_CUDA_kernel_by();
+    clear_static_var_tiramisu_CUDA_kernel_border();
     std::chrono::duration<double,std::milli> duration = end - start;
     duration_vector.push_back(duration);
     std::cerr << "Iteration " << i << " complete: " << duration.count() << "ms." << std::endl;
@@ -255,10 +262,10 @@ void generate_multi_gpu_test(int rank) {
   halide_buffer_t hb_output;
   halide_buffer_t hb_d2h_wait;
     if (rank == 0) {
-      std::cerr << "Allocating rank 0 with 1" << std::endl;
-      tiramisu_init_cuda(2);
+      tiramisu_init_cuda(1);
+    } else if (rank == 1 || rank == 3) {
+      tiramisu_init_cuda(1);
     } else {
-      std::cerr << "Allocating rank " << rank << " with " << (rank%4) << std::endl;      
       tiramisu_init_cuda(2);
     }
     std::cerr << "Generating blur input" << std::endl;
