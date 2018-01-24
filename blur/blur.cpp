@@ -932,8 +932,7 @@ int main() {
     #ifdef DIST
     generate_multi_gpu();
 #else
-    //    generate_single_gpu();
-    generate_single_gpu_big_box();
+    generate_single_gpu();
 #endif
 #elif defined(COOP)
 //    generate_multi_cpu();

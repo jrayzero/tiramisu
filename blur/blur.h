@@ -1,8 +1,8 @@
-//#define GPU
-#define COOP
+#define GPU
+//#define COOP
 //#define DIST
 //#define CPU
-//#define CHECK
+#define CHECK
 
 //#define GPU_PROCS 1
 //#define CPU_PROCS 1
@@ -11,9 +11,8 @@
 #define GPU_ROWS (int64_t)12800
 #define CPU_ROWS (int64_t)3200
 #define CPU_PROCS (int64_t)1
-#define GPU_PROCS (int64_t)1
+#define GPU_PROCS (int64_t)2
 
-#define PROCS (int64_t)2
 
 #ifndef CHECK
 #define COLS (int64_t)2000000//00
