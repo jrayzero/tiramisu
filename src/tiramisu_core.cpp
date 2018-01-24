@@ -20,7 +20,7 @@ namespace tiramisu
 std::map<std::string, computation *> computations_list;
 bool global::auto_data_mapping;
 primitive_t global::loop_iterator_type;
-  bool use_gpu = false;
+bool use_gpu = false;
 
 // Used for the generation of new variable names.
 const var computation::root = var("root");
@@ -1226,50 +1226,50 @@ std::string generate_new_variable_name()
 }
 
 void computation::tag_gpu_level2(tiramisu::var L0_var, tiramisu::var L1_var, int comm_prop_id) {
-  use_gpu = true;
-  DEBUG_FCT_NAME(3);
-  DEBUG_INDENT(4);
+    use_gpu = true;
+    DEBUG_FCT_NAME(3);
+    DEBUG_INDENT(4);
 
-  assert(L0_var.get_name().length() > 0);
-  assert(L1_var.get_name().length() > 0);
-  std::vector<int> dimensions =
-    this->get_loop_level_numbers_from_dimension_names({L0_var.get_name(), L1_var.get_name()});
-  this->check_dimensions_validity(dimensions);
-  int L0 = dimensions[0];
-  int L1 = dimensions[1];
+    assert(L0_var.get_name().length() > 0);
+    assert(L1_var.get_name().length() > 0);
+    std::vector<int> dimensions =
+            this->get_loop_level_numbers_from_dimension_names({L0_var.get_name(), L1_var.get_name()});
+    this->check_dimensions_validity(dimensions);
+    int L0 = dimensions[0];
+    int L1 = dimensions[1];
 
-  this->get_function()->add_gpu_range(this->get_name(), L0 /*start level*/, L1 /*end level*/);
-  this->get_function()->add_gpu_comm_prop_id(this->get_name(), comm_prop_id);
-  
-  DEBUG_INDENT(-4);
+    this->get_function()->add_gpu_range(this->get_name(), L0 /*start level*/, L1 /*end level*/);
+    this->get_function()->add_gpu_comm_prop_id(this->get_name(), comm_prop_id);
+
+    DEBUG_INDENT(-4);
 }
 
 void computation::tag_gpu_level2(tiramisu::var L0_var, tiramisu::var L1_var, tiramisu::var L2_var, tiramisu::var L3_var, int comm_prop_id) {
-  use_gpu = true;
-  DEBUG_FCT_NAME(3);
-  DEBUG_INDENT(4);
+    use_gpu = true;
+    DEBUG_FCT_NAME(3);
+    DEBUG_INDENT(4);
 
-  assert(L0_var.get_name().length() > 0);
-  assert(L1_var.get_name().length() > 0);
-  assert(L2_var.get_name().length() > 0);
-  assert(L3_var.get_name().length() > 0);
-  std::vector<int> dimensions =
-    this->get_loop_level_numbers_from_dimension_names({L0_var.get_name(), L1_var.get_name(), L2_var.get_name(), L3_var.get_name()});
-  this->check_dimensions_validity(dimensions);
-  int L0 = dimensions[0];
-  int L1 = dimensions[1];
-  int L2 = dimensions[2];
-  int L3 = dimensions[3];
+    assert(L0_var.get_name().length() > 0);
+    assert(L1_var.get_name().length() > 0);
+    assert(L2_var.get_name().length() > 0);
+    assert(L3_var.get_name().length() > 0);
+    std::vector<int> dimensions =
+            this->get_loop_level_numbers_from_dimension_names({L0_var.get_name(), L1_var.get_name(), L2_var.get_name(), L3_var.get_name()});
+    this->check_dimensions_validity(dimensions);
+    int L0 = dimensions[0];
+    int L1 = dimensions[1];
+    int L2 = dimensions[2];
+    int L3 = dimensions[3];
 
-  this->get_function()->add_gpu_range(this->get_name(), L0 /*start level*/, L3 /*end level*/);
-  this->get_function()->add_gpu_comm_prop_id(this->get_name(), comm_prop_id);
-  
-  DEBUG_INDENT(-4);
+    this->get_function()->add_gpu_range(this->get_name(), L0 /*start level*/, L3 /*end level*/);
+    this->get_function()->add_gpu_comm_prop_id(this->get_name(), comm_prop_id);
+
+    DEBUG_INDENT(-4);
 }
 
 void function::add_gpu_range(std::string comp_name, int start_level, int end_level) {
-  assert(gpu_ranges.find(comp_name) == gpu_ranges.end() && "This computation already has been tagged with GPU levels.");
-  this->gpu_ranges.emplace(comp_name, std::pair<int, int>(start_level, end_level));
+    assert(gpu_ranges.find(comp_name) == gpu_ranges.end() && "This computation already has been tagged with GPU levels.");
+    this->gpu_ranges.emplace(comp_name, std::pair<int, int>(start_level, end_level));
 }
 
 void computation::tag_gpu_level(tiramisu::var L0_var, tiramisu::var L1_var, int comm_prop_id)
@@ -1787,6 +1787,7 @@ void tiramisu::computation::separate_at(var _level, std::vector<tiramisu::expr> 
     DEBUG(3, tiramisu::str_dump("Constructing the constraint (i<middle)"));
     std::string constraint;
     constraint = "";
+    // get the constants
     for (int i=0; i<isl_map_dim(this->get_schedule(), isl_dim_param); i++)
     {
         if (i==0) {
@@ -1800,6 +1801,14 @@ void tiramisu::computation::separate_at(var _level, std::vector<tiramisu::expr> 
             constraint += ",";
         else
             constraint += "]->";
+    }
+    if (isl_map_dim(this->get_schedule(), isl_dim_param) == 0) {
+        // Need to add in these constants
+        constraint += "[" + max.get_name();
+        for (auto separate_point : separate_points) {
+            constraint += ", " +  separate_point.get_name() ;
+        }
+        constraint += "]->";
     }
     constraint += "{" + this->get_name() + "[0,";
     for (int i=1; i<isl_map_dim(this->get_schedule(), isl_dim_out); i++)
@@ -5324,7 +5333,7 @@ tiramisu::expr utility::extract_bound_expression(isl_ast_node *node, int dim, bo
                 }
                 else if (isl_ast_expr_get_op_type(cond) == isl_ast_op_le)
                 {
-                  result = tiramisu_expr_from_isl_ast_expr(isl_ast_expr_get_op_arg(cond, 1), true);
+                    result = tiramisu_expr_from_isl_ast_expr(isl_ast_expr_get_op_arg(cond, 1), true);
                 }
             }
             else
@@ -5552,18 +5561,18 @@ bool computation::separateAndSplit(tiramisu::var L0_var, int v,
     int original_depth = this->compute_maximal_AST_depth();
 
     tiramisu::expr loop_upper_bound =
-tiramisu::utility::get_bound(this->get_trimmed_time_processor_domain(),
-                                                                                                           L0, true);
+            tiramisu::utility::get_bound(this->get_trimmed_time_processor_domain(),
+                                         L0, true);
 
     tiramisu::expr loop_lower_bound =
-      tiramisu::utility::get_bound(this->get_trimmed_time_processor_domain(),
-                                                                                                           L0, false);
+            tiramisu::utility::get_bound(this->get_trimmed_time_processor_domain(),
+                                         L0, false);
 
     tiramisu::expr loop_bound;
-    if (global::get_loop_iterator_data_type() == tiramisu::p_int32) 
-      loop_bound = loop_upper_bound - loop_lower_bound + tiramisu::expr((int32_t) 1);
-    else 
-      loop_bound = loop_upper_bound - loop_lower_bound + tiramisu::expr((int64_t) 1);
+    if (global::get_loop_iterator_data_type() == tiramisu::p_int32)
+        loop_bound = loop_upper_bound - loop_lower_bound + tiramisu::expr((int32_t) 1);
+    else
+        loop_bound = loop_upper_bound - loop_lower_bound + tiramisu::expr((int64_t) 1);
     loop_bound = loop_bound.simplify();
 
     DEBUG(3, tiramisu::str_dump("Loop bound for the loop to be separated and split: "); loop_bound.dump(false));
@@ -5761,10 +5770,10 @@ void computation::split(int L0, int sizeX)
         }
     }
     if (global::get_loop_iterator_data_type() == p_int64)
-    map = map + "] : " + dimensions_str[0] + " = " + std::to_string(duplicate_ID) + " and " +
-          outDim0_str + " = floor(" + inDim0_str + "/" +
-          std::to_string(sizeX) + ") and " + outDim1_str + " = (" +
-          inDim0_str + "%" + std::to_string(sizeX) + ")}";
+        map = map + "] : " + dimensions_str[0] + " = " + std::to_string(duplicate_ID) + " and " +
+              outDim0_str + " = floor(" + inDim0_str + "/" +
+              std::to_string(sizeX) + ") and " + outDim1_str + " = (" +
+              inDim0_str + "%" + std::to_string(sizeX) + ")}";
 
     isl_map *transformation_map = isl_map_read_from_str(this->get_ctx(), map.c_str());
 
@@ -5931,8 +5940,8 @@ bool tiramisu::function::should_unroll(const std::string &comp, int lev0) const
 }
 
 bool tiramisu::function::should_map_to_gpu(const std::string comp_name) {
-  
-  return gpu_ranges.find(comp_name) != gpu_ranges.end();
+
+    return gpu_ranges.find(comp_name) != gpu_ranges.end();
 }
 
 bool tiramisu::function::should_map_to_gpu_block(const std::string &comp, int lev0) const
@@ -6315,14 +6324,14 @@ void tiramisu::function::add_gpu_block_dimensions(std::string stmt_name, int dim
 }
 
 void tiramisu::function::add_gpu_comm_prop_id(std::string stmt_name, int comm_prop_id) {
-  assert(!stmt_name.empty());
-  assert(this->gpu_comm_prop_ids.find(stmt_name) == this->gpu_comm_prop_ids.end());
-  this->gpu_comm_prop_ids.emplace(std::pair<std::string, int>(stmt_name, comm_prop_id));
+    assert(!stmt_name.empty());
+    assert(this->gpu_comm_prop_ids.find(stmt_name) == this->gpu_comm_prop_ids.end());
+    this->gpu_comm_prop_ids.emplace(std::pair<std::string, int>(stmt_name, comm_prop_id));
 }
 
 int tiramisu::function::get_gpu_comm_prop_id(std::string name) {
-  assert(this->gpu_comm_prop_ids.find(name) != this->gpu_comm_prop_ids.end());
-  return this->gpu_comm_prop_ids[name];
+    assert(this->gpu_comm_prop_ids.find(name) != this->gpu_comm_prop_ids.end());
+    return this->gpu_comm_prop_ids[name];
 }
 
 void tiramisu::function::add_gpu_thread_dimensions(std::string stmt_name, int dim0,
@@ -7884,18 +7893,18 @@ void tiramisu::computation::storage_fold(tiramisu::var L0_var, int factor)
 std::set<int> tiramisu::xfer_prop::comm_prop_ids;
 
 tiramisu::xfer_prop::xfer_prop(tiramisu::primitive_t dtype,
-                                                 std::initializer_list<tiramisu::channel_attr> attrs)
+                               std::initializer_list<tiramisu::channel_attr> attrs)
         : dtype(dtype), comm_prop_id(-1) {
     this->attrs.insert(this->attrs.begin(), attrs);
     //    comm_prop_ids.insert(0);
 }
 
 tiramisu::xfer_prop::xfer_prop(tiramisu::primitive_t dtype,
-                                                 std::initializer_list<tiramisu::channel_attr> attrs,
-                                                 int comm_prop_id) : dtype(dtype), comm_prop_id(comm_prop_id) {
+                               std::initializer_list<tiramisu::channel_attr> attrs,
+                               int comm_prop_id) : dtype(dtype), comm_prop_id(comm_prop_id) {
     this->attrs.insert(this->attrs.begin(), attrs);
     if (comm_prop_id != -1) {
-      comm_prop_ids.insert(comm_prop_id);
+        comm_prop_ids.insert(comm_prop_id);
     }
     comm_prop_ids.insert(0); // The kernel one. Just make sure it gets in there
 }
@@ -8298,14 +8307,14 @@ isl_map *isl_map_add_free_var(const std::string &free_var_name, isl_map *map, is
 static int next_dim_name = 0;
 
 void tiramisu::computation::full_loop_level_collapse(int level, tiramisu::expr collapse_from_iter) {
-  std::string collapse_from_iter_repr = "";
-  if (global::get_loop_iterator_data_type() == p_int32) {
-    collapse_from_iter_repr = collapse_from_iter.get_expr_type() == tiramisu::e_val ?
-            std::to_string(collapse_from_iter.get_int32_value()) : collapse_from_iter.get_name();
-  } else {
-    collapse_from_iter_repr = collapse_from_iter.get_expr_type() == tiramisu::e_val ?
-            std::to_string(collapse_from_iter.get_int64_value()) : collapse_from_iter.get_name();
-  }
+    std::string collapse_from_iter_repr = "";
+    if (global::get_loop_iterator_data_type() == p_int32) {
+        collapse_from_iter_repr = collapse_from_iter.get_expr_type() == tiramisu::e_val ?
+                                  std::to_string(collapse_from_iter.get_int32_value()) : collapse_from_iter.get_name();
+    } else {
+        collapse_from_iter_repr = collapse_from_iter.get_expr_type() == tiramisu::e_val ?
+                                  std::to_string(collapse_from_iter.get_int64_value()) : collapse_from_iter.get_name();
+    }
     isl_map *sched = this->get_schedule();
     isl_map *sched_copy = isl_map_copy(sched);
     int dim = loop_level_into_dynamic_dimension(level);

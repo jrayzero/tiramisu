@@ -102,6 +102,14 @@ class function
     friend recv;
     friend wait;
 
+public:
+
+    int rank_offset = 0;
+
+    void set_rank_offset(int rank_offset) {
+        this->rank_offset = rank_offset;
+    }
+
 private:
     /**
       * The name of the function.
@@ -1404,6 +1412,7 @@ private:
      */
     tiramisu::expr predicate;
 
+public:
     /**
       * The schedules of the computation.
       */

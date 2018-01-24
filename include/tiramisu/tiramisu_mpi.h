@@ -11,7 +11,7 @@ extern "C" {
 
 inline void check_MPI_error(int ret_val);
 
-int tiramisu_MPI_Comm_rank();
+int tiramisu_MPI_Comm_rank(int offset);
 
 void tiramisu_MPI_Wait(void *request);
 

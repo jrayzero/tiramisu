@@ -2489,7 +2489,7 @@ void function::gen_halide_stmt()
                 Halide::Internal::Variable::make(halide_type_from_tiramisu_type(tiramisu::p_int32), "rank");
         Halide::Expr mpi_rank = Halide::cast(halide_type_from_tiramisu_type(global::get_loop_iterator_data_type()),
                                              Halide::Internal::Call::make(Halide::Int(32), "tiramisu_MPI_Comm_rank",
-                                                                          std::vector<Halide::Expr>(),
+                                                                          {this->rank_offset},
                                                                           Halide::Internal::Call::Extern));
         stmt = Halide::Internal::LetStmt::make("rank", mpi_rank, stmt);
     }

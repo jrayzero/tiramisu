@@ -56,10 +56,10 @@ inline void check_MPI_error(int ret_val) {
     }
 }
 
-int tiramisu_MPI_Comm_rank() {
+int tiramisu_MPI_Comm_rank(int offset) {
     int rank;
     check_MPI_error(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
-    return rank;
+    return rank + offset;
 }
 
 void tiramisu_MPI_Wait(void *request) {
