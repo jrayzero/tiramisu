@@ -929,15 +929,13 @@ void generate_multi_cpu_comm_border() {
 
     xfer_prop async_mpi(p_float32, {ASYNC, MPI, CPU2CPU, NONBLOCK});
     xfer_prop block_mpi(p_float32, {ASYNC, MPI, CPU2CPU, BLOCK});
-    xfer border_xfer = computation::create_xfer("{border_xfer_send[q,r,c]: 1<=q<" + std::to_string(PROCS) + " and 0<=r<2 and 0<=c<" + scols + "}", 
+    xfer border_xfer = computation::create_xfer("{border_xfer_send[q,r,c]: 1<=q<" + std::to_string(PROCS) + " and 0<=r<2 and 0<=c<" + scols + "}",
                                                 "{border_xfer_recv[q,r,c]: 0<=q<" + std::to_string(PROCS-1) + " and 0<=r<2 and 0<=c<" + scols + "}",
-                                                var(p_int64, "q")-(int64_t)1, var(p_int64, "q")+(int64_t)1, async_mpi, block_mpi, 
-                                                blur_input->operator()((int64_t)(ROWS/PROCS) - (int64_t)2 + r, c), 
+                                                var(p_int64, "q")-(int64_t)1, var(p_int64, "q")+(int64_t)1, async_mpi, block_mpi,
+                                                blur_input->operator()((int64_t)(ROWS/PROCS) - (int64_t)2 + r, c),
                                                 &blur);
-    generator::update_producer_expr_name(&border, "blur_input", "border_xfer_recv");
-    //    tiramisu::wait border_xfer_wait(border_xfer(q,r,c), block_mpi, &blur);
-
-    border_xfer.s->set_schedule_this_comp(false);
+    border_xfer.s->collapse_many({collapser(2, (int64_t)0, COLS+(int64_t)2), collapser(1, (int64_t)0, (int64_t)2)});
+    border_xfer.r->collapse_many({collapser(2, (int64_t)0, COLS+(int64_t)2), collapser(1, (int64_t)0, (int64_t)2)});
 
     bx->split(r, ROWS/PROCS, q1, q2);
     by->split(r, ROWS/PROCS, q1, q2);
@@ -958,16 +956,13 @@ void generate_multi_cpu_comm_border() {
     bx->tag_distribute_level(q1);
     by->tag_distribute_level(q1);
     border.tag_distribute_level(q);
-    border_xfer.s->tag_distribute_level(q);
-    border_xfer.r->tag_distribute_level(q);
-    //    wait.tag_distribute_level(q);
+    border_xfer.s->tag_distribute_level(q, false);
+    border_xfer.r->tag_distribute_level(q, false);
 
     border_xfer.s->before(*bx, computation::root);
     bx->before(*by, computation::root);
     by->before(*border_xfer.r, computation::root);
     border_xfer.r->before(border, computation::root);
-    //    border_xfer.r->before(wait, computation::root);
-    //    wait.before(border, computation::root);
 
     tiramisu::buffer buff_input("buff_input", {ROWS/PROCS+(int64_t)2, COLS+(int64_t)2}, p_float32,
                                 tiramisu::a_input, &blur);
@@ -980,8 +975,8 @@ void generate_multi_cpu_comm_border() {
 
     tiramisu::buffer buff_null("buff_null", {1}, p_wait_ptr, tiramisu::a_temporary, &blur);
 
-    border_xfer.r->set_access("{border_xfer_recv[q,r,c]->buff_null[0]}");//buff_input[r+" + std::to_string(ROWS/PROCS) + ",c]}");
-    //border_xfer.s->set_wait_access("{border_xfer_send[q,r,c]->buff_null[0]}");
+    border_xfer.r->set_access("{border_xfer_recv[q,r,c]->buff_input[r+" + std::to_string(ROWS/PROCS) + ",c]}");
+    border_xfer.s->set_wait_access("{border_xfer_send[q,r,c]->buff_null[0]}");
     blur_input->set_access("{blur_input[i1, i0]->buff_input[i1,i0]}");
     by->set_access("{by[y, x]->buff_by[y,x]}");
     bx->set_access("{bx[y, x]->buff_bx[y, x]}");
