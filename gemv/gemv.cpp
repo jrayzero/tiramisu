@@ -86,10 +86,10 @@ void create_cpu_fwd_pass() {
     var c("c"), r("r"), r0("r0"), r1("r1"), r2("r2"), r3("r3"), c0("c0"), c1("c1");
     function *gemv_cpu_fwd = new function("gemv_cpu_fwd");
     std::vector<std::pair<int, int>> weights;
-    weights.push_back(std::pair<int, int>(COLS, 20));
-    weights.push_back(std::pair<int, int>(20, 30));
-    weights.push_back(std::pair<int, int>(30, 5));
-    weights.push_back(std::pair<int, int>(5, 70));
+    weights.push_back(std::pair<int, int>(WEIGHTS_0, COLS));
+    weights.push_back(std::pair<int, int>(WEIGHTS_1, WEIGHTS_0));
+    weights.push_back(std::pair<int, int>(WEIGHTS_2, WEIGHTS_1));
+    weights.push_back(std::pair<int, int>(WEIGHTS_3, WEIGHTS_2));
     int num_layers = weights.size();
     std::vector<computation*> comps = make_fwd_pass(weights, ROWS, COLS, gemv_cpu_fwd);
 

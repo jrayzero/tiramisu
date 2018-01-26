@@ -160,10 +160,10 @@ void run_gemv_cpu_only() {
 #endif
 }
 
-void fill_weights(int rows, int cols, halide_buffer_t *buff, float starting_val) {
+void fill_weights(size_t rows, size_t cols, halide_buffer_t *buff, float starting_val) {
   float val = starting_val;
-  for (int r = 0; r < rows; r++) {
-    for (int c = 0; c < cols; c++) {
+  for (size_t r = 0; r < rows; r++) {
+    for (size_t c = 0; c < cols; c++) {
       buff->host[r * cols + c] = val;
       val += 0.001f;
     }
@@ -172,50 +172,50 @@ void fill_weights(int rows, int cols, halide_buffer_t *buff, float starting_val)
 
 void check_fwd_pass_results(halide_buffer_t *input, std::vector<halide_buffer_t *> weights, halide_buffer_t *output) {
   // generate the correct results
-  float *layer_0_res = (float*)malloc(sizeof(float)*20);
-  float *layer_1_res = (float*)malloc(sizeof(float)*30);
-  float *layer_2_res = (float*)malloc(sizeof(float)*5);
-  float *layer_3_res = (float*)malloc(sizeof(float)*70*ROWS);
+  float *layer_0_res = (float*)malloc(sizeof(float)*WEIGHTS_0);
+  float *layer_1_res = (float*)malloc(sizeof(float)*WEIGHTS_1);
+  float *layer_2_res = (float*)malloc(sizeof(float)*WEIGHTS_2);
+  float *layer_3_res = (float*)malloc(sizeof(float)*WEIGHTS_3*ROWS);
 
-  for (int z = 0; z < ROWS; z++) { // total input rows
+  for (size_t z = 0; z < ROWS; z++) { // total input rows
     float *row_input = &(((float*)(input->host))[z * COLS]);
     float *weights_0_1 = (float*)(weights[0]->host);
     float *weights_1_2 = (float*)(weights[1]->host);
     float *weights_2_3 = (float*)(weights[2]->host);
     float *weights_3_4 = (float*)(weights[3]->host);
     // layer 0->1
-    for (int r = 0; r < 20; r++) {
+    for (size_t r = 0; r < WEIGHTS_0; r++) {
       layer_0_res[r] = 0.0f;
-      for (int c = 0; c < COLS; c++) {
+      for (size_t c = 0; c < COLS; c++) {
         layer_0_res[r] += weights_0_1[r * COLS + c] * row_input[c];
       }
     }
     // layer 1->2
-    for (int r = 0; r < 30; r++) {
+    for (size_t r = 0; r < WEIGHTS_1; r++) {
       layer_1_res[r] = 0.0f;
-      for (int c = 0; c < 20; c++) {
-        layer_1_res[r] += weights_1_2[r * 20 + c] * layer_0_res[c];
+      for (size_t c = 0; c < WEIGHTS_0; c++) {
+        layer_1_res[r] += weights_1_2[r * WEIGHTS_0 + c] * layer_0_res[c];
       }
     }
     // layer 2->3
-    for (int r = 0; r < 5; r++) {
+    for (size_t r = 0; r < WEIGHTS_2; r++) {
       layer_2_res[r] = 0.0f;
-      for (int c = 0; c < 30; c++) {
-        layer_2_res[r] += weights_2_3[r * 30 + c] * layer_1_res[c];
+      for (size_t c = 0; c < WEIGHTS_1; c++) {
+        layer_2_res[r] += weights_2_3[r * WEIGHTS_1 + c] * layer_1_res[c];
       }
     }
     // layer 3->4
-    for (int r = 0; r < 70; r++) {
-      layer_3_res[z * 70 + r] = 0.0f;
-      for (int c = 0; c < 5; c++) {
-        layer_3_res[z * 70 + r] += weights_3_4[r * 5 + c] * layer_2_res[c];
+    for (size_t r = 0; r < WEIGHTS_3; r++) {
+      layer_3_res[z * WEIGHTS_3 + r] = 0.0f;
+      for (size_t c = 0; c < WEIGHTS_2; c++) {
+        layer_3_res[z * WEIGHTS_3 + r] += weights_3_4[r * WEIGHTS_2 + c] * layer_2_res[c];
       }
     }
   }
-  for (int z = 0; z < ROWS; z++) {
-    float *guesses = &(((float*)(output->host))[z * 70]);
-    float *correct_vals = &layer_3_res[z * 70];
-    for (int c = 0; c < 70; c++) {
+  for (size_t z = 0; z < ROWS; z++) {
+    float *guesses = &(((float*)(output->host))[z * WEIGHTS_3]);
+    float *correct_vals = &layer_3_res[z * WEIGHTS_3];
+    for (size_t c = 0; c < WEIGHTS_3; c++) {
       float guess = guesses[c];
       float correct = correct_vals[c];
       if (std::fabs(guess - correct) > 0.0001f) {
@@ -234,11 +234,11 @@ void run_cpu_fwd_pass() {
     std::cerr << "Running cpu fwd pass" << std::endl;
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
     Halide::Buffer<float> input_matrix(COLS, ROWS);
-    Halide::Buffer<float> weights_0_1(COLS, 20);
-    Halide::Buffer<float> weights_1_2(20, 30);
-    Halide::Buffer<float> weights_2_3(30, 5);
-    Halide::Buffer<float> weights_3_4(5, 70);
-    Halide::Buffer<float> fwd_pass_output(70,ROWS); // one per row
+    Halide::Buffer<float> weights_0_1(COLS, WEIGHTS_0);
+    Halide::Buffer<float> weights_1_2(WEIGHTS_0, WEIGHTS_1);
+    Halide::Buffer<float> weights_2_3(WEIGHTS_1, WEIGHTS_2);
+    Halide::Buffer<float> weights_3_4(WEIGHTS_2, WEIGHTS_3);
+    Halide::Buffer<float> fwd_pass_output(WEIGHTS_3,ROWS); // one per row
     fill_weights(ROWS, COLS, input_matrix.raw_buffer(), 0.0f);
     fill_weights(20, COLS, weights_0_1.raw_buffer(), 1.0f);
     fill_weights(30, 20, weights_1_2.raw_buffer(), 2.0f);
