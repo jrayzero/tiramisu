@@ -9,11 +9,11 @@
 //#define GPU
 #define FWD_PASS
 
-//#define CHECK_RESULTS
+#define CHECK_RESULTS
 
 #ifndef CHECK_RESULTS
 #define ROWS (int64_t)1000
-#define COLS (int64_t)80
+#define COLS (int64_t)100
 #define ITERS 10
 #else
 #define ROWS (int64_t)100

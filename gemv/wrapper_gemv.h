@@ -10,7 +10,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+  // 3 layers
+  int gemv_cpu_fwd(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
   int gemv_cpu(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
   int gemv_gpu(halide_buffer_t *, halide_buffer_t *, halide_buffer_t *, halide_buffer_t *);
 

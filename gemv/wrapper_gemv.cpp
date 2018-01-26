@@ -7,7 +7,7 @@
 #include <fstream>
 #include <mpi.h>
 #include "tiramisu/tiramisu_cuda.h"
-#include "gemv_params.h"
+#include "gemv.h"
 #include <cuda.h>
 #include "Halide.h"
 #include <math.h>
@@ -130,7 +130,7 @@ void check_results(halide_buffer_t *vector, halide_buffer_t *matrix, halide_buff
 }
 
 void run_gemv_cpu_only() {
-#ifdef CPU
+#if defined(CPU) && !defined(FWD_PASS)
     int rank = mpi_init();
     assert(rank == 0 && "This CPU implementation is for a single node ONLY (i.e. one process)");
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
@@ -152,6 +152,109 @@ void run_gemv_cpu_only() {
 #ifdef CHECK_RESULTS
 	if (iter == 0) {
 	  check_results(vector, matrix, result);
+	}
+#endif
+    }
+    print_time("performance_CPU.csv", "GEMV CPU", {"Tiramisu"}, {median(duration_vector)});
+    std::cout.flush();
+#endif
+}
+
+void fill_weights(int rows, int cols, halide_buffer_t *buff, float starting_val) {
+  float val = starting_val;
+  for (int r = 0; r < rows; r++) {
+    for (int c = 0; c < cols; c++) {
+      buff->host[r * cols + c] = val;
+      val += 0.001f;
+    }
+  }
+}
+
+void check_fwd_pass_results(halide_buffer_t *input, std::vector<halide_buffer_t *> weights, halide_buffer_t *output) {
+  // generate the correct results
+  float *layer_0_res = (float*)malloc(sizeof(float)*20);
+  float *layer_1_res = (float*)malloc(sizeof(float)*30);
+  float *layer_2_res = (float*)malloc(sizeof(float)*5);
+  float *layer_3_res = (float*)malloc(sizeof(float)*70*ROWS);
+
+  for (int z = 0; z < ROWS; z++) { // total input rows
+    float *row_input = &(((float*)(input->host))[z * COLS]);
+    float *weights_0_1 = (float*)(weights[0]->host);
+    float *weights_1_2 = (float*)(weights[1]->host);
+    float *weights_2_3 = (float*)(weights[2]->host);
+    float *weights_3_4 = (float*)(weights[3]->host);
+    // layer 0->1
+    for (int r = 0; r < 20; r++) {
+      layer_0_res[r] = 0.0f;
+      for (int c = 0; c < COLS; c++) {
+        layer_0_res[r] += weights_0_1[r * COLS + c] * row_input[c];
+      }
+    }
+    // layer 1->2
+    for (int r = 0; r < 30; r++) {
+      layer_1_res[r] = 0.0f;
+      for (int c = 0; c < 20; c++) {
+        layer_1_res[r] += weights_1_2[r * 20 + c] * layer_0_res[c];
+      }
+    }
+    // layer 2->3
+    for (int r = 0; r < 5; r++) {
+      layer_2_res[r] = 0.0f;
+      for (int c = 0; c < 30; c++) {
+        layer_2_res[r] += weights_2_3[r * 30 + c] * layer_1_res[c];
+      }
+    }
+    // layer 3->4
+    for (int r = 0; r < 70; r++) {
+      layer_3_res[z * 70 + r] = 0.0f;
+      for (int c = 0; c < 5; c++) {
+        layer_3_res[z * 70 + r] += weights_3_4[r * 5 + c] * layer_2_res[c];
+      }
+    }
+  }
+  for (int z = 0; z < ROWS; z++) {
+    float *guesses = &(((float*)(output->host))[z * 70]);
+    float *correct_vals = &layer_3_res[z * 70];
+    for (int c = 0; c < 70; c++) {
+      float guess = guesses[c];
+      float correct = correct_vals[c];
+      if (std::fabs(guess - correct) > 0.0001f) {
+        std::cerr << "result at row " << z << ", cols << " << c << " is wrong" << std::endl;
+        std::cerr << "should be " << correct << " but is " << guess << std::endl;
+        assert(false);
+      }
+    }
+  }
+  std::cerr << "Passes" << std::endl;
+}
+
+void run_cpu_fwd_pass() {
+#if defined(CPU) && defined(FWD_PASS)
+    int rank = mpi_init();
+    std::cerr << "Running cpu fwd pass" << std::endl;
+    std::vector<std::chrono::duration<double,std::milli>> duration_vector;
+    Halide::Buffer<float> input_matrix(COLS, ROWS);
+    Halide::Buffer<float> weights_0_1(COLS, 20);
+    Halide::Buffer<float> weights_1_2(20, 30);
+    Halide::Buffer<float> weights_2_3(30, 5);
+    Halide::Buffer<float> weights_3_4(5, 70);
+    Halide::Buffer<float> fwd_pass_output(70,ROWS); // one per row
+    fill_weights(ROWS, COLS, input_matrix.raw_buffer(), 0.0f);
+    fill_weights(20, COLS, weights_0_1.raw_buffer(), 1.0f);
+    fill_weights(30, 20, weights_1_2.raw_buffer(), 2.0f);
+    fill_weights(5, 30, weights_2_3.raw_buffer(), 3.0f);
+    fill_weights(70, 5, weights_3_4.raw_buffer(), 4.0f);
+    for (int iter = 0; iter < ITERS; iter++) {
+        std::cerr << "Iter " << iter << std::endl;
+        auto start = std::chrono::high_resolution_clock::now();
+        gemv_cpu_fwd(input_matrix.raw_buffer(), weights_0_1.raw_buffer(), weights_1_2.raw_buffer(), weights_2_3.raw_buffer(), weights_3_4.raw_buffer(), fwd_pass_output.raw_buffer());
+        auto end = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double,std::milli> duration = end - start;
+	duration_vector.push_back(duration);
+	std::cerr << "Iteration " << iter << " done in " << duration.count() << "ms." << std::endl;
+#ifdef CHECK_RESULTS
+	if (iter == 0) {
+	  check_fwd_pass_results(input_matrix.raw_buffer(), {weights_0_1.raw_buffer(), weights_1_2.raw_buffer(), weights_2_3.raw_buffer(), weights_3_4.raw_buffer()}, fwd_pass_output.raw_buffer());
 	}
 #endif
     }
@@ -208,7 +311,11 @@ void run_gemv_gpu_only() {
 
 int main() {
 #ifdef CPU
+#ifdef FWD_PASS
+  run_cpu_fwd_pass();
+#else
   run_gemv_cpu_only();
+#endif
 #elif defined(GPU)
   run_gemv_gpu_only();
 #endif
