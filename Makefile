@@ -423,7 +423,9 @@ BLUR_KERNEL_OBJ = \
 	/tmp/tiramisu_cuda_runtime.o \
 	/tmp/tiramisu_CUDA_kernel_bx_wrapper.o \
 	/tmp/tiramisu_CUDA_kernel_by_wrapper.o \
-	/tmp/tiramisu_CUDA_kernel_border_wrapper.o 
+	/tmp/tiramisu_CUDA_kernel_border_wrapper.o \
+	/tmp/generated_multi_gpu_coop_blur.o
+#	/tmp/generated_single_gpu_coop_blur.o
 
 single_cpu_blur_test: $(OBJ) /tmp/single_cpu_blur_generator /tmp/single_cpu_blur
 /tmp/single_cpu_blur_generator: blur/blur.cpp 
@@ -432,6 +434,24 @@ single_cpu_blur_test: $(OBJ) /tmp/single_cpu_blur_generator /tmp/single_cpu_blur
 /tmp/generated_single_cpu_blur.o: /tmp/single_cpu_blur_generator
 /tmp/single_cpu_blur: blur/wrapper_blur.cpp /tmp/single_cpu_blur_generator /tmp/generated_single_cpu_blur.o blur/wrapper_blur.h ${OBJ} ${HEADER_FILES} blur/blur.h
 	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
+single_coop_blur_test: $(OBJ) /tmp/single_coop_blur_generator /tmp/single_coop_blur
+/tmp/single_coop_blur_generator: blur/blur.cpp 
+	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}//tmp/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}//tmp/ $@
+/tmp/generated_single_cpu_coop_blur.o: /tmp/single_coop_blur_generator
+/tmp/generated_single_gpu_coop_blur.o: /tmp/single_coop_blur_generator
+/tmp/single_coop_blur: blur/wrapper_blur.cpp /tmp/single_coop_blur_generator /tmp/generated_single_cpu_coop_blur.o /tmp/generated_single_gpu_coop_blur.o blur/wrapper_blur.h ${BLUR_KERNEL_OBJ} ${OBJ} ${HEADER_FILES} blur/blur.h
+	$(CXX) ${CXXFLAGS} ${BLUR_KERNEL_OBJ} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
+multi_coop_blur_test: $(OBJ) /tmp/multi_coop_blur_generator /tmp/multi_coop_blur
+/tmp/multi_coop_blur_generator: blur/blur.cpp 
+	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}//tmp/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}//tmp/ $@
+/tmp/generated_multi_cpu_coop_blur.o: /tmp/multi_coop_blur_generator
+/tmp/generated_multi_gpu_coop_blur.o: /tmp/multi_coop_blur_generator
+/tmp/multi_coop_blur: blur/wrapper_blur.cpp /tmp/multi_coop_blur_generator /tmp/generated_multi_cpu_coop_blur.o /tmp/generated_multi_gpu_coop_blur.o blur/wrapper_blur.h ${BLUR_KERNEL_OBJ} ${OBJ} ${HEADER_FILES} blur/blur.h
+	$(CXX) ${CXXFLAGS} ${BLUR_KERNEL_OBJ} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
 
 single_gpu_blur_test: $(OBJ) /tmp/single_gpu_blur_generator /tmp/single_gpu_blur
 /tmp/single_gpu_blur_generator: blur/blur.cpp 
@@ -458,6 +478,15 @@ multi_cpu_blur_test: $(OBJ) /tmp/multi_cpu_blur_generator /tmp/multi_cpu_blur
 	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
 
 
+multi_cpu_border_comm_blur_test: $(OBJ) /tmp/multi_cpu_border_comm_blur_generator /tmp/multi_cpu_border_comm_blur
+/tmp/multi_cpu_border_comm_blur_generator: blur/blur.cpp 
+	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}//tmp/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}//tmp/ $@
+/tmp/generated_multi_cpu_border_comm_blur.o: /tmp/multi_cpu_border_comm_blur_generator
+/tmp/multi_cpu_border_comm_blur: blur/wrapper_blur.cpp /tmp/multi_cpu_border_comm_blur_generator /tmp/generated_multi_cpu_border_comm_blur.o blur/wrapper_blur.h ${OBJ} ${HEADER_FILES} blur/blur.h
+	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
+
 #dblur: $(OBJ) /tmp/blur_generator /tmp/blur
 #/tmp/blur_generator: distributed/blur_backwards.cpp 
 #	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
@@ -475,6 +504,14 @@ gemv: $(OBJ) /tmp/gemv_generator /tmp/gemv
 	$(CXX) -fPIC ${CXXFLAGS} ${INCLUDES} -c $< -o $@
 /tmp/gemv: distributed/wrapper_gemv.cpp /tmp/gemv_generator /tmp/generated_gemv.o distributed/wrapper_gemv.h ${OBJ} ${GEMV_KERNEL_OBJ} ${HEADER_FILES} distributed/gemv_params.h
 	$(CXX) ${CXXFLAGS} ${OBJ} ${GEMV_KERNEL_OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
+
+gemv_cpu_fwd: $(OBJ) /tmp/gemv_cpu_fwd_generator /tmp/gemv_cpu_fwd
+/tmp/gemv_cpu_fwd_generator: gemv/gemv.cpp 
+	$(CXX) ${CXXFLAGS} ${OBJ} $< -o $@ ${INCLUDES} ${LIBRARIES}
+	@LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${ISL_LIB_DIRECTORY}:${PWD}//tmp/ DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:${HALIDE_LIB_DIRECTORY}:${PWD}//tmp/ $@
+/tmp/generated_gemv_cpu_fwd.o: /tmp/gemv_cpu_fwd_generator
+/tmp/gemv_cpu_fwd: gemv/wrapper_gemv.cpp /tmp/gemv_cpu_fwd_generator /tmp/generated_gemv_cpu_fwd.o gemv/wrapper_gemv.h ${OBJ} ${HEADER_FILES} gemv/gemv.h
+	$(CXX) ${CXXFLAGS} ${OBJ} $< $(word 3,$^) -o $@ ${INCLUDES} ${LIBRARIES}
 
 dsimple: $(OBJ) build/simple_generator build/simple
 build/simple_generator: distributed/simple.cpp 

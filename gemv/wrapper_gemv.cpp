@@ -240,10 +240,10 @@ void run_cpu_fwd_pass() {
     Halide::Buffer<float> weights_3_4(WEIGHTS_2, WEIGHTS_3);
     Halide::Buffer<float> fwd_pass_output(WEIGHTS_3,ROWS); // one per row
     fill_weights(ROWS, COLS, input_matrix.raw_buffer(), 0.0f);
-    fill_weights(20, COLS, weights_0_1.raw_buffer(), 1.0f);
-    fill_weights(30, 20, weights_1_2.raw_buffer(), 2.0f);
-    fill_weights(5, 30, weights_2_3.raw_buffer(), 3.0f);
-    fill_weights(70, 5, weights_3_4.raw_buffer(), 4.0f);
+    fill_weights(WEIGHTS_0, COLS, weights_0_1.raw_buffer(), 1.0f);
+    fill_weights(WEIGHTS_1, WEIGHTS_0, weights_1_2.raw_buffer(), 2.0f);
+    fill_weights(WEIGHTS_2, WEIGHTS_1, weights_2_3.raw_buffer(), 3.0f);
+    fill_weights(WEIGHTS_3, WEIGHTS_2, weights_3_4.raw_buffer(), 4.0f);
     for (int iter = 0; iter < ITERS; iter++) {
         std::cerr << "Iter " << iter << std::endl;
         auto start = std::chrono::high_resolution_clock::now();

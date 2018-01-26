@@ -12,19 +12,19 @@
 #define CHECK_RESULTS
 
 #ifdef FWD_PASS
-#define WEIGHTS_0 1000
-#define WEIGHTS_1 30
-#define WEIGHTS_2 5
-#define WEIGHTS_3 70
+#define WEIGHTS_0 5000
+#define WEIGHTS_1 1000
+#define WEIGHTS_2 2000
+#define WEIGHTS_3 700
 #endif
 
 #ifndef CHECK_RESULTS
-#define ROWS (int64_t)100000000
-#define COLS (int64_t)500
+#define ROWS (int64_t)10000000
+#define COLS (int64_t)5000
 #define ITERS 10
 #else
-#define ROWS (int64_t)100
-#define COLS (int64_t)1024
+#define ROWS (int64_t)500
+#define COLS (int64_t)10000
 #define ITERS 1
 #endif
 

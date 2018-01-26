@@ -49,20 +49,12 @@ std::vector<computation*> make_fwd_pass(std::vector<std::pair<int,int>> layer_si
       // Does the reduction
       expr gemv_expr;
       if (prev_weights) {
-        gemv_expr = expr(weights->operator()(0,r,c) * prev_weights->operator()(0,r,c) + gemv_dummy->operator()(0,r,0));
+        gemv_expr = expr(weights->operator()(0,r,c) * prev_gemv->operator()(z,r,c) + gemv_dummy->operator()(z,r,0));
       } else {
-        gemv_expr = expr(weights->operator()(0,r,c) * input->operator()(z,c) + gemv_dummy->operator()(0,r,0));
+        gemv_expr = expr(weights->operator()(0,r,c) * input->operator()(z,c) + gemv_dummy->operator()(z,r,0));
       }
       computation *gemv = new computation("{gemv_" + std::to_string(ctr) + "[z,r,c]: 0<=z<" + std::to_string(input_rows) + " and 0<=r<" + rows + " and 0<=c<" + 
                                           cols + "}", gemv_expr, true, p_float32, f);
-      // order the operations
-      if (prev_weights) {
-        prev_gemv->before(*prev_weights, z);
-        prev_weights->before(*gemv_dummy, z);
-        gemv_dummy->before(*gemv, r);
-      } else {
-        gemv_dummy->before(*gemv, r);
-      }
       prev_weights = weights;
       prev_gemv = gemv;
       ctr++;
@@ -83,7 +75,7 @@ void postprocess(function *f, std::string obj_file_name) {
 }
 
 void create_cpu_fwd_pass() {
-    var c("c"), r("r"), r0("r0"), r1("r1"), r2("r2"), r3("r3"), c0("c0"), c1("c1");
+  var c("c"), r("r"), r0("r0"), r1("r1"), r2("r2"), r3("r3"), c0("c0"), c1("c1"), z("z");
     function *gemv_cpu_fwd = new function("gemv_cpu_fwd");
     std::vector<std::pair<int, int>> weights;
     weights.push_back(std::pair<int, int>(WEIGHTS_0, COLS));
@@ -93,7 +85,6 @@ void create_cpu_fwd_pass() {
     int num_layers = weights.size();
     std::vector<computation*> comps = make_fwd_pass(weights, ROWS, COLS, gemv_cpu_fwd);
 
-    buffer buff_null("buff_null", {1}, p_float32, a_temporary, gemv_cpu_fwd);
     buffer buff_input("buff_input", {ROWS, COLS}, p_float32, a_input, gemv_cpu_fwd);
     std::vector<buffer*> buffs;
     buffs.push_back(&buff_input);
@@ -105,12 +96,15 @@ void create_cpu_fwd_pass() {
         buffer *b = new buffer("buff_gemv_" + std::to_string(i), {ROWS, weight.first}, p_float32, a_output, gemv_cpu_fwd);
         buffs.push_back(b);
       } else {
-        new buffer("buff_gemv_" + std::to_string(i), {weight.first, 1 /*vector*/}, p_float32, a_temporary, gemv_cpu_fwd);
+        new buffer("buff_gemv_" + std::to_string(i), {20, weight.first, 1}, p_float32, a_temporary, gemv_cpu_fwd);
       }
     }
 
     int i = 0;
     int layer = 0;
+    var z1("z1"), z2("z2");
+    computation *prev_weights = nullptr;
+    computation *prev_gemv = nullptr;
     while (i < comps.size()) {
       if (i == 0) { // this is the input
         computation *input = comps[i];
@@ -120,13 +114,29 @@ void create_cpu_fwd_pass() {
         computation *weights = comps[i];
         computation *gemv_dummy = comps[i+1];
         computation *gemv = comps[i+2];
+        weights->split(z, 20, z1, z2);
+        gemv_dummy->split(z, 20, z1, z2);
+        gemv->split(z, 20, z1, z2);
+        weights->tag_parallel_level(z2);
+        gemv_dummy->tag_parallel_level(z2);
+        gemv->tag_parallel_level(z2);
+        // order the operations
+        if (prev_weights) {
+          prev_gemv->before(*prev_weights, z2);
+          prev_weights->before(*gemv_dummy, z2);
+          gemv_dummy->before(*gemv, r);
+        } else {
+          gemv_dummy->before(*gemv, r);
+        }
+        prev_weights = weights;
+        prev_gemv = gemv;
         weights->set_access("{" + weights->get_name() + "[z,r,c]->buff_weights_" + std::to_string(layer) + "[r,c]}");
         if (layer == num_layers - 1) {
           gemv_dummy->set_access("{" + gemv_dummy->get_name() + "[z,r,c]->buff_gemv_" + std::to_string(layer) + "[z,r]}");
           gemv->set_access("{" + gemv->get_name() + "[z,r,c]->buff_gemv_" + std::to_string(layer) + "[z,r]}");
         } else {
-          gemv_dummy->set_access("{" + gemv_dummy->get_name() + "[z,r,c]->buff_gemv_" + std::to_string(layer) + "[r,0]}");
-          gemv->set_access("{" + gemv->get_name() + "[z,r,c]->buff_gemv_" + std::to_string(layer) + "[r,0]}");
+          gemv_dummy->set_access("{" + gemv_dummy->get_name() + "[z,r,c]->buff_gemv_" + std::to_string(layer) + "[z%20,r,0]}");
+          gemv->set_access("{" + gemv->get_name() + "[z,r,c]->buff_gemv_" + std::to_string(layer) + "[z%20,r,0]}");
         }
         layer++;
         i += 3;
