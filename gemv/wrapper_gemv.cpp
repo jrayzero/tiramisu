@@ -189,7 +189,7 @@ void check_fwd_pass_results(halide_buffer_t *input, std::vector<halide_buffer_t 
       for (size_t c = 0; c < COLS; c++) {
         layer_0_res[r] += weights_0_1[r * COLS + c] * row_input[c];
       }
-      layer_0_res[r] = 1.0f / (1.0f + std::exp(layer_0_res[r]));
+      layer_0_res[r] = 1.0f / (1.0f + std::exp(-1.0f * layer_0_res[r]));
     }
     // layer 1->2
     for (size_t r = 0; r < WEIGHTS_1; r++) {
@@ -197,7 +197,7 @@ void check_fwd_pass_results(halide_buffer_t *input, std::vector<halide_buffer_t 
       for (size_t c = 0; c < WEIGHTS_0; c++) {
         layer_1_res[r] += weights_1_2[r * WEIGHTS_0 + c] * layer_0_res[c];
       }
-      layer_1_res[r] = 1.0f / (1.0f + std::exp(layer_1_res[r]));
+      layer_1_res[r] = 1.0f / (1.0f + std::exp(-1.0f * layer_1_res[r]));
     }
     // layer 2->3
     for (size_t r = 0; r < WEIGHTS_2; r++) {
@@ -205,7 +205,7 @@ void check_fwd_pass_results(halide_buffer_t *input, std::vector<halide_buffer_t 
       for (size_t c = 0; c < WEIGHTS_1; c++) {
         layer_2_res[r] += weights_2_3[r * WEIGHTS_1 + c] * layer_1_res[c];
       }
-      layer_2_res[r] = 1.0f / (1.0f + std::exp(layer_2_res[r]));
+      layer_2_res[r] = 1.0f / (1.0f + std::exp(-1.0f * layer_2_res[r]));
     }
     // layer 3->4
     for (size_t r = 0; r < WEIGHTS_3; r++) {
@@ -213,7 +213,14 @@ void check_fwd_pass_results(halide_buffer_t *input, std::vector<halide_buffer_t 
       for (size_t c = 0; c < WEIGHTS_2; c++) {
         layer_3_res[z * WEIGHTS_3 + r] += weights_3_4[r * WEIGHTS_2 + c] * layer_2_res[c];
       }
-      layer_3_res[r] = 1.0f / (1.0f + std::exp(layer_3_res[r]));
+      //      layer_3_res[r] = 1.0f / (1.0f + std::exp(layer_3_res[r]));
+    }
+    float denom = 0.0f;
+    for (size_t d = 0; d < WEIGHTS_3; d++) {
+      denom += std::exp(layer_3_res[z * WEIGHTS_3 + d]);
+    }
+    for (size_t d = 0; d < WEIGHTS_3; d++) {
+      layer_3_res[z * WEIGHTS_3 + d] = std::exp(layer_3_res[z * WEIGHTS_3 + d]) / denom;
     }
   }
   for (size_t z = 0; z < ROWS; z++) {

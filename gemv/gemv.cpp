@@ -57,26 +57,32 @@ std::vector<computation*> make_fwd_pass(std::vector<std::pair<int,int>> layer_si
 
       computation *gemv = new computation("{gemv_" + std::to_string(ctr) + "[z,r,c]: 0<=z<" + std::to_string(input_rows) + " and 0<=r<" + rows + " and 0<=c<" + 
                                           cols + "}", gemv_expr, true, p_float32, f);
-      // apply the activation function
-      expr activation_expr;
-      //      if (ctr == layer_sizes.size() - 1) {
-
-      //      } else { // sigmoid
-      expr expo = expr(o_expo, -1.0f * gemv->operator()(z,r,0));
-      activation_expr = 1.0f / (1.0f + expo);
-      //      }
-      computation *activation = new computation("{sigmoid_" + std::to_string(ctr) + "[z,r,c]: 0<=z<" + std::to_string(input_rows) + " and 0<=r<" + rows + " and 0<=c<1}",
-                                                activation_expr, true, p_float32, f);
-      
-
-
-      prev_weights = weights;
-      prev_gemv = gemv;
-      ctr++;
       comps.push_back(weights);
       comps.push_back(gemv_dummy);
       comps.push_back(gemv);
-      comps.push_back(activation);
+      // apply the activation function
+      computation *activation = nullptr;
+      if (ctr == layer_sizes.size() - 1) { // softmax
+        computation *sum_dummy = new computation("{sum_dummy_" + std::to_string(ctr) + "[z,r,c]: 0<=z<" + std::to_string(input_rows) + " and 0<=r<1 and 0<=c<1}", 
+                                                expr(0.0f), true, p_float32, f);
+        expr sum_expr(expr(o_expo, gemv->operator()(z,r,c)) + sum_dummy->operator()(z,r,0));
+        computation *sum = new computation("{sum_" + std::to_string(ctr) + "[z,r,c]: 0<=z<" + std::to_string(input_rows) + " and 0<=r<" + rows + " and 0<=c<1}", sum_expr, true, p_float32, f);
+        expr softmax_expr(expr(o_expo, gemv->operator()(z,r,0)) / sum->operator()(z,r,0));
+        activation = new computation("{softmax_" + std::to_string(ctr) + "[z,r,c]: 0<=z<" + std::to_string(input_rows) + " and 0<=r<" + rows + " and 0<=c<1}", softmax_expr, true, p_float32, f);
+        comps.push_back(sum_dummy);
+        comps.push_back(sum);
+        comps.push_back(activation);
+      } else { // sigmoid
+        expr expo = expr(o_expo, -1.0f * gemv->operator()(z,r,0));
+        expr sigmoid_expr = 1.0f / (1.0f + expo);
+        activation = new computation("{sigmoid_" + std::to_string(ctr) + "[z,r,c]: 0<=z<" + std::to_string(input_rows) + " and 0<=r<" + rows + " and 0<=c<1}",
+                             sigmoid_expr, true, p_float32, f);
+        comps.push_back(activation);
+      }
+      
+      prev_weights = weights;
+      prev_gemv = gemv;
+      ctr++;
     }    
     return comps;
 }
@@ -130,7 +136,20 @@ void create_cpu_fwd_pass() {
         computation *weights = comps[i];
         computation *gemv_dummy = comps[i+1];
         computation *gemv = comps[i+2];
-        computation *activation = comps[i+3];
+        computation *activation = nullptr;
+        computation *sum_dummy = nullptr;
+        computation *sum = nullptr;
+        if (layer == num_layers - 1) {
+          sum_dummy = comps[i+3];
+          sum = comps[i+4];
+          activation = comps[i+5];
+          sum_dummy->split(z, 20, z1, z2);
+          sum->split(z, 20, z1, z2);
+          sum_dummy->tag_parallel_level(z2);
+          sum->tag_parallel_level(z2);
+        } else {
+          activation = comps[i+3];
+        }
         weights->split(z, 20, z1, z2);
         gemv_dummy->split(z, 20, z1, z2);
         gemv->split(z, 20, z1, z2);
@@ -144,7 +163,13 @@ void create_cpu_fwd_pass() {
           prev_gemv->before(*prev_weights, z2);
           prev_weights->before(*gemv_dummy, z2);
           gemv_dummy->before(*gemv, r);
-          gemv->before(*activation, r);
+          if (sum_dummy) {
+            gemv->before(*sum_dummy, z2);
+            sum_dummy->before(*sum, z2);
+            sum->before(*activation, z2);
+          } else {
+            gemv->before(*activation, r);
+          }
         } else {
           gemv_dummy->before(*gemv, r);
           gemv->before(*activation, r);
@@ -161,8 +186,15 @@ void create_cpu_fwd_pass() {
           gemv->set_access("{" + gemv->get_name() + "[z,r,c]->buff_gemv_" + std::to_string(layer) + "[z%20,r,0]}");
           activation->set_access("{" + activation->get_name() + "[z,r,c]->buff_gemv_" + std::to_string(layer) + "[z%20,r,0]}");
         }
+        if (sum_dummy) {
+          new buffer("buff_sum_" + std::to_string(layer), {20}, p_float32, a_temporary, gemv_cpu_fwd);
+          sum_dummy->set_access("{" + sum_dummy->get_name() + "[z,r,c]->buff_sum_" + std::to_string(layer) + "[z%20]}");
+          sum->set_access("{" + sum->get_name() + "[z,r,c]->buff_sum_" + std::to_string(layer) + "[z%20]}");
+          i += 6;
+        } else {
+          i += 4;
+        }
         layer++;
-        i += 4;
       }
     }
 
