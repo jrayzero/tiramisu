@@ -213,7 +213,6 @@ void check_fwd_pass_results(halide_buffer_t *input, std::vector<halide_buffer_t 
       for (size_t c = 0; c < WEIGHTS_2; c++) {
         layer_3_res[z * WEIGHTS_3 + r] += weights_3_4[r * WEIGHTS_2 + c] * layer_2_res[c];
       }
-      //      layer_3_res[r] = 1.0f / (1.0f + std::exp(layer_3_res[r]));
     }
     float denom = 0.0f;
     for (size_t d = 0; d < WEIGHTS_3; d++) {

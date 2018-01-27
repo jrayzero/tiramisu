@@ -164,6 +164,8 @@ void create_cpu_fwd_pass() {
           prev_weights->before(*gemv_dummy, z2);
           gemv_dummy->before(*gemv, r);
           if (sum_dummy) {
+            activation->split(r, 8, r0, r1);
+            activation->tag_vector_level(r1, 8);
             gemv->before(*sum_dummy, z2);
             sum_dummy->before(*sum, z2);
             sum->before(*activation, z2);

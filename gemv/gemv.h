@@ -15,7 +15,7 @@
 #define WEIGHTS_0 5000
 #define WEIGHTS_1 1000
 #define WEIGHTS_2 2000
-#define WEIGHTS_3 700
+#define WEIGHTS_3 800
 #endif
 
 #ifndef CHECK_RESULTS
