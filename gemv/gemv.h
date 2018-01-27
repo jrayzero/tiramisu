@@ -19,12 +19,12 @@
 #endif
 
 #ifndef CHECK_RESULTS
-#define ROWS (int64_t)10000000
+#define ROWS (int64_t)10000//000
 #define COLS (int64_t)5000
 #define ITERS 10
 #else
-#define ROWS (int64_t)500
-#define COLS (int64_t)10000
+#define ROWS (int64_t)5000
+#define COLS (int64_t)5000
 #define ITERS 1
 #endif
 

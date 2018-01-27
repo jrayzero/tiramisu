@@ -50,17 +50,33 @@ std::vector<computation*> make_fwd_pass(std::vector<std::pair<int,int>> layer_si
       expr gemv_expr;
       if (prev_weights) {
         gemv_expr = expr(weights->operator()(0,r,c) * prev_gemv->operator()(z,r,c) + gemv_dummy->operator()(z,r,0));
+          
       } else {
         gemv_expr = expr(weights->operator()(0,r,c) * input->operator()(z,c) + gemv_dummy->operator()(z,r,0));
       }
+
       computation *gemv = new computation("{gemv_" + std::to_string(ctr) + "[z,r,c]: 0<=z<" + std::to_string(input_rows) + " and 0<=r<" + rows + " and 0<=c<" + 
                                           cols + "}", gemv_expr, true, p_float32, f);
+      // apply the activation function
+      expr activation_expr;
+      //      if (ctr == layer_sizes.size() - 1) {
+
+      //      } else { // sigmoid
+      expr expo = expr(o_expo, -1.0f * gemv->operator()(z,r,0));
+      activation_expr = 1.0f / (1.0f + expo);
+      //      }
+      computation *activation = new computation("{sigmoid_" + std::to_string(ctr) + "[z,r,c]: 0<=z<" + std::to_string(input_rows) + " and 0<=r<" + rows + " and 0<=c<1}",
+                                                activation_expr, true, p_float32, f);
+      
+
+
       prev_weights = weights;
       prev_gemv = gemv;
       ctr++;
       comps.push_back(weights);
       comps.push_back(gemv_dummy);
       comps.push_back(gemv);
+      comps.push_back(activation);
     }    
     return comps;
 }
@@ -114,32 +130,39 @@ void create_cpu_fwd_pass() {
         computation *weights = comps[i];
         computation *gemv_dummy = comps[i+1];
         computation *gemv = comps[i+2];
+        computation *activation = comps[i+3];
         weights->split(z, 20, z1, z2);
         gemv_dummy->split(z, 20, z1, z2);
         gemv->split(z, 20, z1, z2);
+        activation->split(z, 20, z1, z2);
         weights->tag_parallel_level(z2);
         gemv_dummy->tag_parallel_level(z2);
         gemv->tag_parallel_level(z2);
+        activation->tag_parallel_level(z2);
         // order the operations
         if (prev_weights) {
           prev_gemv->before(*prev_weights, z2);
           prev_weights->before(*gemv_dummy, z2);
           gemv_dummy->before(*gemv, r);
+          gemv->before(*activation, r);
         } else {
           gemv_dummy->before(*gemv, r);
+          gemv->before(*activation, r);
         }
         prev_weights = weights;
-        prev_gemv = gemv;
+        prev_gemv = activation;//gemv;
         weights->set_access("{" + weights->get_name() + "[z,r,c]->buff_weights_" + std::to_string(layer) + "[r,c]}");
         if (layer == num_layers - 1) {
           gemv_dummy->set_access("{" + gemv_dummy->get_name() + "[z,r,c]->buff_gemv_" + std::to_string(layer) + "[z,r]}");
           gemv->set_access("{" + gemv->get_name() + "[z,r,c]->buff_gemv_" + std::to_string(layer) + "[z,r]}");
+          activation->set_access("{" + activation->get_name() + "[z,r,c]->buff_gemv_" + std::to_string(layer) + "[z,r]}");
         } else {
           gemv_dummy->set_access("{" + gemv_dummy->get_name() + "[z,r,c]->buff_gemv_" + std::to_string(layer) + "[z%20,r,0]}");
           gemv->set_access("{" + gemv->get_name() + "[z,r,c]->buff_gemv_" + std::to_string(layer) + "[z%20,r,0]}");
+          activation->set_access("{" + activation->get_name() + "[z,r,c]->buff_gemv_" + std::to_string(layer) + "[z%20,r,0]}");
         }
         layer++;
-        i += 3;
+        i += 4;
       }
     }
 
