@@ -9,7 +9,7 @@
 #define GPU
 #define FWD_PASS
 
-//#define CHECK_RESULTS
+#define CHECK_RESULTS
 
 #ifdef FWD_PASS
 #define WEIGHTS_0 5000
@@ -23,7 +23,7 @@
 #define COLS (int64_t)5000
 #define ITERS 10
 #else
-#define ROWS (int64_t)5000
+#define ROWS (int64_t)100
 #define COLS (int64_t)5000
 #define ITERS 1
 #endif

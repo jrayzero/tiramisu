@@ -329,6 +329,7 @@ void create_gpu_fwd_pass() {
             d2h.os->set_access("{result_xfer[z,r]->buff_gemv_3[z,r]}");
             activation->before(*d2h.os, z);
             d2h.os->collapse_many({collapser(1, (int64_t)0, (int64_t)WEIGHTS_3)});
+            d2h.os->set_schedule_this_comp(false);
 
           } else {
             gemv->before(*activation, z);
@@ -383,6 +384,7 @@ void create_gpu_fwd_pass() {
 
     gemv_gpu_fwd->set_arguments(buffs);
     postprocess(gemv_gpu_fwd, "/tmp/generated_gemv_gpu_fwd.o");
+    compile_kernels_to_obj();
 }
 
 // This does the multiply, then the reduction separately. You could schedule them together to get the original algorithm if you wanted

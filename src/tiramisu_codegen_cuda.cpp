@@ -519,6 +519,7 @@ std::map<std::string, int> literals_per_kernel;
 std::vector<std::string> already_printed;
 std::vector<std::string> kernel_names;
 int num_kernels = 0;
+
 std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_file(std::string kernel_name, std::string kernel_fn,
                                                                                    std::string kernel_wrapper_fn,
                                                                                    std::string kernel_body, std::string kernel_wrapper_body,
@@ -534,13 +535,17 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     if (!skip) {
         num_kernels++;
         kernel_names.push_back(kernel_name);
+#ifndef SKIP
         kernel.open(kernel_fn);
+#endif
     }
     std::ofstream kernel_wrapper;
     std::ofstream kernel_wrapper_header;
     if (!skip) {
+#ifndef SKIP
         kernel_wrapper.open(kernel_wrapper_fn);
         kernel_wrapper_header.open(kernel_fn + ".h");
+#endif
     }
     // headers
     if (!skip) {
@@ -558,8 +563,10 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         }
         init_cuda += "  }\n";*/
         std::string init_cuda = "";
+#ifndef SKIP
         kernel << cuda_headers() << std::endl;
         kernel_wrapper << cuda_headers() << "#include \"" + kernel_fn + ".h\"" << "\nextern \"C\" {\n/*struct cuda_vars cvars;*/\n" << init_cuda << " }\n" << std::endl;
+#endif
     }
     // kernel
     std::string kernel_signature = "void DEVICE_" + kernel_name + "(";
@@ -568,8 +575,10 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     std::string kernel_params = "  void *kernel_args[] = {";
     std::string clear_static_var = "\nvoid clear_static_var_" + kernel_name + "() { " + kernel_name + "_kernel_count = 0; }\n";
     if (!skip) {
+#ifndef SKIP
         kernel_wrapper_header << "extern \"C\" {\nvoid clear_static_var_" + kernel_name + "(); }\n" << std::endl;
         kernel_wrapper_header.close();
+#endif
     }
     std::vector<std::string> buffer_names;
     std::vector<std::string> other_params;
@@ -649,7 +658,9 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
     kernel_code +=  kernel_signature + " {\n  " + ptr_to_literal + "\n";
     kernel_code += "  " + kernel_body + "\n}\n}/*extern \"C\"*/\n";
     if (!skip) {
+#ifndef SKIP
         kernel << kernel_code << std::endl;
+#endif
     }
     // wrapper function that the host calls
     std::string stream_convert = "";
@@ -672,6 +683,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
         event_record += "    CUevent event;\n    /*assert(cuEventCreate(&event, 0) == 0);\n    assert(cuEventRecord(event, kernel_stream[" + std::to_string(comm_id) + "]) == 0);\n    kernel_event_buff[0] = event;*/\n  }\n";
     }
     if (!skip) {
+#ifndef SKIP
         kernel_wrapper << kernel_wrapper_signature << "  {\n" << stream_convert << module_mgmt << device_params << kernel_params
                        << kernel_wrapper_body
                        << event_check << kernel_launch << device_free << event_record << "  " << kernel_name <<  "_kernel_count++;\n}\n";
@@ -680,6 +692,7 @@ std::pair<std::vector<std::string>, std::vector<std::string>> generate_kernel_fi
                        << kernel_launch << device_free << "  " << kernel_name << "_kernel_count++;\n}" << clear_static_var << "\n}/*extern \"C\"*/\n";
         kernel.close();
         kernel_wrapper.close();
+#endif
     }
     closure_vars.clear();
     closure_vars_no_type.clear();
@@ -1367,7 +1380,7 @@ std::string tiramisu::generator::cuda_expr_from_tiramisu_expr(const tiramisu::fu
                 assert(false && "do this cuda func later");
                 break;
             case tiramisu::o_expo:
-                assert(false && "do this cuda func later");
+              result = "expf(" + op0 + ")";
                 break;
             case tiramisu::o_log:
                 assert(false && "do this cuda func later");

@@ -13,14 +13,27 @@
 #include <math.h>
 #ifdef GPU
 #include "/tmp/tiramisu_cuda_runtime.h"
-//#include "/tmp/tiramisu_CUDA_kernel_multiply.cu.h"
-//#include "/tmp/tiramisu_CUDA_kernel_sum.cu.h"
-#include "/tmp/tiramisu_CUDA_kernel_gemv.cu.h"
+#include "/tmp/tiramisu_CUDA_kernel_gemv_0.cu.h"
+#include "/tmp/tiramisu_CUDA_kernel_gemv_1.cu.h"
+#include "/tmp/tiramisu_CUDA_kernel_gemv_2.cu.h"
+#include "/tmp/tiramisu_CUDA_kernel_gemv_3.cu.h"
+#include "/tmp/tiramisu_CUDA_kernel_sigmoid_0.cu.h"
+#include "/tmp/tiramisu_CUDA_kernel_sigmoid_1.cu.h"
+#include "/tmp/tiramisu_CUDA_kernel_sigmoid_2.cu.h"
+#include "/tmp/tiramisu_CUDA_kernel_softmax_3.cu.h"
+#include "/tmp/tiramisu_CUDA_kernel_sum_3.cu.h"
 #endif
 
-extern void clear_static_var_tiramisu_CUDA_kernel_gemv();
-//extern void clear_static_var_tiramisu_CUDA_kernel_multiply();
-//extern void clear_static_var_tiramisu_CUDA_kernel_sum();
+extern void clear_static_var_tiramisu_CUDA_kernel_gemv_0();
+extern void clear_static_var_tiramisu_CUDA_kernel_gemv_1();
+extern void clear_static_var_tiramisu_CUDA_kernel_gemv_2();
+extern void clear_static_var_tiramisu_CUDA_kernel_gemv_3();
+extern void clear_static_var_tiramisu_CUDA_kernel_sigmoid_0();
+extern void clear_static_var_tiramisu_CUDA_kernel_sigmoid_1();
+extern void clear_static_var_tiramisu_CUDA_kernel_sigmoid_2();
+extern void clear_static_var_tiramisu_CUDA_kernel_softmax_3();
+extern void clear_static_var_tiramisu_CUDA_kernel_sum_3();
+
 
 int mpi_init() {
     int provided = -1;
@@ -277,32 +290,56 @@ void run_cpu_fwd_pass() {
 void run_gpu_fwd_pass() {
 #if defined(GPU) && defined(FWD_PASS)
     int rank = mpi_init();
+    tiramisu_init_cuda(0);
     std::cerr << "Running gpu fwd pass" << std::endl;
     std::vector<std::chrono::duration<double,std::milli>> duration_vector;
-    Halide::Buffer<float> input_matrix(COLS, ROWS);
-    Halide::Buffer<float> weights_0_1(COLS, WEIGHTS_0);
-    Halide::Buffer<float> weights_1_2(WEIGHTS_0, WEIGHTS_1);
-    Halide::Buffer<float> weights_2_3(WEIGHTS_1, WEIGHTS_2);
-    Halide::Buffer<float> weights_3_4(WEIGHTS_2, WEIGHTS_3);
-    Halide::Buffer<float> fwd_pass_output(WEIGHTS_3,ROWS); // one per row
-    fill_weights(ROWS, COLS, input_matrix.raw_buffer(), 0.0f);
-    fill_weights(WEIGHTS_0, COLS, weights_0_1.raw_buffer(), 1.0f);
-    fill_weights(WEIGHTS_1, WEIGHTS_0, weights_1_2.raw_buffer(), 2.0f);
-    fill_weights(WEIGHTS_2, WEIGHTS_1, weights_2_3.raw_buffer(), 3.0f);
-    fill_weights(WEIGHTS_3, WEIGHTS_2, weights_3_4.raw_buffer(), 4.0f);
+    float* _input_matrix; 
+    assert(cuMemHostAlloc((void**)&_input_matrix, sizeof(float) * COLS * ROWS, CU_MEMHOSTALLOC_PORTABLE) == 0);
+    float* _weights_0_1;
+    assert(cuMemHostAlloc((void**)&_weights_0_1, sizeof(float) * COLS * WEIGHTS_0, CU_MEMHOSTALLOC_PORTABLE) == 0);
+    float* _weights_1_2; 
+    assert(cuMemHostAlloc((void**)&_weights_1_2, sizeof(float) * WEIGHTS_0 * WEIGHTS_1, CU_MEMHOSTALLOC_PORTABLE) == 0);
+    float* _weights_2_3;
+    assert(cuMemHostAlloc((void**)&_weights_2_3, sizeof(float) * WEIGHTS_1 * WEIGHTS_2, CU_MEMHOSTALLOC_PORTABLE) == 0);
+    float* _weights_3_4;
+    assert(cuMemHostAlloc((void**)&_weights_3_4, sizeof(float) * WEIGHTS_2 * WEIGHTS_3, CU_MEMHOSTALLOC_PORTABLE) == 0);
+    float* _fwd_pass_output;
+    assert(cuMemHostAlloc((void**)&_fwd_pass_output, sizeof(float) * WEIGHTS_3 * ROWS, CU_MEMHOSTALLOC_PORTABLE) == 0);
+    halide_buffer_t input_matrix, weights_0_1, weights_1_2, weights_2_3, weights_3_4, fwd_pass_output;
+    input_matrix.host = (uint8_t*)_input_matrix;
+    weights_0_1.host = (uint8_t*)_weights_0_1;
+    weights_1_2.host = (uint8_t*)_weights_1_2;
+    weights_2_3.host = (uint8_t*)_weights_2_3;
+    weights_3_4.host = (uint8_t*)_weights_3_4;
+    fill_weights(ROWS, COLS, &input_matrix, 0.0f);
+    fill_weights(WEIGHTS_0, COLS, &weights_0_1, 1.0f);
+    fill_weights(WEIGHTS_1, WEIGHTS_0, &weights_1_2, 2.0f);
+    fill_weights(WEIGHTS_2, WEIGHTS_1, &weights_2_3, 3.0f);
+    fill_weights(WEIGHTS_3, WEIGHTS_2, &weights_3_4, 4.0f);
     for (int iter = 0; iter < ITERS; iter++) {
         std::cerr << "Iter " << iter << std::endl;
         auto start = std::chrono::high_resolution_clock::now();
-        gemv_gpu_fwd(input_matrix.raw_buffer(), weights_0_1.raw_buffer(), weights_1_2.raw_buffer(), weights_2_3.raw_buffer(), weights_3_4.raw_buffer(), fwd_pass_output.raw_buffer());
+        gemv_gpu_fwd(&input_matrix, &weights_0_1, &weights_1_2, &weights_2_3, &weights_3_4, &fwd_pass_output);
         auto end = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double,std::milli> duration = end - start;
 	duration_vector.push_back(duration);
 	std::cerr << "Iteration " << iter << " done in " << duration.count() << "ms." << std::endl;
 #ifdef CHECK_RESULTS
 	if (iter == 0) {
-	  check_fwd_pass_results(input_matrix.raw_buffer(), {weights_0_1.raw_buffer(), weights_1_2.raw_buffer(), weights_2_3.raw_buffer(), weights_3_4.raw_buffer()}, fwd_pass_output.raw_buffer());
+          std::cerr << "checking results" << std::endl;
+	  check_fwd_pass_results(&input_matrix, {&weights_0_1, &weights_1_2, &weights_2_3, &weights_3_4}, &fwd_pass_output);
 	}
 #endif
+        clear_static_var_tiramisu_CUDA_kernel_gemv_0();
+        clear_static_var_tiramisu_CUDA_kernel_gemv_1();
+        clear_static_var_tiramisu_CUDA_kernel_gemv_2();
+        clear_static_var_tiramisu_CUDA_kernel_gemv_3();
+        clear_static_var_tiramisu_CUDA_kernel_sigmoid_0();
+        clear_static_var_tiramisu_CUDA_kernel_sigmoid_1();
+        clear_static_var_tiramisu_CUDA_kernel_sigmoid_2();
+        clear_static_var_tiramisu_CUDA_kernel_softmax_3();
+        clear_static_var_tiramisu_CUDA_kernel_sum_3();
+        cuCtxSynchronize();
     }
     print_time("performance_CPU.csv", "GEMV CPU", {"Tiramisu"}, {median(duration_vector)});
     std::cout.flush();
@@ -311,7 +348,7 @@ void run_gpu_fwd_pass() {
 
 
 void run_gemv_gpu_only() {
-#ifdef GPU
+#if defined(GPU) && !defined(FWD_PASS)
     int rank = mpi_init();
     assert(rank == 0 && "This GPU implementation is for a single node ONLY (i.e. one process)");
     std::cerr << "Running GPU" << std::endl;
@@ -345,8 +382,6 @@ void run_gemv_gpu_only() {
 	}
 #endif
         clear_static_var_tiramisu_CUDA_kernel_gemv();
-//        clear_static_var_tiramisu_CUDA_kernel_multiply();
-//        clear_static_var_tiramisu_CUDA_kernel_sum();
         cuCtxSynchronize();
         cuCtxDestroy(cvars.ctx);
     }
