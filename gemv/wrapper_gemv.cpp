@@ -311,6 +311,7 @@ void run_gpu_fwd_pass() {
     weights_1_2.host = (uint8_t*)_weights_1_2;
     weights_2_3.host = (uint8_t*)_weights_2_3;
     weights_3_4.host = (uint8_t*)_weights_3_4;
+    fwd_pass_output.host = (uint8_t*)_fwd_pass_output;
     fill_weights(ROWS, COLS, &input_matrix, 0.0f);
     fill_weights(WEIGHTS_0, COLS, &weights_0_1, 1.0f);
     fill_weights(WEIGHTS_1, WEIGHTS_0, &weights_1_2, 2.0f);
