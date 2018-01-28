@@ -219,21 +219,22 @@ void create_gpu_fwd_pass() {
     std::vector<buffer*> buffs;
     buffs.push_back(&buff_input);
 
-    xfer_prop h2d_cuda_async(p_float32, {SYNC, CUDA, CPU2GPU}, 0);
+    xfer_prop h2d_cuda_async(p_float32, {ASYNC, CUDA, CPU2GPU}, 0);
     xfer_prop d2h_cuda_async(p_float32, {ASYNC, CUDA, GPU2CPU}, 0);
+    xfer_prop h2d_cuda_sync(p_float32, {SYNC, CUDA, CPU2GPU}, 0);
+    xfer_prop d2h_cuda_sync(p_float32, {SYNC, CUDA, GPU2CPU}, 0);
 
     // transfer weights at the beginning
     send_recv *prev_weight_xfer = nullptr;
     int w = 0;
     int w_idx = 0;
     var q("q");
-    // Todo: need to change producer name
     while (w < comps.size()) {
       if (w != 0 && (w+4 < comps.size())) {
         computation *_weights = comps[w];
         xfer h2d = computation::create_xfer("{weight_xfer_" + std::to_string(w_idx) + "[q,r,c]: 0<=q<1 and 0<=r<" + 
                                             std::to_string(weights[w_idx].first) + " and 0<=c<" + std::to_string(weights[w_idx].second) +
-                                            "}", h2d_cuda_async, _weights->operator()(0,r,c), gemv_gpu_fwd);        
+                                            "}", h2d_cuda_sync, _weights->operator()(0,r,c), gemv_gpu_fwd);        
         if (prev_weight_xfer) {
           prev_weight_xfer->before(*h2d.os, computation::root);
         }
@@ -262,15 +263,34 @@ void create_gpu_fwd_pass() {
       }
     }
 
+    // make the literal buffers
+    new buffer("buff_gemv_0_literals", {ROWS,1}, p_int64, a_temporary_gpu, gemv_gpu_fwd);
+    new buffer("buff_gemv_1_literals", {ROWS,1}, p_int64, a_temporary_gpu, gemv_gpu_fwd);
+    new buffer("buff_gemv_2_literals", {ROWS,1}, p_int64, a_temporary_gpu, gemv_gpu_fwd);
+    new buffer("buff_gemv_3_literals", {ROWS,1}, p_int64, a_temporary_gpu, gemv_gpu_fwd);
+    new buffer("buff_sigmoid_0_literals", {ROWS,1}, p_int64, a_temporary_gpu, gemv_gpu_fwd);
+    new buffer("buff_sigmoid_1_literals", {ROWS,1}, p_int64, a_temporary_gpu, gemv_gpu_fwd);
+    new buffer("buff_sigmoid_2_literals", {ROWS,1}, p_int64, a_temporary_gpu, gemv_gpu_fwd);
+    new buffer("buff_sigmoid_3_literals", {ROWS,1}, p_int64, a_temporary_gpu, gemv_gpu_fwd);
+    new buffer("buff_sum_3_literals", {ROWS,1}, p_int64, a_temporary_gpu, gemv_gpu_fwd);
+    new buffer("buff_softmax_3_literals", {ROWS,1}, p_int64, a_temporary_gpu, gemv_gpu_fwd);
+
     int i = 0;
     int layer = 0;
     var z1("z1"), z2("z2");
     computation *prev_weights = nullptr;
     computation *prev_gemv = nullptr;
+    send_recv *input_xfer = nullptr;
     while (i < comps.size()) {
       if (i == 0) { // this is the input
         computation *input = comps[i];
         input->set_access("{" + input->get_name() + "[z,c]->buff_input[z,c]}");
+        xfer h2d = computation::create_xfer("{input_xfer[z,c]: 0<=z<" + std::to_string(ROWS) + " and 0<=c<" + std::to_string(COLS) + "}", 
+                                            h2d_cuda_sync, input->operator()(z,c), gemv_gpu_fwd);        
+        h2d.os->collapse_many({collapser(1, (int64_t)0, (int64_t)COLS)});
+        new buffer("gpu_buff_input", {ROWS, COLS}, p_float32, a_temporary_gpu, gemv_gpu_fwd);
+        h2d.os->set_access("{input_xfer[z,c]->gpu_buff_input[z,c]}");
+        input_xfer = h2d.os;
         i++;
       } else {
         computation *weights = comps[i];
@@ -297,16 +317,28 @@ void create_gpu_fwd_pass() {
           prev_gemv->before(*prev_weights, z);
           prev_weights->before(*gemv_dummy, z);
           gemv_dummy->before(*gemv, z);
-          if (sum_dummy) {
+          generator::update_producer_expr_name(gemv, "weights_" + std::to_string(layer), "weight_xfer_" + std::to_string(layer));
+          if (sum_dummy) { // last layer
             gemv->before(*sum_dummy, z);
             sum_dummy->before(*sum, z);
             sum_dummy->set_schedule_this_comp(false);
             sum->before(*activation, z);
+            // transfer back the results
+            xfer d2h = computation::create_xfer("{result_xfer[z,r]: 0<=z<" + std::to_string(ROWS) + " and 0<=r<" + std::to_string(WEIGHTS_3) + "}", 
+                                                d2h_cuda_sync, activation->operator()(z,r,0), gemv_gpu_fwd);        
+            d2h.os->set_access("{result_xfer[z,r]->buff_gemv_3[z,r]}");
+            activation->before(*d2h.os, z);
+            d2h.os->collapse_many({collapser(1, (int64_t)0, (int64_t)WEIGHTS_3)});
+
           } else {
             gemv->before(*activation, z);
           }
         } else {
-          prev_weight_xfer->before(*gemv_dummy, computation::root);
+          generator::update_producer_expr_name(gemv, "weights_" + std::to_string(layer), "weight_xfer_" + std::to_string(layer));
+          generator::update_producer_expr_name(gemv, "input", "input_xfer");
+          
+          prev_weight_xfer->before(*input_xfer, computation::root);
+          input_xfer->before(*gemv_dummy, z);//computation::root);
           gemv_dummy->before(*gemv, r1);
           gemv->before(*activation, z);
         }
@@ -338,9 +370,9 @@ void create_gpu_fwd_pass() {
           activation->set_access("{" + activation->get_name() + "[z,r,c]->gpu_buff_gemv_" + std::to_string(layer) + "[z,r,0]}");
         }
         if (sum_dummy) {
-          new buffer("buff_sum_" + std::to_string(layer), {ROWS}, p_float32, a_temporary_gpu, gemv_gpu_fwd);
-          sum_dummy->set_access("{" + sum_dummy->get_name() + "[z,r,c]->buff_sum_" + std::to_string(layer) + "[z]}");
-          sum->set_access("{" + sum->get_name() + "[z,r,c]->buff_sum_" + std::to_string(layer) + "[z]}");
+          new buffer("gpu_buff_sum_" + std::to_string(layer), {ROWS}, p_float32, a_temporary_gpu, gemv_gpu_fwd);
+          sum_dummy->set_access("{" + sum_dummy->get_name() + "[z,r,c]->gpu_buff_sum_" + std::to_string(layer) + "[z]}");
+          sum->set_access("{" + sum->get_name() + "[z,r,c]->gpu_buff_sum_" + std::to_string(layer) + "[z]}");
           i += 6;
         } else {
           i += 4;
