@@ -204,6 +204,155 @@ void create_cpu_fwd_pass() {
     postprocess(gemv_cpu_fwd, "/tmp/generated_gemv_cpu_fwd.o");
 }
 
+void create_gpu_fwd_pass() {
+  var c("c"), r("r"), r0("r0"), r1("r1"), r2("r2"), r3("r3"), c0("c0"), c1("c1"), z("z");
+    function *gemv_gpu_fwd = new function("gemv_gpu_fwd");
+    std::vector<std::pair<int, int>> weights;
+    weights.push_back(std::pair<int, int>(WEIGHTS_0, COLS));
+    weights.push_back(std::pair<int, int>(WEIGHTS_1, WEIGHTS_0));
+    weights.push_back(std::pair<int, int>(WEIGHTS_2, WEIGHTS_1));
+    weights.push_back(std::pair<int, int>(WEIGHTS_3, WEIGHTS_2));
+    int num_layers = weights.size();
+    std::vector<computation*> comps = make_fwd_pass(weights, ROWS, COLS, gemv_gpu_fwd);
+
+    buffer buff_input("buff_input", {ROWS, COLS}, p_float32, a_input, gemv_gpu_fwd);
+    std::vector<buffer*> buffs;
+    buffs.push_back(&buff_input);
+
+    xfer_prop h2d_cuda_async(p_float32, {SYNC, CUDA, CPU2GPU}, 0);
+    xfer_prop d2h_cuda_async(p_float32, {ASYNC, CUDA, GPU2CPU}, 0);
+
+    // transfer weights at the beginning
+    send_recv *prev_weight_xfer = nullptr;
+    int w = 0;
+    int w_idx = 0;
+    var q("q");
+    // Todo: need to change producer name
+    while (w < comps.size()) {
+      if (w != 0 && (w+4 < comps.size())) {
+        computation *_weights = comps[w];
+        xfer h2d = computation::create_xfer("{weight_xfer_" + std::to_string(w_idx) + "[q,r,c]: 0<=q<1 and 0<=r<" + 
+                                            std::to_string(weights[w_idx].first) + " and 0<=c<" + std::to_string(weights[w_idx].second) +
+                                            "}", h2d_cuda_async, _weights->operator()(0,r,c), gemv_gpu_fwd);        
+        if (prev_weight_xfer) {
+          prev_weight_xfer->before(*h2d.os, computation::root);
+        }
+        h2d.os->collapse_many({collapser(2, (int64_t)0, (int64_t)weights[w_idx].second), collapser(1, (int64_t)0, (int64_t)weights[w_idx].first)});
+
+        new buffer("gpu_buff_weights_" + std::to_string(w_idx), {weights[w_idx].first, weights[w_idx].second}, p_float32, a_temporary_gpu, gemv_gpu_fwd);
+        h2d.os->set_access("{" + h2d.os->get_name() + "[q,r,c]->gpu_buff_weights_" + std::to_string(w_idx) + "[r,c]}");
+        prev_weight_xfer = h2d.os;
+        w_idx++;
+        w += 4;
+      } else {
+        w++;
+      }
+    }
+
+    for (int i = 0; i < num_layers; i++) {
+      std::pair<int, int> weight = weights[i];
+      buffer *buff_weights = new buffer("buff_weights_" + std::to_string(i), {weight.first, weight.second}, p_float32, a_input, gemv_gpu_fwd);
+      buffs.push_back(buff_weights);
+      if (i == num_layers - 1) {
+        buffer *b = new buffer("buff_gemv_" + std::to_string(i), {ROWS, weight.first}, p_float32, a_output, gemv_gpu_fwd);
+        buffs.push_back(b);
+        new buffer("gpu_buff_gemv_" + std::to_string(i), {ROWS, weight.first, 1}, p_float32, a_temporary_gpu, gemv_gpu_fwd);
+      } else {
+        new buffer("gpu_buff_gemv_" + std::to_string(i), {ROWS, weight.first, 1}, p_float32, a_temporary_gpu, gemv_gpu_fwd);
+      }
+    }
+
+    int i = 0;
+    int layer = 0;
+    var z1("z1"), z2("z2");
+    computation *prev_weights = nullptr;
+    computation *prev_gemv = nullptr;
+    while (i < comps.size()) {
+      if (i == 0) { // this is the input
+        computation *input = comps[i];
+        input->set_access("{" + input->get_name() + "[z,c]->buff_input[z,c]}");
+        i++;
+      } else {
+        computation *weights = comps[i];
+        computation *gemv_dummy = comps[i+1];
+        gemv_dummy->set_schedule_this_comp(false);
+        computation *gemv = comps[i+2];
+        computation *activation = nullptr;
+        computation *sum_dummy = nullptr;
+        computation *sum = nullptr;
+        gemv_dummy->split(r, 500, r0, r1);
+        gemv->split(r, 500, r0, r1);
+        if (layer == num_layers - 1) {
+          sum_dummy = comps[i+3];
+          sum = comps[i+4];
+          activation = comps[i+5];
+          sum_dummy->split(r, 500, r0, r1);
+          sum->split(r, 500, r0, r1);
+        } else {
+          activation = comps[i+3];
+        }
+        activation->split(r, 500, r0, r1);
+        // order the operations
+        if (prev_weights) {
+          prev_gemv->before(*prev_weights, z);
+          prev_weights->before(*gemv_dummy, z);
+          gemv_dummy->before(*gemv, z);
+          if (sum_dummy) {
+            gemv->before(*sum_dummy, z);
+            sum_dummy->before(*sum, z);
+            sum_dummy->set_schedule_this_comp(false);
+            sum->before(*activation, z);
+          } else {
+            gemv->before(*activation, z);
+          }
+        } else {
+          prev_weight_xfer->before(*gemv_dummy, computation::root);
+          gemv_dummy->before(*gemv, r1);
+          gemv->before(*activation, z);
+        }
+        if (prev_weights) {
+          if (sum_dummy) {
+            gemv->tag_gpu_level2(r0, r1, 0);
+            sum->split(r0, 2, r2, r3);
+            sum->tag_gpu_level2(r2, r3, 0);
+            activation->tag_gpu_level2(r0, r1, 0);          
+          } else {
+            gemv->tag_gpu_level2(r0, r1, 0);
+            activation->tag_gpu_level2(r0, r1, 0);          
+          }
+        } else {
+          gemv->tag_gpu_level2(r0, r1, 0);
+          activation->tag_gpu_level2(r0, r1, 0);          
+        }
+
+        prev_weights = weights;
+        prev_gemv = activation;
+        weights->set_access("{" + weights->get_name() + "[z,r,c]->buff_weights_" + std::to_string(layer) + "[r,c]}");
+        if (layer == num_layers - 1) {
+          gemv_dummy->set_access("{" + gemv_dummy->get_name() + "[z,r,c]->gpu_buff_gemv_" + std::to_string(layer) + "[z,r,0]}");
+          gemv->set_access("{" + gemv->get_name() + "[z,r,c]->gpu_buff_gemv_" + std::to_string(layer) + "[z,r,0]}");
+          activation->set_access("{" + activation->get_name() + "[z,r,c]->gpu_buff_gemv_" + std::to_string(layer) + "[z,r,0]}");
+        } else {
+          gemv_dummy->set_access("{" + gemv_dummy->get_name() + "[z,r,c]->gpu_buff_gemv_" + std::to_string(layer) + "[z,r,0]}");
+          gemv->set_access("{" + gemv->get_name() + "[z,r,c]->gpu_buff_gemv_" + std::to_string(layer) + "[z,r,0]}");
+          activation->set_access("{" + activation->get_name() + "[z,r,c]->gpu_buff_gemv_" + std::to_string(layer) + "[z,r,0]}");
+        }
+        if (sum_dummy) {
+          new buffer("buff_sum_" + std::to_string(layer), {ROWS}, p_float32, a_temporary_gpu, gemv_gpu_fwd);
+          sum_dummy->set_access("{" + sum_dummy->get_name() + "[z,r,c]->buff_sum_" + std::to_string(layer) + "[z]}");
+          sum->set_access("{" + sum->get_name() + "[z,r,c]->buff_sum_" + std::to_string(layer) + "[z]}");
+          i += 6;
+        } else {
+          i += 4;
+        }
+        layer++;
+      }
+    }
+
+    gemv_gpu_fwd->set_arguments(buffs);
+    postprocess(gemv_gpu_fwd, "/tmp/generated_gemv_gpu_fwd.o");
+}
+
 // This does the multiply, then the reduction separately. You could schedule them together to get the original algorithm if you wanted
 std::vector<computation *> make_alternate_algorithm(function *f, int64_t rows, int64_t cols) {
     var c("c"), r("r");
@@ -557,9 +706,11 @@ int main() {
     create_cpu_version();
 #endif
 #elif defined(GPU)
-            create_gpu_version_with_shared();
-    //    create_gpu_alternate_version();
-//    create_gpu_shared_version();
+#ifdef FWD_PASS
+    create_gpu_fwd_pass();
+#else
+    create_gpu_version_with_shared();
+#endif
 #endif
 
     return 0;

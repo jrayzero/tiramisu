@@ -273,6 +273,43 @@ void run_cpu_fwd_pass() {
 #endif
 }
 
+
+void run_gpu_fwd_pass() {
+#if defined(GPU) && defined(FWD_PASS)
+    int rank = mpi_init();
+    std::cerr << "Running gpu fwd pass" << std::endl;
+    std::vector<std::chrono::duration<double,std::milli>> duration_vector;
+    Halide::Buffer<float> input_matrix(COLS, ROWS);
+    Halide::Buffer<float> weights_0_1(COLS, WEIGHTS_0);
+    Halide::Buffer<float> weights_1_2(WEIGHTS_0, WEIGHTS_1);
+    Halide::Buffer<float> weights_2_3(WEIGHTS_1, WEIGHTS_2);
+    Halide::Buffer<float> weights_3_4(WEIGHTS_2, WEIGHTS_3);
+    Halide::Buffer<float> fwd_pass_output(WEIGHTS_3,ROWS); // one per row
+    fill_weights(ROWS, COLS, input_matrix.raw_buffer(), 0.0f);
+    fill_weights(WEIGHTS_0, COLS, weights_0_1.raw_buffer(), 1.0f);
+    fill_weights(WEIGHTS_1, WEIGHTS_0, weights_1_2.raw_buffer(), 2.0f);
+    fill_weights(WEIGHTS_2, WEIGHTS_1, weights_2_3.raw_buffer(), 3.0f);
+    fill_weights(WEIGHTS_3, WEIGHTS_2, weights_3_4.raw_buffer(), 4.0f);
+    for (int iter = 0; iter < ITERS; iter++) {
+        std::cerr << "Iter " << iter << std::endl;
+        auto start = std::chrono::high_resolution_clock::now();
+        gemv_gpu_fwd(input_matrix.raw_buffer(), weights_0_1.raw_buffer(), weights_1_2.raw_buffer(), weights_2_3.raw_buffer(), weights_3_4.raw_buffer(), fwd_pass_output.raw_buffer());
+        auto end = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double,std::milli> duration = end - start;
+	duration_vector.push_back(duration);
+	std::cerr << "Iteration " << iter << " done in " << duration.count() << "ms." << std::endl;
+#ifdef CHECK_RESULTS
+	if (iter == 0) {
+	  check_fwd_pass_results(input_matrix.raw_buffer(), {weights_0_1.raw_buffer(), weights_1_2.raw_buffer(), weights_2_3.raw_buffer(), weights_3_4.raw_buffer()}, fwd_pass_output.raw_buffer());
+	}
+#endif
+    }
+    print_time("performance_CPU.csv", "GEMV CPU", {"Tiramisu"}, {median(duration_vector)});
+    std::cout.flush();
+#endif
+}
+
+
 void run_gemv_gpu_only() {
 #ifdef GPU
     int rank = mpi_init();
@@ -327,7 +364,11 @@ int main() {
   run_gemv_cpu_only();
 #endif
 #elif defined(GPU)
+#ifdef FWD_PASS
+  run_gpu_fwd_pass();
+#else
   run_gemv_gpu_only();
+#endif
 #endif
   MPI_Finalize();
 }

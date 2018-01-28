@@ -5,17 +5,17 @@
 #ifndef TIRAMISU_GEMV_PARAMS_H
 #define TIRAMISU_GEMV_PARAMS_H
 
-#define CPU
-//#define GPU
+//#define CPU
+#define GPU
 #define FWD_PASS
 
-#define CHECK_RESULTS
+//#define CHECK_RESULTS
 
 #ifdef FWD_PASS
 #define WEIGHTS_0 5000
 #define WEIGHTS_1 1000
 #define WEIGHTS_2 2000
-#define WEIGHTS_3 800
+#define WEIGHTS_3 3000
 #endif
 
 #ifndef CHECK_RESULTS
